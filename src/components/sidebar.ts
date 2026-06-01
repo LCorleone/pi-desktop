@@ -3087,6 +3087,47 @@ export class Sidebar {
 		}
 	}
 
+	private isWindowsPlatform(): boolean {
+		return navigator.platform.toLowerCase().includes("win");
+	}
+
+	private renderWindowControls(): TemplateResult {
+		if (this.isWindowsPlatform()) {
+			return html`
+				<div class="sidebar-window-controls win-controls" @click=${(e: Event) => e.stopPropagation()}>
+					<button class="win-ctrl-btn" title="Minimize" @click=${(e: Event) => {
+						e.stopPropagation();
+						void this.invokeWindowControl("minimize");
+					}}>─</button>
+					<button class="win-ctrl-btn" title="Maximize" @click=${(e: Event) => {
+						e.stopPropagation();
+						void this.invokeWindowControl("maximize");
+					}}>□</button>
+					<button class="win-ctrl-btn win-ctrl-close" title="Close" @click=${(e: Event) => {
+						e.stopPropagation();
+						void this.invokeWindowControl("close");
+					}}>✕</button>
+				</div>
+			`;
+		}
+		return html`
+			<div class="sidebar-window-controls" @click=${(e: Event) => e.stopPropagation()}>
+				<button class="sidebar-window-dot red" title="Close" @click=${(e: Event) => {
+					e.stopPropagation();
+					void this.invokeWindowControl("close");
+				}}></button>
+				<button class="sidebar-window-dot yellow" title="Minimize" @click=${(e: Event) => {
+					e.stopPropagation();
+					void this.invokeWindowControl("minimize");
+				}}></button>
+				<button class="sidebar-window-dot green" title="Maximize" @click=${(e: Event) => {
+					e.stopPropagation();
+					void this.invokeWindowControl("maximize");
+				}}></button>
+			</div>
+		`;
+	}
+
 	private renderWorkspaceSwitcher(): TemplateResult | typeof nothing {
 		const activeWorkspace = this.getActiveWorkspaceItem();
 		if (!activeWorkspace) return nothing;
@@ -3098,20 +3139,7 @@ export class Sidebar {
 		return html`
 			<div class="sidebar-workspace-switcher" data-tauri-drag-region>
 				<div class="sidebar-workspace-switcher-row" data-tauri-drag-region>
-					<div class="sidebar-window-controls" @click=${(e: Event) => e.stopPropagation()}>
-						<button class="sidebar-window-dot red" title="Close" @click=${(e: Event) => {
-							e.stopPropagation();
-							void this.invokeWindowControl("close");
-						}}></button>
-						<button class="sidebar-window-dot yellow" title="Minimize" @click=${(e: Event) => {
-							e.stopPropagation();
-							void this.invokeWindowControl("minimize");
-						}}></button>
-						<button class="sidebar-window-dot green" title="Maximize" @click=${(e: Event) => {
-							e.stopPropagation();
-							void this.invokeWindowControl("maximize");
-						}}></button>
-					</div>
+					${this.renderWindowControls()}
 					<div
 						class="sidebar-workspace-trigger ${this.workspaceMenuOpen ? "open" : ""}"
 						title="Switch workspace"
@@ -3249,20 +3277,7 @@ export class Sidebar {
 	private renderWorkspaceWindowRow(): TemplateResult {
 		return html`
 			<div class="sidebar-window-row" data-tauri-drag-region>
-				<div class="sidebar-window-controls" @click=${(e: Event) => e.stopPropagation()}>
-					<button class="sidebar-window-dot red" title="Close" @click=${(e: Event) => {
-						e.stopPropagation();
-						void this.invokeWindowControl("close");
-					}}></button>
-					<button class="sidebar-window-dot yellow" title="Minimize" @click=${(e: Event) => {
-						e.stopPropagation();
-						void this.invokeWindowControl("minimize");
-					}}></button>
-					<button class="sidebar-window-dot green" title="Maximize" @click=${(e: Event) => {
-						e.stopPropagation();
-						void this.invokeWindowControl("maximize");
-					}}></button>
-				</div>
+				${this.renderWindowControls()}
 				<button
 					class="workspace-sidebar-toggle"
 					title="Collapse sidebar"

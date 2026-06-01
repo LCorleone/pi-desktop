@@ -8929,3 +8929,36 @@ button:active:not(:disabled),
 .packages-list-row:active {
 	opacity: 0.85;
 }
+
+/* Windows-style window controls */
+.sidebar-window-controls.win-controls {
+	gap: 0;
+	order: 99;
+	margin-left: auto;
+}
+
+.win-ctrl-btn {
+	width: 30px;
+	height: 28px;
+	border: none;
+	border-radius: 4px;
+	padding: 0;
+	cursor: pointer;
+	background: transparent;
+	color: var(--muted);
+	font-size: 12px;
+	display: grid;
+	place-items: center;
+	line-height: 1;
+	transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+
+.win-ctrl-btn:hover {
+	background: color-mix(in srgb, var(--bg-soft) 90%, transparent);
+	color: var(--text);
+}
+
+.win-ctrl-close:hover {
+	background: #e81123;
+	color: #fff;
+}
