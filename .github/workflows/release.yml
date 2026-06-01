@@ -1,15 +1,7 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag to release (example: v1.0.0)"
-        required: false
-        type: string
 
 permissions:
   contents: write
@@ -20,15 +12,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
-            args: "--bundles app,dmg"
-            os_name: "macOS"
           - platform: windows-latest
-            args: "--bundles nsis,msi"
+            args: "--bundles nsis"
             os_name: "Windows"
-          - platform: ubuntu-22.04
-            args: "--bundles appimage,deb"
-            os_name: "Linux"
 
     runs-on: ${{ matrix.platform }}
 
@@ -48,19 +34,6 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
 
-      - name: Install Linux dependencies (Tauri)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libjavascriptcoregtk-4.1-dev \
-            libsoup-3.0-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf
-
       - name: Install dependencies
         run: npm ci
 
@@ -68,16 +41,7 @@ jobs:
         id: release_tag
         shell: bash
         run: |
-          TAG="${{ github.ref_name }}"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.tag }}" ]]; then
-            TAG="${{ github.event.inputs.tag }}"
-          fi
-
-          if [[ -z "$TAG" ]]; then
-            echo "Unable to resolve release tag" >&2
-            exit 1
-          fi
-
+          TAG="manual-build-${{ github.run_number }}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Build and publish (${{ matrix.os_name }})
@@ -88,11 +52,8 @@ jobs:
           tagName: ${{ steps.release_tag.outputs.tag }}
           releaseName: "Pi Desktop ${{ steps.release_tag.outputs.tag }}"
           releaseBody: |
-            Cross-platform Pi Desktop release.
-
-            Included platform artifacts are uploaded by GitHub Actions.
-            See README and docs for setup and usage.
-          releaseDraft: false
-          prerelease: ${{ contains(steps.release_tag.outputs.tag, '-') }}
+            Manual Windows build.
+          releaseDraft: true
+          prerelease: false
           tauriScript: npm run tauri
           args: ${{ matrix.args }}
