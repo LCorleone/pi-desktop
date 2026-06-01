@@ -560,6 +560,16 @@ fn discover_pi(app: &AppHandle, options: &RpcStartOptions) -> Result<PiProcess, 
         return Ok(PiProcess::PathBinary { path });
     }
 
+    // Windows: npm installs .cmd/.bat wrappers; GUI apps may not inherit full PATH
+    if cfg!(target_os = "windows") {
+        if let Ok(path) = which::which("pi.cmd") {
+            return Ok(PiProcess::PathBinary { path });
+        }
+        if let Ok(path) = which::which("pi.bat") {
+            return Ok(PiProcess::PathBinary { path });
+        }
+    }
+
     // GUI launches on macOS often don't inherit shell PATH (e.g. nvm-managed node/npm bins)
     if let Some(path) = discover_pi_from_common_locations() {
         return Ok(PiProcess::PathBinary { path });
@@ -2409,6 +2419,34 @@ async fn open_path_in_default_app(path: String) -> Result<(), String> {
     Err("Unsupported platform for open_path_in_default_app".to_string())
 }
 
+fn home_dir() -> Option<PathBuf> {
+    std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok()
+        .map(PathBuf::from)
+}
+
+#[tauri::command]
+async fn load_models_config() -> Result<String, String> {
+    let home = home_dir().ok_or("Could not find home directory")?;
+    let path = home.join(".pi").join("agent").join("models.json");
+    if !path.exists() {
+        return Ok("{}".to_string());
+    }
+    fs::read_to_string(path).map_err(|e| format!("Failed to read models.json: {}", e))
+}
+
+#[tauri::command]
+async fn save_models_config(config: String) -> Result<(), String> {
+    let home = home_dir().ok_or("Could not find home directory")?;
+    let dir = home.join(".pi").join("agent");
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create directory: {}", e))?;
+    serde_json::from_str::<serde_json::Value>(&config)
+        .map_err(|e| format!("Invalid JSON: {}", e))?;
+    let path = dir.join("models.json");
+    fs::write(path, config).map_err(|e| format!("Failed to write models.json: {}", e))
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -2449,6 +2487,8 @@ pub fn run() {
             create_share_gist,
             get_desktop_runtime_info,
             open_path_in_default_app,
+            load_models_config,
+            save_models_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
