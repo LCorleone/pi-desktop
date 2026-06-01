@@ -22,6 +22,7 @@
 		"check": "tsc --noEmit"
 	},
 	"dependencies": {
+		"@fontsource/inter": "^5.2.8",
 		"@mariozechner/mini-lit": "^0.2.0",
 		"@tailwindcss/vite": "^4.1.17",
 		"@tauri-apps/api": "^2.0.0",

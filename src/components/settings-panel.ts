@@ -2181,105 +2181,109 @@ export class SettingsPanel {
 						<div class="settings-desc">Configure custom API providers. Changes are saved to <code>~/.pi/agent/models.json</code>.</div>
 
 						${this.providerConfigLoading ? html`<div class="settings-desc">Loading...</div>` : nothing}
-						${this.providerConfigError ? html`<div class="settings-desc" style="color:var(--color-error,red)">${this.providerConfigError}</div>` : nothing}
-						${this.providerConfigMessage ? html`<div class="settings-desc" style="color:var(--color-success,green)">${this.providerConfigMessage}</div>` : nothing}
+						${this.providerConfigError ? html`<div class="settings-message-error">${this.providerConfigError}</div>` : nothing}
+						${this.providerConfigMessage ? html`<div class="settings-message-success">${this.providerConfigMessage}</div>` : nothing}
 
 						<!-- Existing providers -->
 						${providerKeys.length > 0 ? html`
-							<div style="margin-top:12px">
+							<div class="provider-list">
 								${providerKeys.map((key) => {
 									const p = providers[key];
 									const isEditing = this.editingProviderKey === key;
 									return html`
-										<details ?open=${isEditing} style="margin-bottom:8px;border:1px solid var(--color-border,#333);border-radius:6px;padding:8px 12px">
-											<summary style="cursor:pointer;font-weight:600">${key} <span style="font-weight:400;color:var(--color-muted,#888)">—\u00a0${(p?.models?.length ?? 0)} model(s)</span></summary>
-											<div style="margin-top:8px">
-												<label style="display:block;margin-bottom:6px">
+										<details class="provider-card" ?open=${isEditing}>
+											<summary class="provider-header">${key} <span class="provider-count">—\u00a0${(p?.models?.length ?? 0)} model(s)</span></summary>
+											<div class="provider-body">
+												<div class="provider-field">
 													<span class="settings-label">Base URL</span>
 													<input class="settings-input" type="text" .value=${p?.baseUrl ?? ""} @change=${(e: Event) => { providers[key].baseUrl = (e.target as HTMLInputElement).value; }} />
-												</label>
-												<label style="display:block;margin-bottom:6px">
+												</div>
+												<div class="provider-field">
 													<span class="settings-label">API Key</span>
 													<input class="settings-input" type="password" .value=${p?.apiKey ?? ""} @change=${(e: Event) => { providers[key].apiKey = (e.target as HTMLInputElement).value; }} />
-												</label>
+												</div>
 
-												<div style="margin-top:8px;font-weight:600">Models</div>
+												<div class="model-section-label">Models</div>
+												<div class="model-grid">
 												${(p?.models ?? []).map((m: any, idx: number) => html`
-													<div style="display:grid;grid-template-columns:1fr 1fr auto auto auto;gap:4px;align-items:center;margin-bottom:4px">
+													<div class="model-row">
 														<input class="settings-input" placeholder="model id" .value=${m.id ?? ""} @change=${(e: Event) => { providers[key].models[idx].id = (e.target as HTMLInputElement).value; }} />
 														<input class="settings-input" placeholder="display name" .value=${m.name ?? ""} @change=${(e: Event) => { providers[key].models[idx].name = (e.target as HTMLInputElement).value; }} />
-														<label style="display:flex;align-items:center;gap:2px;font-size:12px"><input type="checkbox" ?checked=${m.reasoning ?? false} @change=${(e: Event) => { providers[key].models[idx].reasoning = (e.target as HTMLInputElement).checked; }} /> Reasoning</label>
-														<input class="settings-input" style="width:80px" type="number" placeholder="ctx" .value=${m.contextWindow ?? ""} @change=${(e: Event) => { providers[key].models[idx].contextWindow = Number((e.target as HTMLInputElement).value); }} />
-														<button style="background:var(--color-error,red);color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer" @click=${() => { providers[key].models.splice(idx, 1); this.render(); }}>\u2715</button>
+														<label class="model-row-check"><input type="checkbox" ?checked=${m.reasoning ?? false} @change=${(e: Event) => { providers[key].models[idx].reasoning = (e.target as HTMLInputElement).checked; }} /> Reasoning</label>
+														<input class="settings-input model-row-ctx" type="number" placeholder="ctx" .value=${m.contextWindow ?? ""} @change=${(e: Event) => { providers[key].models[idx].contextWindow = Number((e.target as HTMLInputElement).value); }} />
+														<button class="model-delete-btn" @click=${() => { providers[key].models.splice(idx, 1); this.render(); }}>\u2715</button>
 													</div>
 												`)}
-												<button style="margin-top:4px;border:1px solid var(--color-border,#333);background:transparent;color:inherit;border-radius:4px;padding:4px 12px;cursor:pointer" @click=${() => {
+												</div>
+												<button class="add-model-btn" @click=${() => {
 													if (!providers[key].models) providers[key].models = [];
 													providers[key].models.push({ id: "", name: "", reasoning: false, input: ["text"], contextWindow: 128000, maxTokens: 32000 });
 													this.render();
 												}}>+ Add Model</button>
-											</div>
 
-											<div style="margin-top:8px;display:flex;gap:8px">
-												<button style="background:var(--color-error,red);color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer" @click=${() => {
-													delete providers[key];
-													this.editingProviderKey = null;
-													this.render();
-												}}>Delete Provider</button>
+												<div class="provider-actions">
+													<button class="settings-btn-danger" @click=${() => {
+														delete providers[key];
+														this.editingProviderKey = null;
+														this.render();
+													}}>Delete Provider</button>
+												</div>
 											</div>
 										</details>
 									`;
 								})}
 							</div>
-						` : html`<div class="settings-desc" style="margin-top:8px">No providers configured yet.</div>`}
+						` : html`<div class="settings-desc provider-list">No providers configured yet.</div>`}
 
 						<!-- Add new provider -->
-						<details style="margin-top:16px;border:1px solid var(--color-border,#333);border-radius:6px;padding:8px 12px">
-							<summary style="cursor:pointer;font-weight:600">+ Add Provider</summary>
-							<div style="margin-top:8px">
-								<label style="display:block;margin-bottom:6px">
+						<details class="provider-card provider-save-row">
+							<summary class="provider-header">+ Add Provider</summary>
+							<div class="provider-body">
+								<div class="provider-field">
 									<span class="settings-label">Provider Key</span>
 									<input id="new-provider-key" class="settings-input" type="text" placeholder="e.g. my-provider" />
-								</label>
-								<label style="display:block;margin-bottom:6px">
+								</div>
+								<div class="provider-field">
 									<span class="settings-label">Base URL</span>
 									<input id="new-provider-url" class="settings-input" type="text" placeholder="https://api.example.com/v1" />
-								</label>
-								<label style="display:block;margin-bottom:6px">
+								</div>
+								<div class="provider-field">
 									<span class="settings-label">API Key</span>
 									<input id="new-provider-apikey" class="settings-input" type="password" placeholder="sk-..." />
-								</label>
-								<button style="margin-top:4px;border:1px solid var(--color-border,#333);background:transparent;color:inherit;border-radius:4px;padding:4px 12px;cursor:pointer" @click=${() => {
-									const key = (document.getElementById("new-provider-key") as HTMLInputElement)?.value?.trim();
-									const url = (document.getElementById("new-provider-url") as HTMLInputElement)?.value?.trim();
-									const apiKey = (document.getElementById("new-provider-apikey") as HTMLInputElement)?.value?.trim();
-									if (!key) { this.providerConfigError = "Provider key is required."; this.render(); return; }
-									if (!url) { this.providerConfigError = "Base URL is required."; this.render(); return; }
-									if (!this.providerConfig.providers) this.providerConfig.providers = {};
-									if (this.providerConfig.providers[key]) { this.providerConfigError = "Provider key already exists."; this.render(); return; }
-									this.providerConfig.providers[key] = {
-										baseUrl: url,
-										api: "openai-completions",
-										apiKey: apiKey,
-										compat: { supportsDeveloperRole: false, supportsReasoningEffort: false },
-										models: [],
-									};
-									this.editingProviderKey = key;
-									this.providerConfigError = "";
-									this.render();
-								}}>Create</button>
+								</div>
+								<div class="provider-actions">
+									<button class="settings-btn-primary" @click=${() => {
+										const key = (document.getElementById("new-provider-key") as HTMLInputElement)?.value?.trim();
+										const url = (document.getElementById("new-provider-url") as HTMLInputElement)?.value?.trim();
+										const apiKey = (document.getElementById("new-provider-apikey") as HTMLInputElement)?.value?.trim();
+										if (!key) { this.providerConfigError = "Provider key is required."; this.render(); return; }
+										if (!url) { this.providerConfigError = "Base URL is required."; this.render(); return; }
+										if (!this.providerConfig.providers) this.providerConfig.providers = {};
+										if (this.providerConfig.providers[key]) { this.providerConfigError = "Provider key already exists."; this.render(); return; }
+										this.providerConfig.providers[key] = {
+											baseUrl: url,
+											api: "openai-completions",
+											apiKey: apiKey,
+											compat: { supportsDeveloperRole: false, supportsReasoningEffort: false },
+											models: [],
+										};
+										this.editingProviderKey = key;
+										this.providerConfigError = "";
+										this.render();
+									}}>Create</button>
+								</div>
 							</div>
 						</details>
 
 						<!-- Save -->
-						<div style="margin-top:16px;display:flex;gap:8px;align-items:center">
+						<div class="provider-actions provider-save-row">
 							<button
+								class="settings-btn-primary"
 								?disabled=${this.providerConfigSaving}
-								style="background:var(--color-accent,#007bff);color:#fff;border:none;border-radius:6px;padding:6px 16px;cursor:pointer"
 								@click=${() => this.saveProviderConfig()}
 							>${this.providerConfigSaving ? "Saving..." : "Save"}</button>
 							<button
-								style="border:1px solid var(--color-border,#333);background:transparent;color:inherit;border-radius:6px;padding:6px 16px;cursor:pointer"
+								class="settings-btn-secondary"
 								@click=${() => this.loadProviderConfig()}
 							>Reload</button>
 						</div>

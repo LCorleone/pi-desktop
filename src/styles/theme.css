@@ -22,8 +22,8 @@
 	--color-text-secondary: #9a9aa3;
 	--color-text-tertiary: #6f7078;
 
-	--color-accent-primary: #7a818f;
-	--color-accent-soft: rgb(122 129 143 / 0.2);
+	--color-accent-primary: #0285ff;
+	--color-accent-soft: rgb(2 133 255 / 0.15);
 
 	--color-state-danger: #ef4444;
 	--color-state-success: #22c55e;
@@ -46,8 +46,8 @@
 	--color-text-secondary: #555863;
 	--color-text-tertiary: #80838f;
 
-	--color-accent-primary: #6b7280;
-	--color-accent-soft: rgb(107 114 128 / 0.16);
+	--color-accent-primary: #0285ff;
+	--color-accent-soft: rgb(2 133 255 / 0.12);
 
 	--color-state-danger: #dc2626;
 	--color-state-success: #16a34a;
