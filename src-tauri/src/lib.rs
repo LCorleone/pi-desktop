@@ -2427,6 +2427,68 @@ fn home_dir() -> Option<PathBuf> {
 }
 
 #[tauri::command]
+async fn generate_session_title(
+    base_url: String,
+    api_key: String,
+    model_id: String,
+    user_message: String,
+) -> Result<String, String> {
+    let client = reqwest::Client::new();
+
+    let url = format!(
+        "{}/chat/completions",
+        base_url.trim_end_matches('/')
+    );
+
+    let body = serde_json::json!({
+        "model": model_id,
+        "max_tokens": 30,
+        "messages": [
+            {
+                "role": "system",
+                "content": "Generate a concise 3-6 word title for this conversation. Reply with ONLY the title, no quotes, no punctuation."
+            },
+            {
+                "role": "user",
+                "content": user_message.chars().take(200).collect::<String>()
+            }
+        ]
+    });
+
+    let response = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(format!("API returned {}: {}", status, text));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let title = json["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("")
+        .trim()
+        .to_string();
+
+    if title.is_empty() {
+        return Err("Empty title generated".to_string());
+    }
+
+    Ok(title)
+}
+
+#[tauri::command]
 async fn load_models_config() -> Result<String, String> {
     let home = home_dir().ok_or("Could not find home directory")?;
     let path = home.join(".pi").join("agent").join("models.json");
@@ -2489,6 +2551,7 @@ pub fn run() {
             open_path_in_default_app,
             load_models_config,
             save_models_config,
+            generate_session_title,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1561,6 +1561,90 @@ async function withRpcRetry<T>(label: string, run: () => Promise<T>, attempts = 
 	throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
+async function autoNameSessionIfNew(): Promise<void> {
+	const workspace = getActiveWorkspace();
+	const activeSession = workspace ? getActiveSessionTab(workspace) : null;
+	if (!workspace || !activeSession || !activeSession.sessionPath) return;
+
+	const currentTitle = (activeSession.title || "").trim().toLowerCase();
+	if (!["new session", "chat", ""].includes(currentTitle)) return;
+
+	const state = chatView?.getState();
+	if (!state?.sessionFile || !state.model?.provider || !state.model?.id) return;
+	if ((state.messageCount ?? 0) < 2) return;
+
+	const userMessage = chatView?.getFirstUserMessageText?.();
+	if (!userMessage || userMessage.trim().length === 0) return;
+
+	// Prevent double-invocation
+	const flagKey = `autoNamed_${state.sessionId}`;
+	if ((activeSession as any)[flagKey]) return;
+	(activeSession as any)[flagKey] = true;
+
+	try {
+		const { invoke } = await import("@tauri-apps/api/core");
+		const raw = await invoke<string>("load_models_config");
+		const config = JSON.parse(raw || "{}");
+		const providers = config.providers || {};
+
+		// Find matching provider by checking if the model's provider key matches
+		let matchedProvider: { baseUrl: string; apiKey: string; models: any[] } | null = null;
+		let matchedModelId: string | null = null;
+		const providerKey = state.model.provider.toLowerCase();
+
+		for (const [key, prov] of Object.entries(providers) as [string, any][]) {
+			if (key.toLowerCase() === providerKey) {
+				matchedProvider = prov;
+				// Find matching model to get exact ID
+				const model = (prov.models || []).find((m: any) =>
+					m.id === state.model!.id || m.id.toLowerCase() === state.model!.id.toLowerCase()
+				);
+				matchedModelId = model?.id ?? state.model!.id;
+				break;
+			}
+		}
+
+		if (!matchedProvider || !matchedModelId) return;
+
+		let title: string;
+		try {
+			title = await invoke<string>("generate_session_title", {
+				baseUrl: matchedProvider.baseUrl,
+				apiKey: matchedProvider.apiKey,
+				modelId: matchedModelId,
+				userMessage: userMessage,
+			});
+		} catch {
+			// Fallback: first 5 words of user message
+			title = userMessage
+				.replace(/\n/g, " ")
+				.trim()
+				.split(/\s+/)
+				.slice(0, 5)
+				.join(" ");
+			if (title.length > 50) title = title.substring(0, 50).trim();
+		}
+
+		if (!title || title.trim().length === 0) return;
+
+		// Update via RPC
+		const runtime = getActiveRuntime();
+		if (runtime?.bridge) {
+			await runtime.bridge.setSessionName(title.trim());
+		}
+
+		// Update UI immediately
+		activeSession.title = title.trim();
+		workspace.sessionTitle = title.trim();
+		persistWorkspaces();
+		syncContentTabsBar(workspace);
+		scheduleSidebarSessionsRefresh(0);
+
+	} catch (err) {
+		console.warn("Auto-name session failed:", err);
+	}
+}
+
 async function renameSessionFromWorkspace(projectId: string, sessionPath: string, nextName: string): Promise<boolean> {
 	const workspace = getActiveWorkspace();
 	const project = sidebar?.getProjectById(projectId);
@@ -3298,6 +3382,7 @@ async function initialize(): Promise<void> {
 				stopSidebarSessionsWarmRefresh();
 				scheduleSidebarSessionsRefresh(0);
 				flushPendingAuthConfigReload();
+				autoNameSessionIfNew();
 			}
 		});
 		chatView.render();

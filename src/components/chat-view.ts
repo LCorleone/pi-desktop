@@ -787,6 +787,11 @@ export class ChatView {
 		return this.state;
 	}
 
+	getFirstUserMessageText(): string | null {
+		const userMsg = this.messages.find((m) => m.role === "user");
+		return userMsg?.text ?? null;
+	}
+
 	private getComposerTextarea(): HTMLTextAreaElement | null {
 		return this.container.querySelector("#chat-input") as HTMLTextAreaElement | null;
 	}
