@@ -42,6 +42,7 @@ interface RenderComposerControlsViewParams {
 	onProviderAuthAction: (provider: string, action: "login" | "logout") => void | Promise<unknown>;
 	onSelectModel: (provider: string, modelId: string) => void | Promise<unknown>;
 	onSetThinkingLevel: (value: ThinkingLevel) => void | Promise<unknown>;
+	onClearSession: () => void | Promise<unknown>;
 	onAbort: () => void | Promise<unknown>;
 	onSend: () => void | Promise<unknown>;
 }
@@ -79,12 +80,24 @@ export function renderComposerControlsView({
 	onProviderAuthAction,
 	onSelectModel,
 	onSetThinkingLevel,
+	onClearSession,
 	onAbort,
 	onSend,
 }: RenderComposerControlsViewParams): TemplateResult {
 	return html`
 		<div class="composer-controls">
 			<div class="control-group">
+				<button
+					class="composer-icon-btn"
+					title="Clear chat"
+					?disabled=${interactionLocked}
+					@click=${() => {
+						if (interactionLocked) return;
+						void onClearSession();
+					}}
+				>
+					✕
+				</button>
 				<button
 					class="composer-icon-btn"
 					title="Attach file"

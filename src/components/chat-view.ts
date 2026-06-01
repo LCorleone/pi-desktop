@@ -4443,6 +4443,7 @@ export class ChatView {
 			onProviderAuthAction: (provider, action) => this.handleProviderAuthAction(provider, action),
 			onSelectModel: (provider, modelId) => this.setModel(provider, modelId),
 			onSetThinkingLevel: (value) => this.setThinkingLevel(value),
+			onClearSession: () => this.newSession(),
 			onAbort: () => this.abortCurrentRun(),
 			onSend: () => this.sendMessage("prompt"),
 		});
