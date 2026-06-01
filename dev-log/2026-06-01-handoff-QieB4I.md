@@ -13,6 +13,9 @@ Continue development on the pi-desktop fork (`LCorleone/pi-desktop`, branch `jul
 - Fixed Windows `.cmd` discovery in `discover_pi()` — added `which::which("pi.cmd")` and `which::which("pi.bat")` fallbacks.
 - Added OpenAI-compatible provider config section in Settings — full CRUD for providers and models, saves to `~/.pi/agent/models.json`.
 - **UI polish (4 phases)**: Providers CSS cleanup, accent color, Inter font, micro-interactions.
+- Removed "Recommended" section from Packages page — discover list now only appears when a search query is active (`hasQuery` guard).
+- Added Windows-style window controls (`─ □ ✕`) to sidebar — platform-detected via `navigator.platform`, macOS/Linux traffic lights unchanged.
+- Added clear chat button (`✕`) to composer toolbar — resets LLM context via RPC, clears messages, starts fresh session.
 
 ## UI Polish Details (Phases A-D)
 
@@ -51,7 +54,11 @@ Continue development on the pi-desktop fork (`LCorleone/pi-desktop`, branch `jul
 1. `1c1a17b` — simplify release workflow: Windows exe only, manual trigger
 2. `a7e3566` — update package name to @earendil-works/pi-coding-agent + handoff doc
 3. `32319b1` — fix windows pi.cmd discovery + add OpenAI-compatible provider config in Settings
-4. *(next)* — UI polish: providers CSS, accent color, Inter font, micro-interactions
+4. `c5b6093` — UI polish: providers CSS, accent color, Inter font, micro-interactions
+5. `fbb5822` — auto session naming via LLM
+6. `6e94192` — remove recommended section from packages page
+7. `5c36016` — Windows-style window controls on sidebar
+8. `8e2fc65` — clear chat button in composer toolbar
 
 ## Key Files Changed
 
@@ -63,6 +70,10 @@ Continue development on the pi-desktop fork (`LCorleone/pi-desktop`, branch `jul
 | `src/components/settings-panel.ts` | Providers section: inline styles → CSS classes, ~114 lines changed |
 | `package.json` | Added `@fontsource/inter` |
 | `src-tauri/src/lib.rs` | (previous) Windows .cmd discovery, provider config commands |
+| `src/components/packages-view.ts` | Discover section hidden without search query; hardcoded "Results" title |
+| `src/components/sidebar.ts` | Platform-aware window controls (`isWindowsPlatform()`, `renderWindowControls()`) |
+| `src/components/chat-view/composer-controls-view.ts` | Added `onClearSession` prop and clear (`✕`) button in composer toolbar |
+| `src/components/chat-view.ts` | Clear session button wired to `newSession()` — resets LLM context, clears messages |
 
 ## Remaining Plan — Phase 1
 
