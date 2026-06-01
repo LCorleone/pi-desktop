@@ -6,85 +6,81 @@ Continue development on the pi-desktop fork (`LCorleone/pi-desktop`, branch `jul
 ## What Was Done
 - Investigated the full project architecture: Tauri v2 + Lit/TypeScript frontend, Rust backend, RPC bridge to `pi` CLI.
 - Created branch `july-dev` and pushed to `git@github.com:LCorleone/pi-desktop.git` (remote name: `july`).
-- Modified `.github/workflows/release.yml` to build Windows exe only (NSIS), manual trigger, draft release. Commit `1c1a17b` pushed.
+- Modified `.github/workflows/release.yml` to build Windows exe only (NSIS), manual trigger, draft release.
 - Analyzed all 18 open upstream issues on `gustavonline/pi-desktop` and produced a prioritized contribution plan.
-- Verified TypeScript compiles clean (`npx tsc --noEmit`), frontend builds (`npm run build:frontend`), no TODO/FIXME markers in code.
-- Tested exe on real Windows device — identified two blocking issues for Windows users.
-- Staged package rename: `@mariozechner/pi-coding-agent` → `@earendil-works/pi-coding-agent` in README.md, lib.rs, main.ts (not yet committed/pushed — git commit disabled by AGENTS.md).
+- Tested exe on real Windows device — identified and fixed two first-run blockers.
+- Updated package name: `@mariozechner/pi-coding-agent` → `@earendil-works/pi-coding-agent`.
+- Fixed Windows `.cmd` discovery in `discover_pi()` — added `which::which("pi.cmd")` and `which::which("pi.bat")` fallbacks.
+- Added OpenAI-compatible provider config section in Settings — full CRUD for providers and models, saves to `~/.pi/agent/models.json`.
 
 ## Current State
 - **Branch**: `july-dev` on remote `july` (SSH: `git@github.com:LCorleone/pi-desktop.git`)
 - **Original upstream**: `origin` → `https://github.com/gustavonline/pi-desktop.git`
-- **Windows exe build**: ✅ Succeeded — `Pi Desktop_1.0.0_x64-setup.exe` uploaded as draft release. Required enabling "Read and write permissions" in repo Settings → Actions → Workflow permissions.
-- **Windows testing done**: App launches but has two first-run blockers (see below).
+- **Latest commit**: `32319b1` — fix windows pi.cmd discovery + add OpenAI-compatible provider config
+- **Windows exe**: Building via GitHub Actions. Repo Settings → Actions → Workflow permissions must be "Read and write".
+- **Pending test**: New exe needs testing for Windows `.cmd` discovery fix and Providers section.
 
-## Windows First-Run Issues (tested on real device)
+## Commits on july-dev (in order)
+1. `1c1a17b` — simplify release workflow: Windows exe only, manual trigger
+2. `a7e3566` — update package name to @earendil-works/pi-coding-agent + handoff doc
+3. `32319b1` — fix windows pi.cmd discovery + add OpenAI-compatible provider config in Settings
 
-Two issues block a clean first-run on Windows. Both need fixes in `src-tauri/src/lib.rs`:
+## Key Changes Summary
 
-1. **`pi.cmd` not discovered by Rust** — npm installs `pi` as a `.cmd` wrapper (e.g. `C:\Users\<name>\AppData\Roaming\npm\pi.cmd`). Rust's `which::which("pi")` only finds `.exe`, not `.cmd`. `where pi` returns nothing. PowerShell's `Get-Command pi` finds it, but the Tauri backend can't use PowerShell resolution.
-   - **Workaround**: Set manual Pi binary path in Settings.
-   - **Fix**: In `discover_pi()`, on Windows also try appending `.cmd` / `.bat` extensions, or explicitly check `<npm-prefix>/pi.cmd`.
+### Fix: Windows `.cmd` Discovery (`src-tauri/src/lib.rs`)
+- Added `which::which("pi.cmd")` and `which::which("pi.bat")` fallbacks after the standard `which::which("pi")` fails on Windows
+- This fixes the issue where npm installs `pi` as a `.cmd` wrapper that Rust's `which` crate can't find
 
-2. **`models.json` missing** — After `pi` is found and RPC connects, the model picker is empty. User had to manually create a `models.json` file in the local pi folder for chat to work.
-   - **Fix**: App should guide the user or auto-run model discovery on first run.
+### Feature: OpenAI-Compatible Provider Config (`src/components/settings-panel.ts` + `src-tauri/src/lib.rs`)
+- New "Providers" section in Settings panel (between Account and Updates)
+- Added `SettingsSectionId = "providers"`
+- Added `load_models_config` / `save_models_config` Tauri commands in Rust backend
+- UI: list/edit/delete existing providers, add new providers, manage models per provider
+- Saves to `~/.pi/agent/models.json` in the Pi CLI schema format
 
-3. **Draft release not visible** — GitHub requires repo Settings → Actions → Workflow permissions → "Read and write permissions" for `tauri-action` to create releases on forks.
+### models.json schema (for reference)
+```json
+{
+  "providers": {
+    "provider-key": {
+      "baseUrl": "https://api.example.com/v1",
+      "api": "openai-completions",
+      "apiKey": "sk-xxx",
+      "compat": { "supportsDeveloperRole": false, "supportsReasoningEffort": false },
+      "models": [
+        { "id": "model-id", "name": "Display Name", "reasoning": true, "input": ["text"], "contextWindow": 128000, "maxTokens": 32000 }
+      ]
+    }
+  }
+}
+```
 
-## Unstaged Changes (need manual commit + push)
+## Remaining Plan — Phase 1
 
-Package rename staged but NOT committed (git disabled in AGENTS.md):
-- `README.md` — 2 replacements
-- `src-tauri/src/lib.rs` — 4 replacements
-- `src/main.ts` — 2 replacements
-- `dev-log/2026-06-01-handoff-QieB4I.md` — this file
+1. **#70 Slash command audit** — July is testing manually. Fix broken `/` commands. Files: `src/commands/`, `src/components/chat-view/slash-builtin-command.ts`
+2. **#104 API key provider setup** — Lower priority now since Providers section covers OpenAI-compatible. Could still add first-class OAuth/login flows for major providers.
 
-Run: `git add -A && git commit -m "update package name to @earendil-works/pi-coding-agent" && git push july july-dev`
+## Phase 2 — Polish
+3. **#84** Keyboard shortcuts reliability across OS/layouts
+4. Code-split frontend (1.4MB single chunk → dynamic import for heavy components)
+5. RPC auto-reconnect / error boundary
 
-## Artifacts
-- `.github/workflows/release.yml` — Modified: Windows-only NSIS build, manual trigger, draft release
-- `TODO.md` — Author's massive backlog (architecture, terminal PTY, notifications, resource model)
-- `ROADMAP_V1.md` — Author's v1 vision doc (completed)
-- `docs/ARCHITECTURE.md` — 3-layer architecture description
-- `docs/FEATURE_MAPPING.md` — Feature parity mapping
+## Phase 3 — Architecture
+6. **#101** Decompose `main.ts` (4770 lines) and `sidebar.ts` (4208 lines)
+7. **#67** Native PTY terminal (evaluate `portable-pty` or `tauri-plugin-pty`)
+8. Bundle Pi CLI as sidecar for zero-setup install
 
-## Upstream Issues — Prioritized Plan
-
-### Phase 1 — Quick wins (prioritized by Windows testing)
-1. **Fix Windows `.cmd` discovery** — In `discover_pi()` (`src-tauri/src/lib.rs`), add `.cmd`/`.bat` resolution for npm-installed `pi`. This is the #1 blocker for Windows users.
-2. **Auto-populate models on first run** — After RPC connects, check if models are available. If not, guide user or auto-run model discovery. Files: `src-tauri/src/lib.rs`, `src/main.ts`
-3. **Package rename** — Commit staged changes: `@mariozechner/pi-coding-agent` → `@earendil-works/pi-coding-agent`
-4. **#70** Slash command audit — test all `/` commands, fix broken ones. Files: `src/commands/`, `src/components/chat-view/slash-builtin-command.ts`
-5. **#104** API key provider setup in Settings — add paste-API-key UI. Files: `src/components/settings-panel.ts`, `src-tauri/src/lib.rs`
-
-### Phase 2 — Polish
-6. **#84** Keyboard shortcuts reliability across OS/layouts
-7. Code-split frontend (1.4MB single chunk → dynamic import for heavy components)
-8. RPC auto-reconnect / error boundary
-
-### Phase 3 — Architecture
-9. **#101** Decompose `main.ts` (4770 lines) and `sidebar.ts` (4208 lines) — follow the pattern already used for `chat-view/` submodules
-10. **#67** Native PTY terminal (evaluate `portable-pty` or `tauri-plugin-pty`)
-11. Bundle Pi CLI as sidecar for zero-setup install
-
-## Codebase Hotspots (line counts)
-| File | Lines | Concern |
-|------|-------|---------|
-| `src/styles/app.css` | 8648 | All CSS — Tailwind + custom |
-| `src/components/packages-view.ts` | 4977 | Package management |
-| `src/components/chat-view.ts` | 4830 | Main chat surface |
-| `src/main.ts` | 4770 | Monolithic orchestrator |
-| `src/components/sidebar.ts` | 4208 | Navigation sidebar |
-| `src/components/settings-panel.ts` | 2226 | Settings UI |
-| `src-tauri/src/lib.rs` | 2455 | Entire Rust backend |
-| `src/rpc/bridge.ts` | 1068 | RPC communication |
+## Windows Known Issues (from testing)
+- `where pi` returns nothing even when `pi` works in PowerShell — npm `.cmd` wrappers. Should be fixed by the new fallback.
+- `models.json` must exist for model picker — now handled by Providers section in Settings.
+- Draft releases on fork repos require "Read and write permissions" in GitHub Actions settings.
 
 ## Decisions Log
-- Remote `july` uses SSH (`git@github.com:`) because HTTPS push was denied (403) — likely a token scope issue. SSH works fine.
-- Release workflow produces draft releases (not published) for safety during development.
-- `where pi` returns nothing on Windows even when `pi` works in PowerShell — npm installs `.cmd` wrappers that `which::which()` can't find.
-- `models.json` must exist for the model picker to show options — app doesn't auto-generate it.
-- Draft releases on fork repos require explicit "Read and write permissions" in GitHub Actions settings.
+- Remote `july` uses SSH because HTTPS push was denied (403).
+- Release workflow produces draft releases for safety.
+- Providers section uses the same `models.json` schema as Pi CLI — no custom format.
+- `dirs` crate not added to Cargo.toml — used manual `HOME`/`USERPROFILE` env var resolution instead.
+- Provider config uses dynamic `invoke()` import matching existing codebase pattern.
 
 ## Suggested Skills
 - `showsignature` — before editing any large file, extract its structural signature first
