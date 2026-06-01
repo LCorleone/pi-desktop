@@ -117,7 +117,7 @@ const AUTH_CONFIG_RELOAD_DEBOUNCE_MS = 550;
 const AUTH_CONFIG_FALLBACK_POLL_MS = 2_500;
 const AUTH_CONFIG_SNAPSHOT_MISSING = "__pi-desktop-auth-missing__";
 const AUTH_CONFIG_SNAPSHOT_ERROR = "__pi-desktop-auth-read-error__";
-const CLI_INSTALL_COMMAND = "npm install -g @mariozechner/pi-coding-agent";
+const CLI_INSTALL_COMMAND = "npm install -g @earendil-works/pi-coding-agent";
 const WINDOWS_NODE_INSTALL_COMMAND = "winget install --id OpenJS.NodeJS.LTS";
 const SESSION_ATTENTION_MESSAGES = [
 	"I’m waiting for you — Pi",
@@ -407,7 +407,7 @@ function shouldShowDebugOverlay(): boolean {
 function isCliMissingError(message: string | null | undefined): boolean {
 	const text = (message ?? "").toLowerCase();
 	if (!text) return false;
-	if (text.includes("could not find the pi cli") || text.includes("npm install -g @mariozechner/pi-coding-agent")) {
+	if (text.includes("could not find the pi cli") || text.includes("npm install -g @earendil-works/pi-coding-agent")) {
 		return true;
 	}
 

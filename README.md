@@ -164,11 +164,11 @@ On launch, Pi Desktop checks for the `pi` CLI.
 If it is missing, the app shows an onboarding card with install instructions:
 
 ```bash
-npm install -g @mariozechner/pi-coding-agent
+npm install -g @earendil-works/pi-coding-agent
 ```
 
 Notes:
-- This installs a **public npm package** (`@mariozechner/pi-coding-agent`), so no npm auth token is required for normal users.
+- This installs a **public npm package** (`@earendil-works/pi-coding-agent`), so no npm auth token is required for normal users.
 - Pi Desktop itself is distributed via **GitHub Releases** (not npm).
 
 Then click **Retry** in-app.

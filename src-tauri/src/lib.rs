@@ -495,7 +495,7 @@ fn discover_pi_from_env_override() -> Option<PathBuf> {
 
 fn missing_pi_cli_error(additional: Option<String>) -> String {
     let mut message = String::from(
-        "Could not find the pi CLI.\n\nInstall it with:\n  npm install -g @mariozechner/pi-coding-agent\n\nThen restart the app.",
+        "Could not find the pi CLI.\n\nInstall it with:\n  npm install -g @earendil-works/pi-coding-agent\n\nThen restart the app.",
     );
     if let Some(extra) = additional {
         let trimmed = extra.trim();
@@ -1889,7 +1889,7 @@ fn get_latest_npm_cli_version(pi: Option<&PiProcess>) -> (bool, Option<String>, 
 
     let mut cmd = Command::new(&npm_path);
     cmd.arg("view")
-        .arg("@mariozechner/pi-coding-agent")
+        .arg("@earendil-works/pi-coding-agent")
         .arg("version")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -2054,7 +2054,7 @@ async fn get_cli_update_status(
     let (npm_available, latest_version, npm_note) = get_latest_npm_cli_version(Some(&pi));
 
     let can_update_in_app = matches!(pi, PiProcess::PathBinary { .. });
-    let update_command = "npm install -g @mariozechner/pi-coding-agent@latest".to_string();
+    let update_command = "npm install -g @earendil-works/pi-coding-agent@latest".to_string();
 
     let update_available = match (&current_version, &latest_version) {
         (Some(current), Some(latest)) if can_update_in_app => is_newer_version(latest, current),
@@ -2149,7 +2149,7 @@ async fn update_cli_via_npm() -> Result<NpmCommandResult, String> {
     let mut cmd = Command::new(&npm_path);
     cmd.arg("install")
         .arg("-g")
-        .arg("@mariozechner/pi-coding-agent@latest")
+        .arg("@earendil-works/pi-coding-agent@latest")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
