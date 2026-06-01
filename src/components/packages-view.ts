@@ -4930,23 +4930,25 @@ Execute the required file creation/edits directly, then summarize exactly which 
 										`}
 							</section>
 
+							${hasQuery ? html`
 							<section class="packages-section packages-section-discover">
 								<div class="packages-section-head">
 									<div>
-										<div class="packages-section-title">${discoverTitle}</div>
-										<div class="packages-section-submeta">${discoverSubmeta}</div>
+										<div class="packages-section-title">Results</div>
+										<div class="packages-section-submeta">Results for “${queryLabel}”.</div>
 									</div>
 								</div>
 								${discoverLoading
 									? html`<div class="packages-empty">Loading results…</div>`
 									: discoverRows.length === 0
-										? html`<div class="packages-empty">${discoverEmptyMessage}</div>`
+										? html`<div class="packages-empty">No matches found.</div>`
 										: html`
 											<div class="packages-list packages-list-grid">
 												${discoverRows}
 											</div>
 										`}
 							</section>
+							` : nothing}
 
 							${hasDiagnostics
 								? html`
