@@ -21,7 +21,7 @@
 	/* Typography */
 	--font-family-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
 	--font-family-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-	--font-size-xs: 10px;
+	--font-size-xs: 11px;
 	--font-size-sm: 12px;
 	--font-size-base: 13px;
 	--font-size-lg: 16px;
@@ -119,7 +119,7 @@
 	--color-bg-workspace-chrome: #15161b;
 	--color-bg-workspace-chrome-soft: #1c1d24;
 
-	--color-border-default: rgb(255 255 255 / 0.08);
+	--color-border-default: rgb(255 255 255 / 0.12);
 	--color-text-primary: #f5f5f7;
 	--color-text-secondary: #9a9aa3;
 	--color-text-tertiary: #6f7078;
