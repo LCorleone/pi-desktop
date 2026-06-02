@@ -8933,8 +8933,7 @@ button:active:not(:disabled),
 /* Windows-style window controls */
 .sidebar-window-controls.win-controls {
 	gap: 0;
-	order: 99;
-	margin-left: auto;
+	flex-shrink: 0;
 }
 
 .win-ctrl-btn {
@@ -8961,4 +8960,20 @@ button:active:not(:disabled),
 .win-ctrl-close:hover {
 	background: #e81123;
 	color: #fff;
+}
+
+.sidebar-right-controls {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	margin-left: auto;
+	flex-shrink: 0;
+}
+
+/* Collapsed row: toggle stays left, win-controls pushed right */
+.sidebar-window-row:has(.win-controls) .workspace-sidebar-toggle {
+	margin-left: 0;
+}
+.sidebar-window-row .sidebar-window-controls.win-controls {
+	margin-left: auto;
 }

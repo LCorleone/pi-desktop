@@ -3139,43 +3139,88 @@ export class Sidebar {
 		return html`
 			<div class="sidebar-workspace-switcher" data-tauri-drag-region>
 				<div class="sidebar-workspace-switcher-row" data-tauri-drag-region>
-					${this.renderWindowControls()}
-					<div
-						class="sidebar-workspace-trigger ${this.workspaceMenuOpen ? "open" : ""}"
-						title="Switch workspace"
-						@contextmenu=${(e: MouseEvent) => this.handleWorkspaceContextMenu(e, activeWorkspace.id)}
-					>
-						<button
-							class="sidebar-workspace-trigger-emoji"
-							title="Change workspace emoji"
-							@click=${(e: MouseEvent) => this.openWorkspaceEmojiPicker(activeWorkspace.id, e)}
-						>
-							<span class="sidebar-workspace-avatar">${activeWorkspace.emoji || "💼"}</span>
-						</button>
-						<button
-							class="sidebar-workspace-trigger-main"
-							@click=${(e: Event) => {
-								e.stopPropagation();
-								this.toggleWorkspaceMenu();
-							}}
-						>
-							<span class="sidebar-workspace-trigger-title">${activeWorkspace.title}</span>
-						</button>
-						<span class="sidebar-workspace-chevron" aria-hidden="true">${this.workspaceMenuOpen ? "▴" : "▾"}</span>
-					</div>
-					<button
-						class="workspace-sidebar-toggle"
-						title="Collapse sidebar"
-						@click=${(e: Event) => {
-							e.stopPropagation();
-							this.toggleCollapsed();
-						}}
-					>
-						<svg viewBox="0 0 16 16" aria-hidden="true">
-							<path d="M3 3.5h10v9H3z" />
-							<path d="M6 3.5v9" />
-						</svg>
-					</button>
+					${this.isWindowsPlatform()
+						? html`
+							<div
+								class="sidebar-workspace-trigger ${this.workspaceMenuOpen ? "open" : ""}"
+								title="Switch workspace"
+								@contextmenu=${(e: MouseEvent) => this.handleWorkspaceContextMenu(e, activeWorkspace.id)}
+							>
+								<button
+									class="sidebar-workspace-trigger-emoji"
+									title="Change workspace emoji"
+									@click=${(e: MouseEvent) => this.openWorkspaceEmojiPicker(activeWorkspace.id, e)}
+								>
+									<span class="sidebar-workspace-avatar">${activeWorkspace.emoji || "💼"}</span>
+								</button>
+								<button
+									class="sidebar-workspace-trigger-main"
+									@click=${(e: Event) => {
+										e.stopPropagation();
+										this.toggleWorkspaceMenu();
+									}}
+								>
+									<span class="sidebar-workspace-trigger-title">${activeWorkspace.title}</span>
+								</button>
+								<span class="sidebar-workspace-chevron" aria-hidden="true">${this.workspaceMenuOpen ? "▴" : "▾"}</span>
+							</div>
+							<div class="sidebar-right-controls">
+								<button
+									class="workspace-sidebar-toggle"
+									title="Collapse sidebar"
+									@click=${(e: Event) => {
+										e.stopPropagation();
+										this.toggleCollapsed();
+									}}
+								>
+									<svg viewBox="0 0 16 16" aria-hidden="true">
+										<path d="M3 3.5h10v9H3z" />
+										<path d="M6 3.5v9" />
+									</svg>
+								</button>
+								${this.renderWindowControls()}
+							</div>
+						`
+						: html`
+							${this.renderWindowControls()}
+							<div
+								class="sidebar-workspace-trigger ${this.workspaceMenuOpen ? "open" : ""}"
+								title="Switch workspace"
+								@contextmenu=${(e: MouseEvent) => this.handleWorkspaceContextMenu(e, activeWorkspace.id)}
+							>
+								<button
+									class="sidebar-workspace-trigger-emoji"
+									title="Change workspace emoji"
+									@click=${(e: MouseEvent) => this.openWorkspaceEmojiPicker(activeWorkspace.id, e)}
+								>
+									<span class="sidebar-workspace-avatar">${activeWorkspace.emoji || "💼"}</span>
+								</button>
+								<button
+									class="sidebar-workspace-trigger-main"
+									@click=${(e: Event) => {
+										e.stopPropagation();
+										this.toggleWorkspaceMenu();
+									}}
+								>
+									<span class="sidebar-workspace-trigger-title">${activeWorkspace.title}</span>
+								</button>
+								<span class="sidebar-workspace-chevron" aria-hidden="true">${this.workspaceMenuOpen ? "▴" : "▾"}</span>
+							</div>
+							<button
+								class="workspace-sidebar-toggle"
+								title="Collapse sidebar"
+								@click=${(e: Event) => {
+									e.stopPropagation();
+									this.toggleCollapsed();
+								}}
+							>
+								<svg viewBox="0 0 16 16" aria-hidden="true">
+									<path d="M3 3.5h10v9H3z" />
+									<path d="M6 3.5v9" />
+								</svg>
+							</button>
+						`
+					}
 				</div>
 				${this.workspaceMenuOpen
 					? html`
@@ -3275,6 +3320,26 @@ export class Sidebar {
 	}
 
 	private renderWorkspaceWindowRow(): TemplateResult {
+		if (this.isWindowsPlatform()) {
+			return html`
+				<div class="sidebar-window-row" data-tauri-drag-region>
+					<button
+						class="workspace-sidebar-toggle"
+						title="Collapse sidebar"
+						@click=${(e: Event) => {
+							e.stopPropagation();
+							this.toggleCollapsed();
+						}}
+					>
+						<svg viewBox="0 0 16 16" aria-hidden="true">
+							<path d="M3 3.5h10v9H3z" />
+							<path d="M6 3.5v9" />
+						</svg>
+					</button>
+					${this.renderWindowControls()}
+				</div>
+			`;
+		}
 		return html`
 			<div class="sidebar-window-row" data-tauri-drag-region>
 				${this.renderWindowControls()}
