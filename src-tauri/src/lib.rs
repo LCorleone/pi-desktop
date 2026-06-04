@@ -2433,7 +2433,10 @@ async fn generate_session_title(
     model_id: String,
     user_message: String,
 ) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Client build failed: {}", e))?;
 
     let url = format!(
         "{}/chat/completions",
@@ -2442,7 +2445,7 @@ async fn generate_session_title(
 
     let body = serde_json::json!({
         "model": model_id,
-        "max_tokens": 30,
+        "max_tokens": 50,
         "messages": [
             {
                 "role": "system",

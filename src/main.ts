@@ -1632,8 +1632,6 @@ async function autoNameSessionIfNew(): Promise<void> {
 			if (title.length > 50) title = title.substring(0, 50).trim();
 		}
 
-		if (!title || title.trim().length === 0) return;
-
 		// Update via RPC
 		const runtime = getActiveRuntime();
 		if (runtime?.bridge) {
