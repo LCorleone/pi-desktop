@@ -1589,71 +1589,24 @@ async function autoNameSessionIfNew(): Promise<void> {
 
 	try {
 		const { invoke } = await import("@tauri-apps/api/core");
-		const raw = await invoke<string>("load_models_config");
-		const config = JSON.parse(raw || "{}");
-		const providers = config.providers || {};
-
-		// Find provider+model by matching model ID across all providers
-		let matchedBaseUrl: string | null = null;
-		let matchedApiKey: string | null = null;
-		let matchedModelId: string | null = null;
-
-		for (const prov of Object.values(providers) as any[]) {
-			const model = (prov.models || []).find((m: any) =>
-				m.id === state.model!.id || m.id.toLowerCase() === state.model!.id.toLowerCase()
-			);
-			if (model) {
-				matchedBaseUrl = prov.baseUrl;
-				matchedApiKey = prov.apiKey;
-				matchedModelId = model.id;
-				break;
-			}
-		}
-
 		let title: string;
 
-		if (!matchedBaseUrl || !matchedApiKey) {
-			// Try auth.json as fallback
-			try {
-				const providerLower = state.model!.provider.toLowerCase();
-				const apiKey = await invoke<string>("get_provider_api_key", { provider: providerLower });
-				const DEFAULT_BASE_URLS: Record<string, string> = {
-					openai: "https://api.openai.com/v1",
-					anthropic: "https://api.anthropic.com/v1",
-					groq: "https://api.groq.com/openai/v1",
-					google: "https://generativelanguage.googleapis.com/v1beta/openai",
-					deepseek: "https://api.deepseek.com/v1",
-					openrouter: "https://openrouter.ai/api/v1",
-					fireworks: "https://api.fireworks.ai/inference/v1",
-					together: "https://api.together.xyz/v1",
-					mistral: "https://api.mistral.ai/v1",
-					xai: "https://api.x.ai/v1",
-					perplexity: "https://api.perplexity.ai",
-					cerebras: "https://api.cerebras.ai/v1",
-				};
-				const baseUrl = DEFAULT_BASE_URLS[providerLower];
-				if (baseUrl && apiKey) {
-					matchedBaseUrl = baseUrl;
-					matchedApiKey = apiKey;
-					matchedModelId = state.model!.id;
-				}
-			} catch {
-				// auth.json lookup failed, fall through to word-based title
-			}
-		}
-
-		if (matchedBaseUrl && matchedApiKey && matchedModelId) {
+		try {
+			const auth = await invoke<{ base_url: string; api_key: string; model_id: string }>("resolve_model_auth", {
+				provider: state.model!.provider,
+				modelId: state.model!.id,
+			});
 			try {
 				title = await invoke<string>("generate_session_title", {
-					baseUrl: matchedBaseUrl,
-					apiKey: matchedApiKey,
-					modelId: matchedModelId,
+					baseUrl: auth.base_url,
+					apiKey: auth.api_key,
+					modelId: auth.model_id,
 					userMessage: userMessage,
 				});
 			} catch {
 				title = "";
 			}
-		} else {
+		} catch {
 			title = "";
 		}
 

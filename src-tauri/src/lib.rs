@@ -2490,26 +2490,91 @@ async fn generate_session_title(
     Ok(title)
 }
 
-#[tauri::command]
-async fn get_provider_api_key(provider: String) -> Result<String, String> {
-    let home = resolve_home_dir().ok_or("Could not find home directory")?;
-    let auth_path = home.join(".pi").join("auth.json");
-    if !auth_path.exists() {
-        return Err("auth.json not found".to_string());
+#[derive(Debug, Serialize)]
+struct ResolvedModelAuth {
+    base_url: String,
+    api_key: String,
+    model_id: String,
+}
+
+fn default_base_url_for_provider(provider: &str) -> String {
+    match provider.to_lowercase().as_str() {
+        "openai" => "https://api.openai.com/v1",
+        "anthropic" => "https://api.anthropic.com/v1",
+        "groq" => "https://api.groq.com/openai/v1",
+        "google" => "https://generativelanguage.googleapis.com/v1beta/openai",
+        "deepseek" => "https://api.deepseek.com/v1",
+        "openrouter" => "https://openrouter.ai/api/v1",
+        "fireworks" => "https://api.fireworks.ai/inference/v1",
+        "together" => "https://api.together.xyz/v1",
+        "mistral" => "https://api.mistral.ai/v1",
+        "xai" => "https://api.x.ai/v1",
+        "perplexity" => "https://api.perplexity.ai",
+        "cerebras" => "https://api.cerebras.ai/v1",
+        _ => "",
     }
-    let content = fs::read_to_string(&auth_path)
-        .map_err(|e| format!("Failed to read auth.json: {}", e))?;
-    let parsed: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| format!("Invalid auth.json: {}", e))?;
+    .to_string()
+}
 
-    let cred = parsed.get(&provider)
-        .ok_or_else(|| format!("Provider '{}' not found in auth.json", provider))?;
+#[tauri::command]
+async fn resolve_model_auth(provider: String, model_id: String) -> Result<ResolvedModelAuth, String> {
+    let home = resolve_home_dir().ok_or("Could not find home directory")?;
 
-    let key = cred.get("key")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| format!("No API key for provider '{}'", provider))?;
+    // 1. Check models.json first
+    let models_path = home.join(".pi").join("agent").join("models.json");
+    if models_path.exists() {
+        let content = fs::read_to_string(&models_path).unwrap_or_default();
+        let config: serde_json::Value =
+            serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
+        let providers = config.get("providers").and_then(|v| v.as_object());
+        if let Some(providers) = providers {
+            for (_, prov) in providers {
+                let models = prov.get("models").and_then(|v| v.as_array());
+                if let Some(models) = models {
+                    for model in models {
+                        let mid = model.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                        if mid.eq_ignore_ascii_case(&model_id) {
+                            let base_url =
+                                prov.get("baseUrl").and_then(|v| v.as_str()).unwrap_or("");
+                            let api_key =
+                                prov.get("apiKey").and_then(|v| v.as_str()).unwrap_or("");
+                            if !base_url.is_empty() && !api_key.is_empty() && !mid.is_empty() {
+                                return Ok(ResolvedModelAuth {
+                                    base_url: base_url.to_string(),
+                                    api_key: api_key.to_string(),
+                                    model_id: mid.to_string(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-    Ok(key.to_string())
+    // 2. Check auth.json for API key, use default base URL
+    let auth_path = home.join(".pi").join("auth.json");
+    if auth_path.exists() {
+        let content = fs::read_to_string(&auth_path)
+            .map_err(|e| format!("Failed to read auth.json: {}", e))?;
+        let parsed: serde_json::Value =
+            serde_json::from_str(&content).map_err(|e| format!("Invalid auth.json: {}", e))?;
+        if let Some(cred) = parsed.get(&provider) {
+            let key = cred.get("key").and_then(|v| v.as_str()).unwrap_or("");
+            if !key.is_empty() {
+                let base_url = default_base_url_for_provider(&provider);
+                if !base_url.is_empty() {
+                    return Ok(ResolvedModelAuth {
+                        base_url,
+                        api_key: key.to_string(),
+                        model_id,
+                    });
+                }
+            }
+        }
+    }
+
+    Err("No credentials found for the current model".to_string())
 }
 
 #[tauri::command]
@@ -2576,7 +2641,7 @@ pub fn run() {
             load_models_config,
             save_models_config,
             generate_session_title,
-            get_provider_api_key,
+            resolve_model_auth,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
