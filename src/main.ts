@@ -1587,30 +1587,30 @@ async function autoNameSessionIfNew(): Promise<void> {
 		const config = JSON.parse(raw || "{}");
 		const providers = config.providers || {};
 
-		// Find matching provider by checking if the model's provider key matches
-		let matchedProvider: { baseUrl: string; apiKey: string; models: any[] } | null = null;
+		// Find provider+model by matching model ID across all providers
+		let matchedBaseUrl: string | null = null;
+		let matchedApiKey: string | null = null;
 		let matchedModelId: string | null = null;
-		const providerKey = state.model.provider.toLowerCase();
 
-		for (const [key, prov] of Object.entries(providers) as [string, any][]) {
-			if (key.toLowerCase() === providerKey) {
-				matchedProvider = prov;
-				// Find matching model to get exact ID
-				const model = (prov.models || []).find((m: any) =>
-					m.id === state.model!.id || m.id.toLowerCase() === state.model!.id.toLowerCase()
-				);
-				matchedModelId = model?.id ?? state.model!.id;
+		for (const prov of Object.values(providers) as any[]) {
+			const model = (prov.models || []).find((m: any) =>
+				m.id === state.model!.id || m.id.toLowerCase() === state.model!.id.toLowerCase()
+			);
+			if (model) {
+				matchedBaseUrl = prov.baseUrl;
+				matchedApiKey = prov.apiKey;
+				matchedModelId = model.id;
 				break;
 			}
 		}
 
 		let title: string;
 
-		if (matchedProvider && matchedModelId) {
+		if (matchedBaseUrl && matchedApiKey && matchedModelId) {
 			try {
 				title = await invoke<string>("generate_session_title", {
-					baseUrl: matchedProvider.baseUrl,
-					apiKey: matchedProvider.apiKey,
+					baseUrl: matchedBaseUrl,
+					apiKey: matchedApiKey,
 					modelId: matchedModelId,
 					userMessage: userMessage,
 				});
