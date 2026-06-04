@@ -1564,7 +1564,7 @@ async function withRpcRetry<T>(label: string, run: () => Promise<T>, attempts = 
 async function autoNameSessionIfNew(): Promise<void> {
 	const workspace = getActiveWorkspace();
 	const activeSession = workspace ? getActiveSessionTab(workspace) : null;
-	if (!workspace || !activeSession || !activeSession.sessionPath) return;
+	if (!workspace || !activeSession) return;
 
 	const currentTitle = (activeSession.title || "").trim().toLowerCase();
 	if (!["new session", "chat", ""].includes(currentTitle)) return;
@@ -1572,6 +1572,12 @@ async function autoNameSessionIfNew(): Promise<void> {
 	const state = chatView?.getState();
 	if (!state?.sessionFile || !state.model?.provider || !state.model?.id) return;
 	if ((state.messageCount ?? 0) < 2) return;
+
+	// Populate sessionPath from fresh state if not already set
+	if (!activeSession.sessionPath) {
+		activeSession.sessionPath = state.sessionFile;
+	}
+	if (!activeSession.sessionPath) return;
 
 	const userMessage = chatView?.getFirstUserMessageText?.();
 	if (!userMessage || userMessage.trim().length === 0) return;
