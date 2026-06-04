@@ -101,7 +101,6 @@ export function handleRuntimeStatusEvent(
 				sawToolActivity: false,
 				keepWorkflowExpanded: false,
 			});
-			context.onRunStateChange(false);
 			context.refreshStateAfterAgentEnd();
 			context.render();
 			return true;

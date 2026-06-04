@@ -2646,6 +2646,7 @@ export class ChatView {
 							this.syncComposerQueueFromState(state);
 							this.pendingDeliveryMode = state.isStreaming ? "steer" : "prompt";
 							this.onStateChange?.(state);
+							this.onRunStateChange?.(false);
 							void this.refreshSessionStats(true);
 							void this.refreshGitSummary(true);
 							this.render();
