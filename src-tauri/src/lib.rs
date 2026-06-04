@@ -2445,15 +2445,14 @@ async fn generate_session_title(
 
     let body = serde_json::json!({
         "model": model_id,
-        "max_tokens": 50,
+        "max_tokens": 60,
         "messages": [
             {
-                "role": "system",
-                "content": "Generate a concise 3-6 word title for this conversation. Reply with ONLY the title, no quotes, no punctuation."
-            },
-            {
                 "role": "user",
-                "content": user_message.chars().take(200).collect::<String>()
+                "content": format!(
+                    "You are naming a coding session in an IDE. Given the user\'s first message below, generate a short descriptive title (3-7 words) that captures what they are working on. Focus on the main task or goal. Do not use quotes, punctuation, or explanations. Just the title.\n\n{}", 
+                    user_message
+                )
             }
         ]
     });
