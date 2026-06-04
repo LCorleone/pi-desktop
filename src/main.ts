@@ -1593,14 +1593,18 @@ async function autoNameSessionIfNew(): Promise<void> {
 		const config = JSON.parse(raw || "{}");
 		const providers = config.providers || {};
 
-		// Find provider+model by matching model ID across all providers
+		const providerName = (state.model!.provider || "").toLowerCase();
+		const modelIdNorm = (state.model!.id || "").toLowerCase();
+
+		// Find provider by name, then match model ID within that provider
 		let matchedBaseUrl: string | null = null;
 		let matchedApiKey: string | null = null;
 		let matchedModelId: string | null = null;
 
-		for (const prov of Object.values(providers) as any[]) {
+		for (const [name, prov] of Object.entries(providers) as [string, any][]) {
+			if (name.toLowerCase() !== providerName) continue;
 			const model = (prov.models || []).find((m: any) =>
-				m.id === state.model!.id || m.id.toLowerCase() === state.model!.id.toLowerCase()
+				m.id === state.model!.id || m.id.toLowerCase() === modelIdNorm
 			);
 			if (model) {
 				matchedBaseUrl = prov.baseUrl;
