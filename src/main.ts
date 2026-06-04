@@ -1604,18 +1604,25 @@ async function autoNameSessionIfNew(): Promise<void> {
 			}
 		}
 
-		if (!matchedProvider || !matchedModelId) return;
-
 		let title: string;
-		try {
-			title = await invoke<string>("generate_session_title", {
-				baseUrl: matchedProvider.baseUrl,
-				apiKey: matchedProvider.apiKey,
-				modelId: matchedModelId,
-				userMessage: userMessage,
-			});
-		} catch {
-			// Fallback: first 5 words of user message
+
+		if (matchedProvider && matchedModelId) {
+			try {
+				title = await invoke<string>("generate_session_title", {
+					baseUrl: matchedProvider.baseUrl,
+					apiKey: matchedProvider.apiKey,
+					modelId: matchedModelId,
+					userMessage: userMessage,
+				});
+			} catch {
+				title = "";
+			}
+		} else {
+			title = "";
+		}
+
+		// Fallback: first 5 words of user message
+		if (!title || title.trim().length === 0) {
 			title = userMessage
 				.replace(/\n/g, " ")
 				.trim()
