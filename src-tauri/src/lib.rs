@@ -2491,6 +2491,28 @@ async fn generate_session_title(
 }
 
 #[tauri::command]
+async fn get_provider_api_key(provider: String) -> Result<String, String> {
+    let home = resolve_home_dir().ok_or("Could not find home directory")?;
+    let auth_path = home.join(".pi").join("auth.json");
+    if !auth_path.exists() {
+        return Err("auth.json not found".to_string());
+    }
+    let content = fs::read_to_string(&auth_path)
+        .map_err(|e| format!("Failed to read auth.json: {}", e))?;
+    let parsed: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Invalid auth.json: {}", e))?;
+
+    let cred = parsed.get(&provider)
+        .ok_or_else(|| format!("Provider '{}' not found in auth.json", provider))?;
+
+    let key = cred.get("key")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| format!("No API key for provider '{}'", provider))?;
+
+    Ok(key.to_string())
+}
+
+#[tauri::command]
 async fn load_models_config() -> Result<String, String> {
     let home = home_dir().ok_or("Could not find home directory")?;
     let path = home.join(".pi").join("agent").join("models.json");
@@ -2554,6 +2576,7 @@ pub fn run() {
             load_models_config,
             save_models_config,
             generate_session_title,
+            get_provider_api_key,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
