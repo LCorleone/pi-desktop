@@ -1584,6 +1584,7 @@ async function autoNameSessionIfNew(): Promise<void> {
 	try {
 		const { invoke } = await import("@tauri-apps/api/core");
 		const raw = await invoke<string>("load_models_config");
+		console.log("[auto-name] models.json:", raw.substring(0, 500));
 		const config = JSON.parse(raw || "{}");
 		const providers = config.providers || {};
 
@@ -1604,20 +1605,26 @@ async function autoNameSessionIfNew(): Promise<void> {
 			}
 		}
 
+		console.log("[auto-name] match:", { matchedBaseUrl: !!matchedBaseUrl, matchedApiKey: !!matchedApiKey, matchedModelId, rpcModelId: state.model!.id });
+
 		let title: string;
 
 		if (matchedBaseUrl && matchedApiKey && matchedModelId) {
 			try {
+				console.log("[auto-name] calling LLM...");
 				title = await invoke<string>("generate_session_title", {
 					baseUrl: matchedBaseUrl,
 					apiKey: matchedApiKey,
 					modelId: matchedModelId,
 					userMessage: userMessage,
 				});
-			} catch {
+				console.log("[auto-name] LLM result:", title);
+			} catch (err) {
+				console.warn("[auto-name] LLM FAILED:", err);
 				title = "";
 			}
 		} else {
+			console.log("[auto-name] no provider match");
 			title = "";
 		}
 
