@@ -1589,38 +1589,53 @@ async function autoNameSessionIfNew(): Promise<void> {
 
 	try {
 		const { invoke } = await import("@tauri-apps/api/core");
+		const raw = await invoke<string>("load_models_config");
+		const config = JSON.parse(raw || "{}");
+		const providers = config.providers || {};
+
+		// Find provider+model by matching model ID across all providers
+		let matchedBaseUrl: string | null = null;
+		let matchedApiKey: string | null = null;
+		let matchedModelId: string | null = null;
+
+		for (const prov of Object.values(providers) as any[]) {
+			const model = (prov.models || []).find((m: any) =>
+				m.id === state.model!.id || m.id.toLowerCase() === state.model!.id.toLowerCase()
+			);
+			if (model) {
+				matchedBaseUrl = prov.baseUrl;
+				matchedApiKey = prov.apiKey;
+				matchedModelId = model.id;
+				break;
+			}
+		}
+
 		let title: string;
 
-		try {
-			const auth = await invoke<{ base_url: string; api_key: string; model_id: string }>("resolve_model_auth", {
-				provider: state.model!.provider,
-				modelId: state.model!.id,
-			});
+		if (matchedBaseUrl && matchedApiKey && matchedModelId) {
 			try {
 				title = await invoke<string>("generate_session_title", {
-					baseUrl: auth.base_url,
-					apiKey: auth.api_key,
-					modelId: auth.model_id,
+					baseUrl: matchedBaseUrl,
+					apiKey: matchedApiKey,
+					modelId: matchedModelId,
 					userMessage: userMessage,
 				});
 			} catch {
 				title = "";
 			}
-		} catch {
+		} else {
 			title = "";
 		}
 
-		// Fallback: first 5 words of user message (URLs stripped)
+		// Fallback: first 5 words of user message
 		if (!title || title.trim().length === 0) {
 			title = userMessage
-				.replace(/https?:\/\/\S+/g, "")
 				.replace(/\n/g, " ")
 				.trim()
 				.split(/\s+/)
 				.slice(0, 5)
 				.join(" ");
-			if (!title) title = "Chat";
-			else if (title.length > 80) title = title.substring(0, 80).trim();
+			if (title.length > 50) title = title.substring(0, 50).trim();
 		}
 
 		// Update via RPC
