@@ -564,6 +564,7 @@ export class ChatView {
 	private workingStatusTimer: ReturnType<typeof setTimeout> | null = null;
 	private disconnectNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 	private streamingReconcileTimer: ReturnType<typeof setTimeout> | null = null;
+	private streamingRenderRaf: number | null = null;
 	private composerResizeObserver: ResizeObserver | null = null;
 	private observedComposerElement: HTMLElement | null = null;
 	private composerOffsetPx = 196;
@@ -1535,6 +1536,28 @@ export class ChatView {
 		this.streamingReconcileTimer = null;
 	}
 
+	/**
+	 * Coalesce streaming renders to at most one per animation frame.
+	 * Text deltas arrive many times per second; rendering on each one
+	 * triggers a full timeline re-render + forced layout and stutters
+	 * in long sessions. The message data is already updated synchronously
+	 * by the caller; this only defers/coalesces the render() call.
+	 */
+	private scheduleStreamingRender(): void {
+		if (this.streamingRenderRaf !== null) return;
+		this.streamingRenderRaf = requestAnimationFrame(() => {
+			this.streamingRenderRaf = null;
+			this.render();
+		});
+	}
+
+	private flushStreamingRender(): void {
+		if (this.streamingRenderRaf !== null) {
+			cancelAnimationFrame(this.streamingRenderRaf);
+			this.streamingRenderRaf = null;
+		}
+	}
+
 	private onGlobalPointerDownForModelPicker = (event: Event): void => {
 		if (!this.modelPickerOpen) return;
 		const target = event.target;
@@ -1582,6 +1605,7 @@ export class ChatView {
 		this.unsubscribeEvents?.();
 		this.unsubscribeEvents = null;
 		this.cancelStreamingUiReconcile();
+		this.flushStreamingRender();
 		this.runHasAssistantText = false;
 		this.runSawToolActivity = false;
 		this.keepWorkflowExpandedUntilAssistantText = false;
@@ -2540,6 +2564,7 @@ export class ChatView {
 				extractAssistantPartialContent: this.extractAssistantPartialContent.bind(this),
 				mergeStreamingText: this.mergeStreamingText.bind(this),
 				scheduleStreamingUiReconcile: this.scheduleStreamingUiReconcile.bind(this),
+				scheduleStreamingRender: this.scheduleStreamingRender.bind(this),
 				createId: uid,
 			})
 		) {

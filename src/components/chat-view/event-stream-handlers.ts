@@ -46,6 +46,7 @@ interface HandleMessageStreamEventContext {
 	extractAssistantPartialContent: (assistantEvent: Record<string, unknown>, mode: "text" | "thinking") => string | null;
 	mergeStreamingText: (current: string, partial: string | null, deltaCandidate: unknown) => string;
 	scheduleStreamingUiReconcile: (delayMs?: number) => void;
+	scheduleStreamingRender: () => void;
 	createId: (prefix?: string) => string;
 }
 
@@ -200,7 +201,9 @@ export function handleMessageStreamEvent(
 					context.markAssistantTextObserved();
 				}
 				context.scheduleStreamingUiReconcile(1800);
-				context.render();
+				// Coalesce: render at most once per animation frame instead of per token.
+				// scrollToBottom is already rAF-wrapped internally.
+				context.scheduleStreamingRender();
 				context.scrollToBottom();
 				return true;
 			}
