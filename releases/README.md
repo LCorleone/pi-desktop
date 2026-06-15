@@ -1,0 +1,17 @@
+# Release Notes
+
+This folder stores the release notes for each published release of the
+`LCorleone/pi-desktop` fork.
+
+## Files
+
+| File | Release | Notes |
+|------|---------|-------|
+| [`v1.0.0.md`](./v1.0.0.md) | First release | Auto session naming, streaming perf, Windows improvements, UI polish |
+
+## Convention
+
+- One Markdown file per release, named after the release tag/version:
+  `v<version>.md` (e.g. `v1.0.0.md`, `v1.1.0.md`).
+- The file content is what gets pasted into the GitHub Release description.
+- Update this README's table when adding a new release note.
