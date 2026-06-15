@@ -14,7 +14,7 @@ import { SettingsPanel, type SettingsSectionId } from "./components/settings-pan
 import { ShortcutsPanel } from "./components/shortcuts-panel.js";
 import { Sidebar, type SidebarMode, type SidebarWorkspaceItem } from "./components/sidebar.js";
 import { TerminalPanel } from "./components/terminal-panel.js";
-import type { WorkspaceTabs } from "./components/workspace-tabs.js";
+import { applyWindowChrome } from "./components/window-chrome.js";
 import { fetchDesktopUpdateStatus, type DesktopUpdateStatus } from "./desktop-updates.js";
 import { type CliUpdateStatus, RpcBridge, type RpcSessionState, rpcBridge, setActiveRpcBridge } from "./rpc/bridge.js";
 import {
@@ -128,7 +128,6 @@ const SESSION_ATTENTION_MESSAGES = [
 
 let sidebar: Sidebar | null = null;
 let chatView: ChatView | null = null;
-let workspaceTabsBar: WorkspaceTabs | null = null;
 let contentTabsBar: ContentTabs | null = null;
 let fileViewer: FileViewer | null = null;
 let terminalPanel: TerminalPanel | null = null;
@@ -2377,7 +2376,6 @@ function syncWorkspaceTabsBar(): void {
 		pinned: false,
 		closable: true,
 	}));
-	workspaceTabsBar?.setTabs(workspaceItems, activeWorkspaceId);
 	sidebar?.setWorkspaces(workspaceItems, activeWorkspaceId);
 }
 
@@ -2402,7 +2400,6 @@ function syncSidebarSettingsNavigation(): void {
 function syncWorkspaceContextChrome(workspace: WorkspaceState | null = getActiveWorkspace()): void {
 	const packagesOpen = workspace?.pane === "packages";
 	const settingsOpen = workspace?.pane === "settings";
-	workspaceTabsBar?.setPackagesToolbarVisible(packagesOpen);
 	sidebar?.setPackagesOpen(packagesOpen);
 	sidebar?.setSettingsShellActive(Boolean(settingsOpen));
 	if (settingsOpen) syncSidebarSettingsNavigation();
@@ -2733,7 +2730,6 @@ async function applyWorkspacePane(workspace: WorkspaceState | null = getActiveWo
 		setPaneVisibility("packages");
 		await packagesView?.open();
 		if (isStale()) return;
-		workspaceTabsBar?.setPackagesSearchQuery(packagesView?.getQuery() ?? "");
 		syncDebugOverlay();
 		return;
 	}
@@ -4875,6 +4871,7 @@ function setupThemeSyncListeners(): void {
 }
 
 applyInitialTheme();
+applyWindowChrome();
 void applyNativeWindowVisualFixes();
 setupThemeSyncListeners();
 setupKeyboardShortcuts();

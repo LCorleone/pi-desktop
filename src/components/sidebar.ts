@@ -4,7 +4,8 @@
 
 import { html, nothing, render, type TemplateResult } from "lit";
 import { clearActiveDraggedFilePaths, setActiveDraggedFilePaths } from "./file-drag-transfer.js";
-import { EMOJI_CATALOG } from "./workspace-tabs.js";
+import { captionIconSvg, getMaximized, subscribeMaximized } from "./window-chrome.js";
+import { EMOJI_CATALOG } from "./emoji-catalog.js";
 
 export type SidebarMode = "projects" | "files";
 
@@ -260,6 +261,8 @@ export class Sidebar {
 	private activeSettingsNavId: string | null = null;
 	private query = "";
 	private collapsed = false;
+	private isMaximized = false;
+	private maximizedUnlisten: (() => void) | null = null;
 	private storageKey = workspaceStorageKey("workspace_default");
 
 	private fileTrees = new Map<string, FileNode[]>();
@@ -314,6 +317,11 @@ export class Sidebar {
 		this.loadSidebarState();
 		this.loadPersistedProjects();
 		this.loadPinnedSessions();
+		this.isMaximized = getMaximized();
+		this.maximizedUnlisten = subscribeMaximized((maximized) => {
+			this.isMaximized = maximized;
+			this.render();
+		});
 		this.render();
 		this.workspaceHydrationToken += 1;
 		void this.hydrateProjects(this.workspaceHydrationToken);
@@ -394,6 +402,11 @@ export class Sidebar {
 
 	isCollapsed(): boolean {
 		return this.collapsed;
+	}
+
+	destroy(): void {
+		this.maximizedUnlisten?.();
+		this.maximizedUnlisten = null;
 	}
 
 	setOnOpenSettings(cb: () => void): void {
@@ -3088,7 +3101,7 @@ export class Sidebar {
 	}
 
 	private isWindowsPlatform(): boolean {
-		return navigator.platform.toLowerCase().includes("win");
+		return document.documentElement.dataset.os === "windows";
 	}
 
 	private renderWindowControls(): TemplateResult {
@@ -3098,15 +3111,15 @@ export class Sidebar {
 					<button class="win-ctrl-btn" title="Minimize" @click=${(e: Event) => {
 						e.stopPropagation();
 						void this.invokeWindowControl("minimize");
-					}}>─</button>
-					<button class="win-ctrl-btn" title="Maximize" @click=${(e: Event) => {
+					}}>${captionIconSvg("minimize")}</button>
+					<button class="win-ctrl-btn" title=${this.isMaximized ? "Restore" : "Maximize"} @click=${(e: Event) => {
 						e.stopPropagation();
 						void this.invokeWindowControl("maximize");
-					}}>□</button>
+					}}>${captionIconSvg(this.isMaximized ? "restore" : "maximize")}</button>
 					<button class="win-ctrl-btn win-ctrl-close" title="Close" @click=${(e: Event) => {
 						e.stopPropagation();
 						void this.invokeWindowControl("close");
-					}}>✕</button>
+					}}>${captionIconSvg("close")}</button>
 				</div>
 			`;
 		}

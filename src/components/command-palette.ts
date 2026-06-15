@@ -2,7 +2,7 @@
  * Command Palette - slash commands + desktop actions
  */
 
-import { html, nothing, render } from "lit";
+import { html, nothing, render, type TemplateResult } from "lit";
 import { normalizeRuntimeSlashCommands } from "../commands/slash-command-runtime.js";
 import { rpcBridge } from "../rpc/bridge.js";
 
@@ -185,10 +185,12 @@ export class CommandPalette {
 		});
 	}
 
-	private getSourceIcon(source: PaletteCommand["source"]): string {
+	private getSourceIcon(source: PaletteCommand["source"]): string | TemplateResult {
 		switch (source) {
 			case "builtin":
-				return "⌘";
+				return document.documentElement.dataset.os === "windows"
+					? html`<svg class="command-row-source-svg" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 2l4 3-4 3" /></svg>`
+					: "⌘";
 			case "extension":
 				return "⚡";
 			case "prompt":

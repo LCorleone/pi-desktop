@@ -8940,7 +8940,7 @@ button:active:not(:disabled),
 	width: 30px;
 	height: 28px;
 	border: none;
-	border-radius: 4px;
+	border-radius: 0;
 	padding: 0;
 	cursor: pointer;
 	background: transparent;
@@ -8960,6 +8960,36 @@ button:active:not(:disabled),
 .win-ctrl-close:hover {
 	background: #e81123;
 	color: #fff;
+}
+
+.win-ctrl-svg {
+	width: 10px;
+	height: 10px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1;
+	stroke-linecap: square;
+	stroke-linejoin: miter;
+	display: block;
+}
+
+.command-row-source-svg {
+	width: 12px;
+	height: 12px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.4;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	display: block;
+}
+
+/* Windows: native window corners (Win11 ~8px, square when maximised) */
+:root[data-os="windows"] {
+	--app-window-radius: 8px;
+}
+:root[data-os="windows"][data-maximized="true"] {
+	--app-window-radius: 0px;
 }
 
 .sidebar-right-controls {
