@@ -2480,8 +2480,9 @@ async fn generate_session_title(
     let title = json["choices"][0]["message"]["content"]
         .as_str()
         .unwrap_or("")
-        .trim()
-        .to_string();
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
 
     if title.is_empty() {
         return Err("Empty title generated".to_string());

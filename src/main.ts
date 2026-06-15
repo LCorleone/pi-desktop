@@ -1585,7 +1585,10 @@ async function autoNameSessionIfNew(): Promise<void> {
 	// Prevent double-invocation
 	const flagKey = `autoNamed_${state.sessionId}`;
 	if ((activeSession as any)[flagKey]) return;
-	(activeSession as any)[flagKey] = true;
+
+	// Capture runtime now, before any awaits, so switching tabs mid-call
+	// doesn't cause us to rename the wrong session.
+	const targetRuntime = getRuntimeForTab(workspace.id, activeSession.id);
 
 	try {
 		const { invoke } = await import("@tauri-apps/api/core");
@@ -1628,32 +1631,40 @@ async function autoNameSessionIfNew(): Promise<void> {
 				title = "";
 			}
 		} else {
+			recordDebugTrace(`[auto-name] no models.json match for provider="${state.model!.provider}" model="${state.model!.id}"`);
 			title = "";
 		}
 
 		// Fallback: first 5 words of user message
 		if (!title || title.trim().length === 0) {
 			title = userMessage
-				.replace(/\n/g, " ")
+				.replace(/[\r\n]+/g, " ")
 				.trim()
 				.split(/\s+/)
 				.slice(0, 5)
 				.join(" ");
-			if (title.length > 50) title = title.substring(0, 50).trim();
+			if (title.length > 50) {
+				const cut = title.substring(0, 50);
+				title = cut.substring(0, cut.lastIndexOf(" ")).trim() || cut.trim();
+			}
 		}
 
-		// Update via RPC
-		const runtime = getActiveRuntime();
-		if (runtime?.bridge) {
-			await runtime.bridge.setSessionName(title.trim());
+		// Re-check: user may have renamed the session during the async window.
+		const latestTab = getActiveSessionTab(workspace);
+		const latestTitle = (latestTab.title || "").trim().toLowerCase();
+		if (latestTab.id === activeSession.id && ["new session", "chat", ""].includes(latestTitle)) {
+			const runtime = targetRuntime;
+			if (runtime?.bridge) {
+				await runtime.bridge.setSessionName(title.trim());
+			}
+			// Update UI immediately
+			latestTab.title = title.trim();
+			workspace.sessionTitle = title.trim();
+			persistWorkspaces();
+			syncContentTabsBar(workspace);
+			scheduleSidebarSessionsRefresh(0);
+			(activeSession as any)[flagKey] = true;
 		}
-
-		// Update UI immediately
-		activeSession.title = title.trim();
-		workspace.sessionTitle = title.trim();
-		persistWorkspaces();
-		syncContentTabsBar(workspace);
-		scheduleSidebarSessionsRefresh(0);
 
 	} catch (err) {
 		console.warn("Auto-name session failed:", err);
