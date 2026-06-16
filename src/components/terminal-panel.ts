@@ -204,7 +204,7 @@ export class TerminalPanel {
 				scrollback: 6000,
 				fontSize: 12,
 				lineHeight: 1.35,
-				fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+				fontFamily: "'JetBrains Mono', ui-monospace, Menlo, Monaco, Consolas, monospace",
 			});
 			this.xterm.loadAddon(this.fitAddon);
 			this.applyTheme();

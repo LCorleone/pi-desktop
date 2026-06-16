@@ -21,8 +21,18 @@ export interface DesktopAppearanceProfiles {
 export const DESKTOP_APPEARANCE_PROFILES_STORAGE_KEY = "pi-desktop.appearance.profiles.v1";
 export const DESKTOP_APPEARANCE_PROFILE_CHANGED_EVENT = "pi-desktop:appearance-profile-changed";
 
-const DEFAULT_UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-const DEFAULT_CODE_FONT = 'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace';
+const DEFAULT_UI_FONT = '"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace';
+const DEFAULT_CODE_FONT = '"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace';
+
+// Previously shipped default fonts. Stored profiles equal to one of these are
+// migrated to the current default so a font change actually reaches existing
+// users (genuine custom values are preserved).
+const LEGACY_DEFAULT_UI_FONTS = new Set([
+	'-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+]);
+const LEGACY_DEFAULT_CODE_FONTS = new Set([
+	'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace',
+]);
 
 export const DEFAULT_APPEARANCE_PROFILES: DesktopAppearanceProfiles = {
 	light: {
@@ -52,10 +62,12 @@ function clampContrast(value: number): number {
 	return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function sanitizeFont(value: unknown, fallback: string): string {
+function sanitizeFont(value: unknown, fallback: string, legacy?: Set<string>): string {
 	if (typeof value !== "string") return fallback;
 	const trimmed = value.trim();
-	return trimmed.length > 0 ? trimmed : fallback;
+	if (trimmed.length === 0) return fallback;
+	if (legacy?.has(trimmed)) return fallback;
+	return trimmed;
 }
 
 function sanitizeThemeName(value: unknown): string {
@@ -74,8 +86,8 @@ function sanitizeProfile(value: unknown, fallback: DesktopAppearanceProfile): De
 		accent: "",
 		background: "",
 		foreground: "",
-		uiFont: sanitizeFont(input.uiFont, fallback.uiFont),
-		codeFont: sanitizeFont(input.codeFont, fallback.codeFont),
+		uiFont: sanitizeFont(input.uiFont, fallback.uiFont, LEGACY_DEFAULT_UI_FONTS),
+		codeFont: sanitizeFont(input.codeFont, fallback.codeFont, LEGACY_DEFAULT_CODE_FONTS),
 		translucentSidebar: typeof input.translucentSidebar === "boolean" ? input.translucentSidebar : fallback.translucentSidebar,
 		contrast: clampContrast(typeof input.contrast === "number" ? input.contrast : fallback.contrast),
 	};
