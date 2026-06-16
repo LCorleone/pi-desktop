@@ -1,19 +1,17 @@
 /**
- * TerminalPanel - docked terminal experience (xterm surface + local shell execution)
+ * TerminalPanel - docked terminal experience backed by a real PTY.
+ *
+ * A persistent login shell runs inside a pseudo-terminal (see src-tauri/src/pty.rs).
+ * xterm.js renders output and forwards keystrokes verbatim to the PTY. The shell
+ * owns its own prompt, line editing, history, cwd, and job control — the host
+ * only transports bytes and manages the session lifecycle.
  */
 
-import { Command, type Child } from "@tauri-apps/plugin-shell";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { html, render } from "lit";
-
-type ShellKind = "posix" | "powershell" | "cmd";
-
-interface ShellProfile {
-	name: string;
-	label: string;
-	kind: ShellKind;
-}
 
 interface TerminalExecResult {
 	code: number | null;
@@ -22,71 +20,21 @@ interface TerminalExecResult {
 	stderr: string;
 }
 
-interface TerminalCommandResolution {
-	shellCommand: string;
-	infoText: string | null;
-	interactive: boolean;
-	initialInput: string[];
-	initialInputStartDelayMs: number;
-	initialInputInterChunkDelayMs: number;
-}
-
 interface TerminalCommandCompleteEvent {
 	command: string;
 	interactive: boolean;
 	result: TerminalExecResult | null;
 }
 
-function normalizeText(value: unknown): string {
-	if (typeof value === "string") return value;
-	if (value == null) return "";
-	try {
-		return JSON.stringify(value, null, 2);
-	} catch {
-		return String(value);
-	}
+interface PtyDataEvent {
+	id: string;
+	data: string;
 }
 
-function toUint8Array(value: unknown): Uint8Array | null {
-	if (value instanceof Uint8Array) return value;
-	if (Array.isArray(value) && value.every((item) => typeof item === "number")) {
-		return Uint8Array.from(value);
-	}
-	if (value && typeof value === "object") {
-		const candidate = (value as { data?: unknown }).data;
-		if (Array.isArray(candidate) && candidate.every((item) => typeof item === "number")) {
-			return Uint8Array.from(candidate);
-		}
-	}
-	return null;
-}
-
-function shellProfilesForPlatform(): ShellProfile[] {
-	const platform = navigator.platform.toLowerCase();
-	if (platform.includes("win")) {
-		return [
-			{ name: "terminal-pwsh-exe", label: "pwsh", kind: "powershell" },
-			{ name: "terminal-pwsh", label: "pwsh", kind: "powershell" },
-			{ name: "terminal-cmd-exe", label: "cmd", kind: "cmd" },
-			{ name: "terminal-cmd", label: "cmd", kind: "cmd" },
-		];
-	}
-	if (platform.includes("mac")) {
-		return [
-			{ name: "terminal-zsh-path", label: "zsh", kind: "posix" },
-			{ name: "terminal-zsh", label: "zsh", kind: "posix" },
-			{ name: "terminal-bash-path", label: "bash", kind: "posix" },
-			{ name: "terminal-bash", label: "bash", kind: "posix" },
-			{ name: "terminal-sh-path", label: "sh", kind: "posix" },
-			{ name: "terminal-sh", label: "sh", kind: "posix" },
-		];
-	}
-	return [
-		{ name: "terminal-bash-path", label: "bash", kind: "posix" },
-		{ name: "terminal-bash", label: "bash", kind: "posix" },
-		{ name: "terminal-sh-path", label: "sh", kind: "posix" },
-		{ name: "terminal-sh", label: "sh", kind: "posix" },
-	];
+interface PtyExitEvent {
+	id: string;
+	generation: number;
+	exit_code: number | null;
 }
 
 function compactPath(path: string | null): string {
@@ -101,19 +49,19 @@ function compactPath(path: string | null): string {
 	return normalized;
 }
 
-function isPrintableKey(event: KeyboardEvent, key: string): boolean {
-	if (event.ctrlKey || event.metaKey || event.altKey) return false;
-	return key.length === 1;
-}
-
-function shellSingleQuote(value: string): string {
-	return `'${value.replace(/'/g, `'"'"'`)}'`;
+/** Decode a base64 string into a Uint8Array (binary-safe PTY output transport). */
+function base64ToBytes(b64: string): Uint8Array {
+	const binary = atob(b64);
+	const bytes = new Uint8Array(binary.length);
+	for (let i = 0; i < binary.length; i += 1) {
+		bytes[i] = binary.charCodeAt(i);
+	}
+	return bytes;
 }
 
 export class TerminalPanel {
 	private container: HTMLElement;
 	private cwd: string | null = null;
-	private running = false;
 	private onRequestClose: (() => void) | null = null;
 	private onCommandComplete: ((event: TerminalCommandCompleteEvent) => void | Promise<void>) | null = null;
 
@@ -121,21 +69,16 @@ export class TerminalPanel {
 	private fitAddon: FitAddon | null = null;
 	private resizeObserver: ResizeObserver | null = null;
 
-	private inputBuffer = "";
-	private commandHistory: string[] = [];
-	private commandHistoryIndex = -1;
-	private commandHistoryDraft = "";
-
-	private shellProfile: ShellProfile | null = null;
-	private resolvingShellProfile: Promise<ShellProfile> | null = null;
-	private runningChild: Child | null = null;
-	private runningInteractive = false;
-	private suppressPromptOnce = false;
-	private queuedCommands: string[] = [];
-	private clipboardEventHandlersInstalled = false;
+	private readonly ptyId: string;
+	private ptySpawned = false;
+	private spawnedCwd: string | null = null;
+	private spawnInFlight: Promise<void> | null = null;
+	private unlistenData: UnlistenFn | null = null;
+	private unlistenExit: UnlistenFn | null = null;
 
 	constructor(container: HTMLElement) {
 		this.container = container;
+		this.ptyId = `terminal-${Math.random().toString(36).slice(2, 10)}`;
 		this.render();
 	}
 
@@ -149,27 +92,40 @@ export class TerminalPanel {
 
 	setProjectPath(path: string | null): void {
 		const next = path && path.trim().length > 0 ? path : null;
-		if (this.cwd === next) return;
+		const previous = this.cwd;
 		this.cwd = next;
 		this.render();
+		// If a shell is already running and the working directory changed (e.g.
+		// switching workspaces), restart the shell in the new cwd so each
+		// workspace owns an independent session.
+		if (this.ptySpawned && next !== previous) {
+			void this.respawn();
+		}
 	}
 
 	focusInput(): void {
 		this.xterm?.focus();
 	}
 
+	/** Run a command from an external trigger (e.g. command palette / chat).
+	 * The command is typed into the persistent shell followed by Enter. */
 	async runCommand(commandText: string): Promise<void> {
 		const command = commandText.trim();
 		if (!command) return;
 		this.ensureTerminal();
+		await this.ensurePty();
 		this.focusInput();
-		if (this.running) {
-			this.queuedCommands.push(command);
-			this.writeInfo(`Queued: ${command}`);
-			return;
+		await this.writeToPty(`${command}\r`);
+		// The persistent shell owns command execution, so we cannot observe a
+		// structured exit code here. Notify with result=null so downstream
+		// refresh hooks (auth/command refresh) still fire for pi commands.
+		if (this.onCommandComplete) {
+			void Promise.resolve(
+				this.onCommandComplete({ command, interactive: false, result: null }),
+			).catch(() => {
+				// Ignore command completion callback failures.
+			});
 		}
-		this.xterm?.write(`${command}\r\n`);
-		await this.executeCommand(command);
 	}
 
 	private applyTheme(): void {
@@ -200,7 +156,7 @@ export class TerminalPanel {
 				cursorBlink: true,
 				cursorStyle: "bar",
 				cursorWidth: 2,
-				convertEol: true,
+				convertEol: false,
 				scrollback: 6000,
 				fontSize: 12,
 				lineHeight: 1.35,
@@ -210,9 +166,22 @@ export class TerminalPanel {
 			this.applyTheme();
 			this.xterm.open(viewport);
 			this.fitAddon.fit();
-			this.installKeyboardBindings();
-			this.installClipboardEventHandlers(this.container);
-			this.printPrompt();
+
+			// Keystrokes flow straight into the PTY.
+			this.xterm.onData((data) => {
+				void this.writeToPty(data);
+			});
+			// Keep the PTY size in sync with the viewport.
+			this.xterm.onResize(({ cols, rows }) => {
+				if (this.ptySpawned) {
+					void invoke("pty_resize", { id: this.ptyId, cols, rows }).catch(() => {
+						// Ignore resize errors while spawning/tearing down.
+					});
+				}
+			});
+			// Handle host-level shortcuts (copy/paste/select-all) before they
+			// reach the PTY; everything else is passed through to the shell.
+			this.xterm.attachCustomKeyEventHandler((event) => this.handleKey(event));
 		}
 
 		if (!this.resizeObserver) {
@@ -222,6 +191,100 @@ export class TerminalPanel {
 			this.resizeObserver.observe(viewport);
 		}
 	}
+
+	private async ensurePty(): Promise<void> {
+		if (this.ptySpawned) return;
+		if (this.spawnInFlight) return this.spawnInFlight;
+		const attempt = (async () => {
+			await this.installListeners();
+			const { cols, rows } = this.getDimensions();
+			try {
+				await invoke("pty_spawn", {
+					options: { cwd: this.cwd || ".", cols, rows },
+					id: this.ptyId,
+				});
+				this.ptySpawned = true;
+				this.spawnedCwd = this.cwd;
+			} catch (err) {
+				this.xterm?.writeln(
+					`\x1b[31mFailed to start shell: ${err instanceof Error ? err.message : String(err)}\x1b[0m`,
+				);
+				throw err;
+			}
+		})();
+		this.spawnInFlight = attempt;
+		try {
+			await attempt;
+		} finally {
+			this.spawnInFlight = null;
+		}
+	}
+
+	private async respawn(): Promise<void> {
+		// The backend pty_spawn supersedes an existing session under the same id
+		// (kills the old child). Reset the viewport and re-spawn in the new cwd.
+		try {
+			const { cols, rows } = this.getDimensions();
+			await invoke("pty_spawn", {
+				options: { cwd: this.cwd || ".", cols, rows },
+				id: this.ptyId,
+			});
+			this.ptySpawned = true;
+			this.spawnedCwd = this.cwd;
+			this.xterm?.reset();
+		} catch (err) {
+			this.xterm?.writeln(
+				`\x1b[31mFailed to start shell: ${err instanceof Error ? err.message : String(err)}\x1b[0m`,
+			);
+		}
+	}
+
+	private async installListeners(): Promise<void> {
+		const id = this.ptyId;
+		if (!this.unlistenData) {
+			this.unlistenData = await listen<PtyDataEvent>("pty-data", (event) => {
+				if (event.payload.id !== id) return;
+				const bytes = base64ToBytes(event.payload.data);
+				this.xterm?.write(bytes);
+				this.scrollTerminalToBottom();
+			});
+		}
+		if (!this.unlistenExit) {
+			this.unlistenExit = await listen<PtyExitEvent>("pty-exit", (event) => {
+				if (event.payload.id !== id) return;
+				this.handlePtyExit();
+			});
+		}
+	}
+
+	private handlePtyExit(): void {
+		this.ptySpawned = false;
+		this.spawnedCwd = null;
+		this.xterm?.write("\r\n\x1b[90m[shell exited — type to start a new session]\x1b[0m\r\n");
+	}
+
+	private async writeToPty(data: string): Promise<void> {
+		if (!data) return;
+		await this.ensurePty();
+		await invoke("pty_write", { id: this.ptyId, data }).catch(() => {
+			// Ignore write errors while the session is starting/ending.
+		});
+	}
+
+	private getDimensions(): { cols: number; rows: number } {
+		return {
+			cols: Math.max(20, Math.floor(this.xterm?.cols ?? 80)),
+			rows: Math.max(5, Math.floor(this.xterm?.rows ?? 24)),
+		};
+	}
+
+	private scrollTerminalToBottom(): void {
+		requestAnimationFrame(() => {
+			this.xterm?.scrollToBottom();
+		});
+	}
+
+	// --- Clipboard / host shortcuts ---
 
 	private isMacPlatform(): boolean {
 		return navigator.platform.toLowerCase().includes("mac");
@@ -266,19 +329,7 @@ export class TerminalPanel {
 		if (!rawText) return;
 		const normalized = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 		if (!normalized) return;
-
-		if (this.running) {
-			if (this.runningInteractive && this.runningChild) {
-				this.writeToRunningChild(normalized.replace(/\n/g, "\r"));
-			}
-			return;
-		}
-
-		const inline = normalized.replace(/\n+/g, " ");
-		if (!inline) return;
-		this.inputBuffer += inline;
-		this.xterm?.write(inline);
-		this.scrollTerminalToBottom();
+		void this.writeToPty(normalized);
 	}
 
 	private async pasteFromClipboard(): Promise<void> {
@@ -290,734 +341,34 @@ export class TerminalPanel {
 		}
 	}
 
-	private installClipboardEventHandlers(target: HTMLElement): void {
-		if (this.clipboardEventHandlersInstalled) return;
-		target.addEventListener("paste", (event: ClipboardEvent) => {
-			const text = event.clipboardData?.getData("text") ?? "";
-			if (!text) return;
-			event.preventDefault();
-			this.handlePastedText(text);
-		});
-		target.addEventListener("copy", (event: ClipboardEvent) => {
-			const selection = this.xterm?.getSelection() ?? "";
-			if (!selection) return;
-			event.clipboardData?.setData("text/plain", selection);
-			event.preventDefault();
-		});
-		this.clipboardEventHandlersInstalled = true;
-	}
-
-	private installKeyboardBindings(): void {
-		if (!this.xterm) return;
-		this.xterm.onKey(({ key, domEvent }) => {
-			if (this.isCopyShortcut(domEvent)) {
-				domEvent.preventDefault();
-				void this.copySelectionToClipboard();
-				return;
-			}
-
-			if (this.isPasteShortcut(domEvent)) {
-				if (this.isMacPlatform() && domEvent.metaKey) {
-					void this.pasteFromClipboard();
-					return;
-				}
-				domEvent.preventDefault();
-				void this.pasteFromClipboard();
-				return;
-			}
-
-			if (this.isSelectAllShortcut(domEvent)) {
-				domEvent.preventDefault();
-				this.xterm?.selectAll();
-				return;
-			}
-
-			if (domEvent.ctrlKey && !domEvent.metaKey && domEvent.key.toLowerCase() === "c") {
-				domEvent.preventDefault();
-				if (this.running) {
-					void this.abortRunningCommand();
-				} else {
-					this.clearCurrentInput();
-					this.xterm?.write("^C\r\n");
-					this.printPrompt();
-				}
-				return;
-			}
-
-			if (this.running) {
-				domEvent.preventDefault();
-				if (this.runningInteractive && this.runningChild) {
-					if (domEvent.key === "Enter") {
-						this.writeToRunningChild("\r");
-						return;
-					}
-					if (domEvent.key === "Backspace") {
-						this.writeToRunningChild("\x7f");
-						return;
-					}
-					if (domEvent.key === "ArrowUp") {
-						this.writeToRunningChild("\x1b[A");
-						return;
-					}
-					if (domEvent.key === "ArrowDown") {
-						this.writeToRunningChild("\x1b[B");
-						return;
-					}
-					if (domEvent.key === "ArrowLeft") {
-						this.writeToRunningChild("\x1b[D");
-						return;
-					}
-					if (domEvent.key === "ArrowRight") {
-						this.writeToRunningChild("\x1b[C");
-						return;
-					}
-					if (domEvent.key === "Tab") {
-						this.writeToRunningChild("\t");
-						return;
-					}
-					if (isPrintableKey(domEvent, key)) {
-						this.writeToRunningChild(key);
-					}
-				}
-				return;
-			}
-
-			if (domEvent.key === "Enter") {
-				domEvent.preventDefault();
-				const command = this.inputBuffer;
-				this.inputBuffer = "";
-				this.xterm?.write("\r\n");
-				void this.executeCommand(command);
-				return;
-			}
-
-			if (domEvent.key === "Backspace") {
-				domEvent.preventDefault();
-				if (this.inputBuffer.length === 0) return;
-				this.inputBuffer = this.inputBuffer.slice(0, -1);
-				this.xterm?.write("\b \b");
-				return;
-			}
-
-			if (domEvent.key === "ArrowUp") {
-				domEvent.preventDefault();
-				this.navigateHistory("up");
-				return;
-			}
-
-			if (domEvent.key === "ArrowDown") {
-				domEvent.preventDefault();
-				this.navigateHistory("down");
-				return;
-			}
-
-			if (domEvent.ctrlKey && !domEvent.metaKey && domEvent.key.toLowerCase() === "l") {
-				domEvent.preventDefault();
-				this.clearScreen();
-				return;
-			}
-
-			if (!isPrintableKey(domEvent, key)) return;
-			this.inputBuffer += key;
-			this.xterm?.write(key);
-		});
-	}
-
-	private replaceCurrentInput(value: string): void {
-		if (!this.xterm) return;
-		for (let i = 0; i < this.inputBuffer.length; i += 1) {
-			this.xterm.write("\b \b");
+	/** xterm custom key handler: intercept host shortcuts, pass everything else
+	 * through to the shell via onData. xterm selections are not DOM selections,
+	 * so copy/paste must use the async Clipboard API actively. */
+	private handleKey(event: KeyboardEvent): boolean {
+		if (this.isCopyShortcut(event)) {
+			void this.copySelectionToClipboard();
+			return false;
 		}
-		this.inputBuffer = value;
-		if (value) this.xterm.write(value);
-	}
-
-	private navigateHistory(direction: "up" | "down"): void {
-		if (this.commandHistory.length === 0) return;
-		if (direction === "up") {
-			if (this.commandHistoryIndex < 0) {
-				this.commandHistoryDraft = this.inputBuffer;
-				this.commandHistoryIndex = this.commandHistory.length - 1;
-			} else if (this.commandHistoryIndex > 0) {
-				this.commandHistoryIndex -= 1;
-			}
-			const next = this.commandHistory[this.commandHistoryIndex] ?? "";
-			this.replaceCurrentInput(next);
-			return;
+		if (this.isPasteShortcut(event)) {
+			void this.pasteFromClipboard();
+			return false;
 		}
-
-		if (this.commandHistoryIndex < 0) return;
-		if (this.commandHistoryIndex < this.commandHistory.length - 1) {
-			this.commandHistoryIndex += 1;
-			const next = this.commandHistory[this.commandHistoryIndex] ?? "";
-			this.replaceCurrentInput(next);
-			return;
+		if (this.isSelectAllShortcut(event)) {
+			this.xterm?.selectAll();
+			return false;
 		}
-
-		this.commandHistoryIndex = -1;
-		this.replaceCurrentInput(this.commandHistoryDraft);
-	}
-
-	private rememberHistory(command: string): void {
-		const trimmed = command.trim();
-		if (!trimmed) return;
-		const last = this.commandHistory[this.commandHistory.length - 1] ?? "";
-		if (last !== trimmed) {
-			this.commandHistory.push(trimmed);
-			if (this.commandHistory.length > 150) {
-				this.commandHistory.splice(0, this.commandHistory.length - 150);
-			}
-		}
-		this.commandHistoryIndex = -1;
-		this.commandHistoryDraft = "";
-	}
-
-	private clearCurrentInput(): void {
-		this.replaceCurrentInput("");
-	}
-
-	private writeToRunningChild(value: string): void {
-		const child = this.runningChild;
-		if (!child || !value) return;
-		void child.write(value).catch(() => {
-			// Ignore transient stdin write failures while process is exiting.
-		});
-	}
-
-	private scrollTerminalToBottom(): void {
-		requestAnimationFrame(() => {
-			this.xterm?.scrollToBottom();
-		});
-	}
-
-	private printPrompt(): void {
-		if (!this.xterm) return;
-		this.commandHistoryIndex = -1;
-		this.commandHistoryDraft = "";
-		this.xterm.write("\x1b[34m$\x1b[0m ");
-		this.scrollTerminalToBottom();
-	}
-
-	private writeInfo(text: string): void {
-		if (!this.xterm) return;
-		this.xterm.writeln(`\x1b[90m${text}\x1b[0m`);
-		this.scrollTerminalToBottom();
-	}
-
-	private writeStdErr(text: string): void {
-		if (!this.xterm) return;
-		const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-		for (const line of lines) {
-			if (!line) continue;
-			this.xterm.writeln(`\x1b[31m${line}\x1b[0m`);
-		}
-		this.scrollTerminalToBottom();
-	}
-
-	private writeRawOutput(text: string): void {
-		if (!this.xterm || !text) return;
-		this.xterm.write(text);
-		this.scrollTerminalToBottom();
-	}
-
-	private decodeOutputChunk(payload: unknown, decoder: TextDecoder | null): string {
-		if (typeof payload === "string") return payload;
-		const bytes = toUint8Array(payload);
-		if (bytes) {
-			if (!decoder) {
-				return new TextDecoder().decode(bytes);
-			}
-			return decoder.decode(bytes, { stream: true });
-		}
-		return normalizeText(payload);
-	}
-
-	private writeStdOut(text: string): void {
-		if (!this.xterm) return;
-		if (!text) return;
-		const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n/g, "\r\n");
-		this.xterm.write(normalized);
-		this.scrollTerminalToBottom();
-	}
-
-	private isCdCommand(command: string): boolean {
-		return /^cd(?:\s+.*)?$/i.test(command.trim());
-	}
-
-	private withPosixPathPrelude(command: string): string {
-		const prelude = [
-			"if [ -n \"$HOME\" ]; then",
-			"if [ -d \"$HOME/.nvm/versions/node/current/bin\" ]; then PATH=\"$HOME/.nvm/versions/node/current/bin:$PATH\"; fi",
-			"for d in \"$HOME\"/.nvm/versions/node/*/bin; do if [ -d \"$d\" ]; then PATH=\"$d:$PATH\"; fi; done",
-			"if [ -d \"$HOME/.volta/bin\" ]; then PATH=\"$HOME/.volta/bin:$PATH\"; fi",
-			"if [ -d \"$HOME/.local/bin\" ]; then PATH=\"$HOME/.local/bin:$PATH\"; fi",
-			"fi",
-			"PATH=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH\"",
-			"export PATH",
-		].join("; ");
-		return `${prelude}; ${command}`;
-	}
-
-	private buildShellArgs(profile: ShellProfile, command: string): string[] {
-		switch (profile.kind) {
-			case "powershell":
-				return ["-NoLogo", "-NoProfile", "-Command", command];
-			case "cmd":
-				return ["/C", command];
-			default:
-				return ["-lc", this.withPosixPathPrelude(command)];
-		}
-	}
-
-	private buildShellProbeArgs(profile: ShellProfile): string[] {
-		switch (profile.kind) {
-			case "powershell":
-				return ["-NoLogo", "-NoProfile", "-Command", "Write-Output __PI_SHELL_OK__"];
-			case "cmd":
-				return ["/C", "echo __PI_SHELL_OK__"];
-			default:
-				return ["-lc", this.withPosixPathPrelude("printf __PI_SHELL_OK__")];
-		}
-	}
-
-	private buildCdProbeCommand(profile: ShellProfile, cdCommand: string): string {
-		switch (profile.kind) {
-			case "powershell":
-				return `${cdCommand}; (Get-Location).Path`;
-			case "cmd":
-				return `${cdCommand} && cd`;
-			default:
-				return `${cdCommand}\npwd`;
-		}
-	}
-
-	private getCurrentTerminalDimensions(): { cols: number; rows: number } {
-		const cols = Math.max(60, Math.floor(this.xterm?.cols ?? 120));
-		const rows = Math.max(18, Math.floor(this.xterm?.rows ?? 36));
-		return { cols, rows };
-	}
-
-	private buildPiInteractiveBridgeCommand(dimensions?: { cols: number; rows: number }): string | null {
-		const platform = navigator.platform.toLowerCase();
-		if (platform.includes("win")) return null;
-		const cols = Math.max(60, Math.floor(dimensions?.cols ?? 120));
-		const rows = Math.max(18, Math.floor(dimensions?.rows ?? 36));
-		const boot = `stty cols ${cols} rows ${rows} 2>/dev/null; exec pi`;
-		if (platform.includes("mac")) {
-			return `script -q /dev/null /bin/sh -lc ${shellSingleQuote(boot)}`;
-		}
-		return `script -q -c ${shellSingleQuote(boot)} /dev/null`;
-	}
-
-	private resolveSpecialShellCommand(command: string): TerminalCommandResolution {
-		const trimmed = command.trim();
-		const piCommand = this.buildPiInteractiveBridgeCommand(this.getCurrentTerminalDimensions());
-		if (piCommand) {
-			if (/^pi$/i.test(trimmed)) {
-				return {
-					shellCommand: piCommand,
-					infoText: "Running pi in interactive terminal mode.",
-					interactive: true,
-					initialInput: [],
-					initialInputStartDelayMs: 0,
-					initialInputInterChunkDelayMs: 0,
-				};
-			}
-			const loginMatch = trimmed.match(/^pi\s+login(?:\s+([a-z0-9._-]+))?$/i);
-			if (loginMatch) {
-				const requestedProvider = (loginMatch[1] ?? "").trim().toLowerCase();
-				const infoText = requestedProvider
-					? `Running Pi in interactive mode. Starting /login automatically; then select ${requestedProvider} in the provider picker.`
-					: "Running Pi in interactive mode. Starting /login automatically.";
-				return {
-					shellCommand: piCommand,
-					infoText,
-					interactive: true,
-					initialInput: ["/login\r"],
-					initialInputStartDelayMs: 1000,
-					initialInputInterChunkDelayMs: 0,
-				};
-			}
-
-			const logoutMatch = trimmed.match(/^pi\s+logout(?:\s+([a-z0-9._-]+))?$/i);
-			if (logoutMatch) {
-				const requestedProvider = (logoutMatch[1] ?? "").trim().toLowerCase();
-				const infoText = requestedProvider
-					? `Running Pi in interactive mode. Type /logout and select ${requestedProvider} in the provider picker.`
-					: "Running Pi in interactive mode. Type /logout in the terminal picker.";
-				return {
-					shellCommand: piCommand,
-					infoText,
-					interactive: true,
-					initialInput: [],
-					initialInputStartDelayMs: 0,
-					initialInputInterChunkDelayMs: 0,
-				};
-			}
-		}
-		return {
-			shellCommand: command,
-			infoText: null,
-			interactive: false,
-			initialInput: [],
-			initialInputStartDelayMs: 0,
-			initialInputInterChunkDelayMs: 0,
-		};
-	}
-
-	private async ensureShellProfile(): Promise<ShellProfile> {
-		if (this.shellProfile) return this.shellProfile;
-		if (this.resolvingShellProfile) return this.resolvingShellProfile;
-		this.resolvingShellProfile = (async () => {
-			const profiles = shellProfilesForPlatform();
-			const failures: string[] = [];
-			for (const profile of profiles) {
-				try {
-					const probe = await Command.create(profile.name, this.buildShellProbeArgs(profile), {
-						cwd: this.cwd || undefined,
-					}).execute();
-					if ((probe.code ?? 1) === 0) {
-						this.shellProfile = profile;
-						return profile;
-					}
-					failures.push(`${profile.name}: probe exit ${probe.code ?? -1}`);
-				} catch (err) {
-					const message = err instanceof Error ? err.message : String(err);
-					failures.push(`${profile.name}: ${message}`);
-				}
-			}
-			const preview = failures.slice(0, 2).join(" | ");
-			throw new Error(
-				`No allowed shell command found. Restart app and verify capabilities.${preview ? ` (${preview})` : ""}`,
-			);
-		})();
-		try {
-			return await this.resolvingShellProfile;
-		} finally {
-			this.resolvingShellProfile = null;
-		}
-	}
-
-	private isSpawnScopeError(error: unknown): boolean {
-		const message = normalizeText(error).toLowerCase();
-		return message.includes("allow-spawn") || message.includes("configured shell scope") || message.includes("program not allowed");
-	}
-
-	private async executeShellViaExecute(profile: ShellProfile, command: string, streamOutput: boolean): Promise<TerminalExecResult> {
-		const output = await Command.create(profile.name, this.buildShellArgs(profile, command), {
-			cwd: this.cwd || undefined,
-		}).execute();
-		const stdout = normalizeText(output.stdout);
-		const stderr = normalizeText(output.stderr);
-		if (streamOutput) {
-			if (stdout) this.writeStdOut(stdout);
-			if (stderr) this.writeStdErr(stderr);
-		}
-		return {
-			code: output.code,
-			signal: output.signal,
-			stdout,
-			stderr,
-		};
-	}
-
-	private async executeShell(
-		command: string,
-		options: {
-			streamOutput?: boolean;
-			initialInput?: string[];
-			initialInputStartDelayMs?: number;
-			initialInputInterChunkDelayMs?: number;
-			rawOutput?: boolean;
-			allowExecuteFallback?: boolean;
-		} = {},
-	): Promise<TerminalExecResult> {
-		const profile = await this.ensureShellProfile();
-		const streamOutput = options.streamOutput !== false;
-		const initialInput = Array.isArray(options.initialInput) ? options.initialInput : [];
-		const outputRaw = options.rawOutput === true;
-		const allowExecuteFallback = options.allowExecuteFallback ?? !outputRaw;
-		const initialInputStartDelayMs = Math.max(0, Number(options.initialInputStartDelayMs ?? 0));
-		const initialInputInterChunkDelayMs = Math.max(0, Number(options.initialInputInterChunkDelayMs ?? 140));
-		const shellArgs = this.buildShellArgs(profile, command);
-		const shellCommand = outputRaw
-			? Command.create(profile.name, shellArgs, {
-					cwd: this.cwd || undefined,
-					encoding: "raw",
-				})
-			: Command.create(profile.name, shellArgs, {
-					cwd: this.cwd || undefined,
-				});
-
-		return await new Promise<TerminalExecResult>((resolve, reject) => {
-			let stdout = "";
-			let stderr = "";
-			let settled = false;
-			let spawnedChild: Child | null = null;
-			let fallbackStarted = false;
-
-			const cleanup = () => {
-				shellCommand.stdout.off("data", onStdout);
-				shellCommand.stderr.off("data", onStderr);
-				shellCommand.off("close", onClose);
-				shellCommand.off("error", onError);
-				if (this.runningChild && spawnedChild && this.runningChild.pid === spawnedChild.pid) {
-					this.runningChild = null;
-				}
-			};
-
-			const settleWithResult = (result: TerminalExecResult) => {
-				if (settled) return;
-				settled = true;
-				cleanup();
-				resolve(result);
-			};
-
-			const settleWithError = (error: unknown) => {
-				if (settled) return;
-				settled = true;
-				cleanup();
-				reject(error instanceof Error ? error : new Error(normalizeText(error)));
-			};
-
-			const attemptExecuteFallback = () => {
-				if (fallbackStarted) return;
-				fallbackStarted = true;
-				if (!allowExecuteFallback) {
-					settleWithError(new Error("Spawn unavailable for interactive terminal command. Restart app and verify shell capabilities."));
-					return;
-				}
-				this.writeInfo("Spawn unavailable; falling back to execute mode.");
-				void this.executeShellViaExecute(profile, command, streamOutput).then(settleWithResult).catch(settleWithError);
-			};
-
-			const sendInitialInput = async (child: Child): Promise<void> => {
-				if (initialInput.length === 0) return;
-				if (initialInputStartDelayMs > 0) {
-					await new Promise((resolve) => setTimeout(resolve, initialInputStartDelayMs));
-				}
-				for (let i = 0; i < initialInput.length; i += 1) {
-					const chunk = initialInput[i] ?? "";
-					if (!chunk) continue;
-					try {
-						await child.write(chunk);
-					} catch (err) {
-						this.writeStdErr(err instanceof Error ? err.message : String(err));
-						return;
-					}
-					if (i < initialInput.length - 1 && initialInputInterChunkDelayMs > 0) {
-						await new Promise((resolve) => setTimeout(resolve, initialInputInterChunkDelayMs));
-					}
-				}
-			};
-
-			const stdoutDecoder = outputRaw ? new TextDecoder() : null;
-			const stderrDecoder = outputRaw ? new TextDecoder() : null;
-
-			const onStdout = (payload: unknown) => {
-				const text = outputRaw ? this.decodeOutputChunk(payload, stdoutDecoder) : normalizeText(payload);
-				if (!text) return;
-				stdout += text;
-				if (streamOutput) {
-					if (outputRaw) this.writeRawOutput(text);
-					else this.writeStdOut(text);
-				}
-			};
-			const onStderr = (payload: unknown) => {
-				const text = outputRaw ? this.decodeOutputChunk(payload, stderrDecoder) : normalizeText(payload);
-				if (!text) return;
-				stderr += text;
-				if (streamOutput) {
-					if (outputRaw) this.writeRawOutput(text);
-					else this.writeStdErr(text);
-				}
-			};
-			const onClose = (payload: { code: number | null; signal: number | null }) => {
-				if (outputRaw) {
-					const flushStdout = stdoutDecoder?.decode() ?? "";
-					if (flushStdout) {
-						stdout += flushStdout;
-						if (streamOutput) this.writeRawOutput(flushStdout);
-					}
-					const flushStderr = stderrDecoder?.decode() ?? "";
-					if (flushStderr) {
-						stderr += flushStderr;
-						if (streamOutput) this.writeRawOutput(flushStderr);
-					}
-				}
-				settleWithResult({
-					code: payload.code,
-					signal: payload.signal,
-					stdout,
-					stderr,
-				});
-			};
-			const onError = (message: string) => {
-				if (!spawnedChild && this.isSpawnScopeError(message)) {
-					attemptExecuteFallback();
-					return;
-				}
-				settleWithError(new Error(message || "Shell command failed"));
-			};
-
-			shellCommand.stdout.on("data", onStdout);
-			shellCommand.stderr.on("data", onStderr);
-			shellCommand.on("close", onClose);
-			shellCommand.on("error", onError);
-
-			shellCommand
-				.spawn()
-				.then((child) => {
-					spawnedChild = child;
-					this.runningChild = child;
-					void sendInitialInput(child);
-				})
-				.catch((error) => {
-					if (this.isSpawnScopeError(error)) {
-						attemptExecuteFallback();
-						return;
-					}
-					settleWithError(error);
-				});
-		});
-	}
-
-	private async executeCdCommand(command: string): Promise<void> {
-		const profile = await this.ensureShellProfile();
-		const probeCommand = this.buildCdProbeCommand(profile, command);
-		const result = await this.executeShell(probeCommand, { streamOutput: false });
-		if (result.stderr.trim()) {
-			this.writeStdErr(result.stderr.trimEnd());
-		}
-
-		const normalizedStdout = result.stdout.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-		const lines = normalizedStdout
-			.split("\n")
-			.map((line) => line.trim())
-			.filter((line) => line.length > 0);
-
-		if ((result.code ?? 1) === 0) {
-			const nextCwd = lines.length > 0 ? lines[lines.length - 1] : "";
-			if (nextCwd) {
-				this.cwd = nextCwd;
-				this.render();
-			}
-			const extraStdout = lines.slice(0, -1).join("\n");
-			if (extraStdout) this.writeStdOut(`${extraStdout}\n`);
-		} else if (lines.length > 0) {
-			this.writeStdOut(`${lines.join("\n")}\n`);
-		}
-	}
-
-	private async executeCommand(rawCommand: string): Promise<void> {
-		const command = rawCommand.trim();
-		if (!command) {
-			this.printPrompt();
-			return;
-		}
-		this.rememberHistory(command);
-
-		if (command === "clear" || command === "cls") {
-			this.clearScreen();
-			return;
-		}
-
-		if (!this.cwd) {
-			this.writeInfo("Open a project to run terminal commands.");
-			this.printPrompt();
-			return;
-		}
-
-		this.fitAddon?.fit();
-		const resolved = this.resolveSpecialShellCommand(command);
-		if (resolved.infoText) {
-			this.writeInfo(resolved.infoText);
-		}
-
-		this.running = true;
-		this.runningInteractive = resolved.interactive;
-		this.render();
-		let completedResult: TerminalExecResult | null = null;
-		try {
-			if (this.isCdCommand(command)) {
-				await this.executeCdCommand(command);
-			} else {
-				const result = await this.executeShell(resolved.shellCommand, {
-					streamOutput: true,
-					initialInput: resolved.initialInput,
-					initialInputStartDelayMs: resolved.initialInputStartDelayMs,
-					initialInputInterChunkDelayMs: resolved.initialInputInterChunkDelayMs,
-					rawOutput: resolved.interactive,
-					allowExecuteFallback: !resolved.interactive,
-				});
-				completedResult = result;
-				if (typeof result.code === "number" && result.code !== 0 && !result.stderr.trim()) {
-					this.writeStdErr(`exit ${result.code}`);
-				}
-			}
-		} catch (err) {
-			this.writeStdErr(err instanceof Error ? err.message : String(err));
-		} finally {
-			this.running = false;
-			this.runningInteractive = false;
-			this.render();
-			const suppressPrompt = this.suppressPromptOnce;
-			this.suppressPromptOnce = false;
-			if (!suppressPrompt) {
-				this.printPrompt();
-			}
-			if (!this.isCdCommand(command) && this.onCommandComplete) {
-				void Promise.resolve(
-					this.onCommandComplete({
-						command,
-						interactive: resolved.interactive,
-						result: completedResult,
-					}),
-				).catch(() => {
-					// Ignore command completion callback failures.
-				});
-			}
-			const next = this.queuedCommands.shift();
-			if (next) {
-				this.xterm?.write(`${next}\r\n`);
-				void this.executeCommand(next);
-			}
-		}
-	}
-
-	private async abortRunningCommand(): Promise<void> {
-		if (!this.running) return;
-		const child = this.runningChild;
-		if (!child) {
-			this.writeInfo("No running child process to abort.");
-			return;
-		}
-		try {
-			await child.kill();
-		} catch (err) {
-			this.writeStdErr(err instanceof Error ? err.message : String(err));
-		}
+		return true;
 	}
 
 	private async handleClearAction(): Promise<void> {
-		if (this.running) {
-			this.suppressPromptOnce = true;
-			await this.abortRunningCommand();
+		// Send Ctrl-L to the shell so it clears and redraws its prompt.
+		if (this.ptySpawned) {
+			await this.writeToPty("\x0c");
 		}
-		this.clearScreen();
-	}
-
-	private clearScreen(): void {
-		this.inputBuffer = "";
-		this.queuedCommands = [];
-		this.xterm?.write("\x1b[2J\x1b[3J\x1b[H");
-		this.printPrompt();
-		this.scrollTerminalToBottom();
+		this.xterm?.focus();
 	}
 
 	render(): void {
-		const shellLabel = this.shellProfile?.label ?? shellProfilesForPlatform()[0]?.label ?? "shell";
-		const headerTitle = this.running ? `Terminal ${shellLabel} · running` : `Terminal ${shellLabel}`;
 		const cwdLabel = this.cwd ? compactPath(this.cwd) : "No project open";
 		const template = html`
 			<div
@@ -1030,7 +381,7 @@ export class TerminalPanel {
 			>
 				<div class="terminal-resize-handle" title="Resize terminal" aria-hidden="true"></div>
 				<div class="terminal-panel-header">
-					<div class="terminal-panel-title">${headerTitle}</div>
+					<div class="terminal-panel-title">Terminal</div>
 					<div class="terminal-panel-cwd" title=${this.cwd || ""}>${cwdLabel}</div>
 					<div class="terminal-panel-actions">
 						<button class="ghost-btn" title="Clear terminal" @click=${() => void this.handleClearAction()}>Clear</button>
