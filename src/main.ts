@@ -1591,58 +1591,18 @@ async function autoNameSessionIfNew(): Promise<void> {
 
 	try {
 		const { invoke } = await import("@tauri-apps/api/core");
-		const raw = await invoke<string>("load_models_config");
-		const config = JSON.parse(raw || "{}");
-		const providers = config.providers || {};
 
-		const providerName = (state.model!.provider || "").toLowerCase();
-		const modelIdNorm = (state.model!.id || "").toLowerCase();
-
-		// TEMPORARY diagnostic: remove after fixing
-		const providerKeys = Object.keys(providers);
-		console.log("[auto-name DIAG]", {
-			stateProvider: state.model!.provider,
-			stateModelId: state.model!.id,
-			configProviderKeys: providerKeys,
-			configRawLen: raw?.length ?? 0,
-		});
-
-		// Find provider by name, then match model ID within that provider
-		let matchedBaseUrl: string | null = null;
-		let matchedApiKey: string | null = null;
-		let matchedModelId: string | null = null;
-
-		for (const [name, prov] of Object.entries(providers) as [string, any][]) {
-			if (name.toLowerCase() !== providerName) continue;
-			const model = (prov.models || []).find((m: any) =>
-				m.id === state.model!.id || m.id.toLowerCase() === modelIdNorm
-			);
-			if (model) {
-				matchedBaseUrl = prov.baseUrl;
-				matchedApiKey = prov.apiKey;
-				matchedModelId = model.id;
-				console.log("[auto-name DIAG] match found", { provider: name, modelId: model.id, baseUrl: prov.baseUrl });
-				break;
-			}
-		}
-
+		// Let pi handle the API call: pi already knows credentials, proxy,
+		// TLS, and API format for every provider. No separate HTTP or config
+		// parsing needed — works with any model in the model picker.
 		let title: string;
-
-		if (matchedBaseUrl && matchedApiKey && matchedModelId) {
-			try {
-				title = await invoke<string>("generate_session_title", {
-					baseUrl: matchedBaseUrl,
-					apiKey: matchedApiKey,
-					modelId: matchedModelId,
-					userMessage: userMessage,
-				});
-			} catch {
-			console.warn("[auto-name DIAG] generate_session_title API call failed");
-			title = "";
-			}
-		} else {
-			console.warn("[auto-name DIAG] no models.json match", { provider: state.model!.provider, modelId: state.model!.id, configKeys: Object.keys(providers) });
-			recordDebugTrace(`[auto-name] no models.json match for provider="${state.model!.provider}" model="${state.model!.id}"`);
+		try {
+			title = await invoke<string>("pi_generate_title", {
+				provider: state.model!.provider,
+				modelId: state.model!.id,
+				userMessage: userMessage,
+			});
+		} catch {
 			title = "";
 		}
 

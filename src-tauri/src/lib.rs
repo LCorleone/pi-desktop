@@ -2491,6 +2491,82 @@ async fn generate_session_title(
     Ok(title)
 }
 
+/// Generate a session title by calling pi CLI in --print mode.
+/// Pi handles credential discovery, proxy routing, and API format
+/// automatically — avoids the fragile manual HTTP + config parsing approach.
+#[tauri::command]
+async fn pi_generate_title(
+    app: AppHandle,
+    provider: String,
+    model_id: String,
+    user_message: String,
+) -> Result<String, String> {
+    // Find pi binary (reuses existing discovery logic)
+    let cwd = std::env::current_dir()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let options = RpcStartOptions {
+        cli_path: None,
+        pi_path: None,
+        cwd,
+        provider: Some(provider.clone()),
+        model: Some(model_id.clone()),
+        env: None,
+    };
+    let pi = discover_pi(&app, &options)
+        .map_err(|e| format!("Could not find pi binary: {}", e))?;
+
+    // Build command: pi --print --no-session --provider X --model Y --system-prompt "..." "..."
+    let mut cmd = match &pi {
+        PiProcess::DevNode { script } => {
+            let mut c = Command::new("node");
+            c.arg(script);
+            c
+        }
+        PiProcess::SidecarBinary { path } | PiProcess::PathBinary { path } => {
+            Command::new(path)
+        }
+    };
+
+    let prompt = format!(
+        "Generate a short descriptive title (3-7 words) for this coding session. Output ONLY the title. No quotes, punctuation, markdown, bullet points, or extra text.\n\nUser message: {}",
+        user_message
+    );
+
+    cmd.arg("--print")
+        .arg("--no-session")
+        .arg("--provider").arg(&provider)
+        .arg("--model").arg(&model_id)
+        .arg("--system-prompt").arg("You generate concise session titles from user messages. Output ONLY the title. No markdown, no quotes, no extra text.")
+        .arg(&prompt)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let output = tokio::task::spawn_blocking(move || {
+        cmd.output()
+    })
+    .await
+    .map_err(|e| format!("Failed to run pi: {}", e))?
+    .map_err(|e| format!("Failed to run pi: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("pi returned error: {}", stderr.trim()));
+    }
+
+    let title = String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .to_string();
+
+    if title.is_empty() {
+        return Err("Empty title generated".to_string());
+    }
+
+    Ok(title)
+}
+
 #[tauri::command]
 async fn load_models_config() -> Result<String, String> {
     let home = home_dir().ok_or("Could not find home directory")?;
@@ -2555,6 +2631,7 @@ pub fn run() {
             load_models_config,
             save_models_config,
             generate_session_title,
+            pi_generate_title,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
