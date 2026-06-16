@@ -9,7 +9,9 @@ permissions:
 jobs:
   build-macos:
     name: Build macOS (Intel x86_64)
-    runs-on: macos-13
+    # Run on Apple Silicon runner (fast provisioning) and cross-compile for
+    # Intel so the resulting .dmg runs on x86_64 Macs.
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
@@ -21,8 +23,10 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Setup Rust
+      - name: Setup Rust (with x86_64-apple-darwin target)
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -32,15 +36,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build app
-        run: npm run tauri build
+      - name: Build app (cross-compile for Intel)
+        run: npm run tauri build -- --target x86_64-apple-darwin
 
       - name: Upload macOS bundle
         uses: actions/upload-artifact@v4
         with:
           name: Pi-Desktop-macos-x86_64
           path: |
-            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
           if-no-files-found: error
 
       - name: Unsigned build notice
