@@ -2493,7 +2493,9 @@ async fn generate_session_title(
 
 /// Generate a session title by calling pi CLI in --print mode.
 /// Pi handles credential discovery, proxy routing, and API format
-/// automatically — avoids the fragile manual HTTP + config parsing approach.
+/// automatically. On Windows pi is a .cmd wrapper that can't handle
+/// long text as command-line args — we write the prompt to a temp file
+/// and use pi's @file input syntax instead.
 #[tauri::command]
 async fn pi_generate_title(
     app: AppHandle,
@@ -2501,7 +2503,6 @@ async fn pi_generate_title(
     model_id: String,
     user_message: String,
 ) -> Result<String, String> {
-    // Find pi binary (reuses existing discovery logic)
     let cwd = std::env::current_dir()
         .unwrap_or_default()
         .to_string_lossy()
@@ -2517,7 +2518,21 @@ async fn pi_generate_title(
     let pi = discover_pi(&app, &options)
         .map_err(|e| format!("Could not find pi binary: {}", e))?;
 
-    // Build command: pi --print --no-session --provider X --model Y --system-prompt "..." "..."
+    // Write prompt to temp file (avoids Windows .cmd argument-length limits)
+    let prompt = format!(
+        "Generate a short descriptive title (3-7 words) for this coding session. Output ONLY the title. No quotes, punctuation, markdown, bullet points, or extra text.\n\nUser message: {}",
+        user_message
+    );
+    let temp_dir = std::env::temp_dir();
+    let file_path = temp_dir.join(format!("pi-auto-title-{}.txt", std::process::id()));
+    {
+        use std::io::Write;
+        let mut file = std::fs::File::create(&file_path)
+            .map_err(|e| format!("Failed to create temp file: {}", e))?;
+        file.write_all(prompt.as_bytes())
+            .map_err(|e| format!("Failed to write temp file: {}", e))?;
+    }
+
     let mut cmd = match &pi {
         PiProcess::DevNode { script } => {
             let mut c = Command::new("node");
@@ -2529,17 +2544,12 @@ async fn pi_generate_title(
         }
     };
 
-    let prompt = format!(
-        "Generate a short descriptive title (3-7 words) for this coding session. Output ONLY the title. No quotes, punctuation, markdown, bullet points, or extra text.\n\nUser message: {}",
-        user_message
-    );
-
+    let file_arg = format!("@{}", file_path.display());
     cmd.arg("--print")
         .arg("--no-session")
         .arg("--provider").arg(&provider)
         .arg("--model").arg(&model_id)
-        .arg("--system-prompt").arg("You generate concise session titles from user messages. Output ONLY the title. No markdown, no quotes, no extra text.")
-        .arg(&prompt)
+        .arg(&file_arg)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -2550,6 +2560,8 @@ async fn pi_generate_title(
     .await
     .map_err(|e| format!("Failed to run pi: {}", e))?
     .map_err(|e| format!("Failed to run pi: {}", e))?;
+
+    let _ = std::fs::remove_file(&file_path);
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
