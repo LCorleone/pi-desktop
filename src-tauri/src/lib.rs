@@ -2544,6 +2544,13 @@ async fn pi_generate_title(
         }
     };
 
+    // Suppress console window flash on Windows
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
     let file_arg = format!("@{}", file_path.display());
     cmd.arg("--print")
         .arg("--no-session")
