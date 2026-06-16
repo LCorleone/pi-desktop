@@ -1602,7 +1602,8 @@ async function autoNameSessionIfNew(): Promise<void> {
 				modelId: state.model!.id,
 				userMessage: userMessage,
 			});
-		} catch {
+		} catch (err) {
+			console.warn("[auto-name] pi_generate_title failed:", err);
 			title = "";
 		}
 
