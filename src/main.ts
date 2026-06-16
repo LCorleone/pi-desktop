@@ -1598,6 +1598,15 @@ async function autoNameSessionIfNew(): Promise<void> {
 		const providerName = (state.model!.provider || "").toLowerCase();
 		const modelIdNorm = (state.model!.id || "").toLowerCase();
 
+		// TEMPORARY diagnostic: remove after fixing
+		const providerKeys = Object.keys(providers);
+		console.log("[auto-name DIAG]", {
+			stateProvider: state.model!.provider,
+			stateModelId: state.model!.id,
+			configProviderKeys: providerKeys,
+			configRawLen: raw?.length ?? 0,
+		});
+
 		// Find provider by name, then match model ID within that provider
 		let matchedBaseUrl: string | null = null;
 		let matchedApiKey: string | null = null;
@@ -1612,6 +1621,7 @@ async function autoNameSessionIfNew(): Promise<void> {
 				matchedBaseUrl = prov.baseUrl;
 				matchedApiKey = prov.apiKey;
 				matchedModelId = model.id;
+				console.log("[auto-name DIAG] match found", { provider: name, modelId: model.id, baseUrl: prov.baseUrl });
 				break;
 			}
 		}
@@ -1627,9 +1637,11 @@ async function autoNameSessionIfNew(): Promise<void> {
 					userMessage: userMessage,
 				});
 			} catch {
-				title = "";
+			console.warn("[auto-name DIAG] generate_session_title API call failed");
+			title = "";
 			}
 		} else {
+			console.warn("[auto-name DIAG] no models.json match", { provider: state.model!.provider, modelId: state.model!.id, configKeys: Object.keys(providers) });
 			recordDebugTrace(`[auto-name] no models.json match for provider="${state.model!.provider}" model="${state.model!.id}"`);
 			title = "";
 		}
