@@ -4064,7 +4064,7 @@ export class ChatView {
 		if (!msg.thinking) return nothing;
 		const expanded = msg.thinkingExpanded ?? false;
 		const thinkingLabel = msg.isThinkingStreaming ? "Thinking…" : "Thought";
-		const toggleClass = `thinking-toggle ${msg.isThinkingStreaming ? "animating" : "done"}`;
+		const toggleClass = `thinking-toggle ${msg.isThinkingStreaming ? "animating" : "done"} ${!expanded && !msg.isThinkingStreaming ? "collapsed" : ""}`;
 		const thinkingText = this.normalizeThinkingText(msg.thinking.replace(/^\s+/, ""));
 		if (!thinkingText) return nothing;
 		return html`
