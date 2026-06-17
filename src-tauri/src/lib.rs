@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, RunEvent};
 
 mod pty;
 
@@ -2563,14 +2563,18 @@ async fn pi_generate_title(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let output = tokio::task::spawn_blocking(move || {
-        cmd.output()
-    })
-    .await
-    .map_err(|e| format!("Failed to run pi: {}", e))?
-    .map_err(|e| format!("Failed to run pi: {}", e))?;
+    let output_result = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        tokio::task::spawn_blocking(move || cmd.output()),
+    ).await;
 
+    // Always clean up temp file even on timeout/error
     let _ = std::fs::remove_file(&file_path);
+
+    let output = output_result
+        .map_err(|_| "Timed out waiting for pi --print (30s)".to_string())?
+        .map_err(|e| format!("Failed to run pi: {}", e))?
+        .map_err(|e| format!("Failed to run pi: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -2659,6 +2663,24 @@ pub fn run() {
             generate_session_title,
             pi_generate_title,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let RunEvent::ExitRequested { .. } = event {
+                if let Some(state) = app_handle.try_state::<crate::pty::PtyState>() {
+                    let sessions = match state.sessions.lock() {
+                        Ok(s) => s,
+                        Err(_) => return,
+                    };
+                    for (_id, session) in sessions.iter() {
+                        if let Ok(mut child) = session.child.lock() {
+                            if let Some(mut child) = child.take() {
+                                let _ = child.kill();
+                                let _ = child.wait();
+                            }
+                        }
+                    }
+                }
+            }
+        });
 }

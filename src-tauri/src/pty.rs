@@ -36,6 +36,7 @@ pub struct PtyState {
 struct PtyDataPayload {
     id: String,
     data: String,
+    generation: u64,
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -103,7 +104,7 @@ pub async fn pty_spawn(
     state: tauri::State<'_, PtyState>,
     options: PtySpawnOptions,
     id: String,
-) -> Result<(), String> {
+) -> Result<u64, String> {
     let id = normalize_id(id);
 
     // Resolve the shell program + extra args.
@@ -165,25 +166,29 @@ pub async fn pty_spawn(
         .map_err(|e| format!("Failed to take PTY writer: {}", e))?;
 
     // Supersede any existing session under this id.
-    let generation = {
+    let (generation, old_child) = {
         let mut sessions = state
             .sessions
             .lock()
             .map_err(|_| "Failed to acquire PTY sessions lock".to_string())?;
-        let next = if let Some(existing) = sessions.get_mut(&id) {
+        let (next, old) = if let Some(existing) = sessions.get_mut(&id) {
             let g = existing.generation.saturating_add(1).max(1);
-            if let Ok(mut c) = existing.child.lock() {
-                if let Some(mut child) = c.take() {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                }
-            }
-            g
+            let old_child = if let Ok(mut c) = existing.child.lock() {
+                c.take()
+            } else {
+                None
+            };
+            (g, old_child)
         } else {
-            1
+            (1, None)
         };
-        next
+        (next, old)
     };
+    // Kill outside the lock (mirror pty_kill).
+    if let Some(mut child) = old_child {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
 
     let session = PtySession {
         master: Arc::new(Mutex::new(master)),
@@ -220,6 +225,7 @@ pub async fn pty_spawn(
                         PtyDataPayload {
                             id: reader_id.clone(),
                             data: encoded,
+                            generation: reader_gen,
                         },
                     );
                 }
@@ -264,7 +270,7 @@ pub async fn pty_spawn(
         );
     });
 
-    Ok(())
+    Ok(generation)
 }
 
 /// Write input (keystrokes) to a PTY. `data` is a plain UTF-8 string.

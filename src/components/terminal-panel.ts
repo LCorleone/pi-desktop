@@ -29,6 +29,7 @@ interface TerminalCommandCompleteEvent {
 interface PtyDataEvent {
 	id: string;
 	data: string;
+	generation: number;
 }
 
 interface PtyExitEvent {
@@ -71,6 +72,7 @@ export class TerminalPanel {
 
 	private readonly ptyId: string;
 	private ptySpawned = false;
+	private currentGeneration = 0;
 	private spawnedCwd: string | null = null;
 	private spawnInFlight: Promise<void> | null = null;
 	private unlistenData: UnlistenFn | null = null;
@@ -199,7 +201,7 @@ export class TerminalPanel {
 			await this.installListeners();
 			const { cols, rows } = this.getDimensions();
 			try {
-				await invoke("pty_spawn", {
+				this.currentGeneration = await invoke<number>("pty_spawn", {
 					options: { cwd: this.cwd || ".", cols, rows },
 					id: this.ptyId,
 				});
@@ -225,7 +227,8 @@ export class TerminalPanel {
 		// (kills the old child). Reset the viewport and re-spawn in the new cwd.
 		try {
 			const { cols, rows } = this.getDimensions();
-			await invoke("pty_spawn", {
+			this.ptySpawned = false;
+			this.currentGeneration = await invoke<number>("pty_spawn", {
 				options: { cwd: this.cwd || ".", cols, rows },
 				id: this.ptyId,
 			});
@@ -244,6 +247,7 @@ export class TerminalPanel {
 		if (!this.unlistenData) {
 			this.unlistenData = await listen<PtyDataEvent>("pty-data", (event) => {
 				if (event.payload.id !== id) return;
+				if (event.payload.generation !== this.currentGeneration) return;
 				const bytes = base64ToBytes(event.payload.data);
 				this.xterm?.write(bytes);
 				this.scrollTerminalToBottom();
@@ -252,6 +256,7 @@ export class TerminalPanel {
 		if (!this.unlistenExit) {
 			this.unlistenExit = await listen<PtyExitEvent>("pty-exit", (event) => {
 				if (event.payload.id !== id) return;
+				if (event.payload.generation !== this.currentGeneration) return;
 				this.handlePtyExit();
 			});
 		}
