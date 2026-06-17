@@ -5472,7 +5472,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 }
 
 .tool-file-target {
-	color: color-mix(in srgb, var(--accent) 78%, #4f95ff);
+	color: var(--text);
 	background: color-mix(in srgb, var(--accent) 14%, transparent);
 	border-radius: 6px;
 	padding: 1px 5px;
