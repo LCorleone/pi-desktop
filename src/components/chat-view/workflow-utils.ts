@@ -134,14 +134,14 @@ export function summarizeToolCall(
 	const path = pickToolArg(toolCall.args, ["path", "filePath", "targetPath", "from", "to"]);
 	const query = pickToolArg(toolCall.args, ["query", "pattern", "glob", "name"]);
 	const filename = path ? extractFilename(path) : null;
-	if (name === "bash" && command) return `Ran ${truncateText(command, 84)}`;
-	if ((name === "read" || name === "readfile") && filename) return `Read ${filename}`;
-	if ((name === "write" || name === "writefile") && filename) return `Wrote ${filename}`;
-	if (name === "edit" && filename) return `Edited ${filename}`;
-	if (name.includes("search") && query) return `Explored ${truncateText(query, 74)}`;
-	if ((name === "list" || name.includes("ls")) && path) return `Explored ${truncateText(path, 74)}`;
-	if (path) return `${toolCall.name} ${truncateText(path, 74)}`;
-	return `Ran ${toolCall.name}`;
+	if (name === "bash" && command) return truncateText(command, 84);
+	if ((name === "read" || name === "readfile") && filename) return filename;
+	if ((name === "write" || name === "writefile") && filename) return filename;
+	if (name === "edit" && filename) return filename;
+	if (name.includes("search") && query) return truncateText(query, 74);
+	if ((name === "list" || name.includes("ls")) && path) return truncateText(path, 74);
+	if (path) return truncateText(path, 74);
+	return toolCall.name;
 }
 
 function buildToolCallGroups(
