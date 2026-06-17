@@ -120,6 +120,11 @@ export function isStandaloneCodeBlockMarkdown(value: string): boolean {
 	return false;
 }
 
+function extractFilename(path: string): string {
+	const parts = path.replace(/\\/g, "/").split("/");
+	return parts[parts.length - 1] || path;
+}
+
 export function summarizeToolCall(
 	toolCall: WorkflowToolCall,
 	truncateText: (value: string, len: number) => string,
@@ -128,10 +133,11 @@ export function summarizeToolCall(
 	const command = pickToolArg(toolCall.args, ["command", "cmd", "shell", "script"]);
 	const path = pickToolArg(toolCall.args, ["path", "filePath", "targetPath", "from", "to"]);
 	const query = pickToolArg(toolCall.args, ["query", "pattern", "glob", "name"]);
+	const filename = path ? extractFilename(path) : null;
 	if (name === "bash" && command) return `Ran ${truncateText(command, 84)}`;
-	if ((name === "read" || name === "readfile") && path) return `Read ${truncateText(path, 74)}`;
-	if ((name === "write" || name === "writefile") && path) return `Wrote ${truncateText(path, 74)}`;
-	if (name === "edit" && path) return `Edited ${truncateText(path, 74)}`;
+	if ((name === "read" || name === "readfile") && filename) return `Read ${filename}`;
+	if ((name === "write" || name === "writefile") && filename) return `Wrote ${filename}`;
+	if (name === "edit" && filename) return `Edited ${filename}`;
 	if (name.includes("search") && query) return `Explored ${truncateText(query, 74)}`;
 	if ((name === "list" || name.includes("ls")) && path) return `Explored ${truncateText(path, 74)}`;
 	if (path) return `${toolCall.name} ${truncateText(path, 74)}`;
