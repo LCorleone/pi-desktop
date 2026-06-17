@@ -4074,7 +4074,7 @@ export class ChatView {
 			if (headingMatch) return headingMatch[1];
 			return "Thought";
 		})();
-		const toggleClass = `thinking-toggle ${msg.isStreaming ? "animating" : "done"}`;
+		const toggleClass = `thinking-toggle ${msg.isThinkingStreaming ? "animating" : "done"}`;
 		const thinkingText = this.normalizeThinkingText(msg.thinking.replace(/^\s+/, ""));
 		if (!thinkingText) return nothing;
 		return html`
