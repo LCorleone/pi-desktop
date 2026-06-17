@@ -4063,8 +4063,9 @@ export class ChatView {
 	private renderThinking(msg: UiMessage): TemplateResult | typeof nothing {
 		if (!msg.thinking) return nothing;
 		const expanded = msg.thinkingExpanded ?? true;
-		const thinkingLabel = msg.isThinkingStreaming ? "Thinking…" : "Thought";
-		const toggleClass = `thinking-toggle ${msg.isThinkingStreaming ? "animating" : "done"} ${!expanded && !msg.isThinkingStreaming ? "collapsed" : ""}`;
+		const thinkingActive = msg.isThinkingStreaming && msg.isStreaming;
+		const thinkingLabel = thinkingActive ? "Thinking…" : "Thought";
+		const toggleClass = `thinking-toggle ${thinkingActive ? "animating" : "done"} ${!expanded && !thinkingActive ? "collapsed" : ""}`;
 		const thinkingText = this.normalizeThinkingText(msg.thinking.replace(/^\s+/, ""));
 		if (!thinkingText) return nothing;
 		return html`
