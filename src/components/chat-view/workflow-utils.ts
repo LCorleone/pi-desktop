@@ -294,8 +294,11 @@ export function resolveWorkflowExpansionState({
 	const total = toolCalls.length;
 	const running = toolCalls.filter((toolCall) => toolCall.isRunning).length;
 	const manualExpanded = expandedWorkflowIds.has(workflowId);
+	const hasCompletedTools = total > 0 && running === 0;
 	const autoExpanded =
-		isTerminal && keepWorkflowExpandedUntilAssistantText && (running > 0 || runSawToolActivity || total === 0);
+		isTerminal &&
+		!collapsedAutoWorkflowIds.has(workflowId) &&
+		(hasCompletedTools || (keepWorkflowExpandedUntilAssistantText && (running > 0 || runSawToolActivity || total === 0)));
 	const expanded = (autoExpanded && !collapsedAutoWorkflowIds.has(workflowId)) || manualExpanded;
 	return {
 		total,
