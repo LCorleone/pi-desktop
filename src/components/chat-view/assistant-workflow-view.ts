@@ -108,6 +108,9 @@ export function renderAssistantWorkflowView({
 			}
 			lastThinkingFull = normalizedThinking;
 
+			// [thinking-diag] TEMP: log workflow thinking dedup result
+			console.debug("[thinking-diag] workflow-build", { msgId: message.id, fullLen: normalizedThinking.length, displayLen: displayThinking.length, hadPrevFull: (lastThinkingFull ?? "").length > 0 });
+
 			const previous = detailEntries[detailEntries.length - 1];
 			if (!displayThinking) {
 				if (previous && previous.kind === "thinking") {

@@ -181,6 +181,16 @@ export function handleMessageStreamEvent(
 			if (!assistantEvent) return true;
 			const subtype = typeof assistantEvent.type === "string" ? assistantEvent.type : "";
 
+			// [thinking-diag] TEMP: log incoming event structure
+			{
+				const partial = assistantEvent.partial as Record<string, unknown> | undefined;
+				const rawContent = partial?.content;
+				const contentTypes = Array.isArray(rawContent)
+					? rawContent.map((p: unknown) => (p && typeof p === "object" && "type" in p ? String((p as Record<string, unknown>).type) : typeof p))
+					: undefined;
+				console.debug("[thinking-diag] message_update", { subtype, contentTypes });
+			}
+
 			if (subtype === "error") {
 				const streamError = context.extractRuntimeErrorMessage(assistantEvent) || context.extractRuntimeErrorMessage(event);
 				const assistant = context.ensureStreamingAssistantMessage(streamError ? { errorText: streamError } : undefined);
@@ -216,6 +226,8 @@ export function handleMessageStreamEvent(
 				const currentThinking = assistant.thinking || "";
 				assistant.thinking = context.mergeStreamingText(currentThinking, partialThinking, assistantEvent.delta);
 				assistant.isThinkingStreaming = true;
+				// [thinking-diag] TEMP: log thinking extraction result
+				console.debug("[thinking-diag] thinking-matched", { subtype, partialThinkingLen: partialThinking?.length ?? null, thinkingTotalLen: assistant.thinking.length });
 				// Auto-expand on first thinking content so users see the reasoning
 				if (!assistant.thinkingExpanded && (assistant.thinking?.trim().length ?? 0) > 0) {
 					assistant.thinkingExpanded = true;

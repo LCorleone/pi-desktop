@@ -126,6 +126,8 @@ export function extractAssistantPartialContent(
 		const typeLower = type.toLowerCase();
 		if (mode === "text" && typeLower === "text" && typeof block.text === "string") return block.text;
 		if (mode === "thinking" && (typeLower.includes("thinking") || typeLower.includes("reason"))) {
+			// [thinking-diag] TEMP: log which field carries thinking content
+			console.debug("[thinking-diag] extract-part", { mode, partType: type, blockKeys: Object.keys(block), hasThinking: typeof block.thinking === "string", hasReasoning: typeof block.reasoning === "string", hasText: typeof block.text === "string" });
 			if (typeof block.thinking === "string") return block.thinking;
 			if (typeof block.reasoning === "string") return block.reasoning;
 			if (typeof block.text === "string") return block.text;
