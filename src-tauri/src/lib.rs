@@ -8,6 +8,8 @@ use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 use tauri::{AppHandle, Emitter, Manager};
 
+mod pty;
+
 #[derive(Default)]
 struct RpcProcessHandle {
     generation: u64,
@@ -2624,7 +2626,12 @@ pub fn run() {
             Ok(())
         })
         .manage(RpcState::default())
+        .manage(pty::PtyState::default())
         .invoke_handler(tauri::generate_handler![
+            pty::pty_spawn,
+            pty::pty_write,
+            pty::pty_resize,
+            pty::pty_kill,
             rpc_start,
             rpc_send,
             rpc_stop,
