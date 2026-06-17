@@ -1,104 +1,45 @@
 # Releases
 
-Pi Desktop uses GitHub Actions for CI and cross-platform release bundling.
+This fork uses GitHub Actions for CI and manual Windows/macOS release builds.
 
-## Latest stable release
+## Latest release
 
-- **Version:** `v1.0.0`
-- **Published:** 2026-04-13
-- **Artifacts:** macOS (`.dmg`, `.app.tar.gz`), Windows (`.exe`, `.msi`), Linux (`.AppImage`, `.deb`)
-- **Release page:** https://github.com/gustavonline/pi-desktop/releases/tag/v1.0.0
+See **[GitHub Releases](https://github.com/LCorleone/pi-desktop/releases)** for available downloads.
+
+Releases are tagged `manual-build-<number>` and published as draft releases from the
+`july-dev` branch.
 
 ## Workflows
 
 - `.github/workflows/ci.yml`
   - TypeScript checks and frontend build
-  - Rust check
+  - Rust check (Linux only)
 - `.github/workflows/release.yml`
-  - Builds release artifacts for macOS, Windows, Linux
-  - Publishes artifacts to a GitHub Release
-- `.github/workflows/release-smoke.yml`
-  - Manual post-release installer smoke checks on macOS/Windows/Linux for an existing tag
+  - **Manual trigger (`workflow_dispatch`)** — Windows NSIS `.exe` installer
+  - Uploads to a draft GitHub Release
+- `.github/workflows/build-mac.yml`
+  - **Manual trigger (`workflow_dispatch`)** — macOS unsigned `.dmg`
+  - Builds x86_64 on Apple Silicon runner (cross-compile)
+
+## Release process
+
+1. Trigger the desired workflow from the **Actions** tab
+2. Wait for build to complete (~8-10 min)
+3. Go to **[Releases](https://github.com/LCorleone/pi-desktop/releases)** → find the draft
+4. Paste release notes from `releases/` folder
+5. Click **Publish release**
 
 ---
 
-## Release process (maintainer)
+## Unsigned build notes
 
-## 1) Ensure main is green
+### Windows (SmartScreen)
+1. Click **More info**
+2. Click **Run anyway**
 
-- CI passes
-- manual smoke pass completed
-
-## 2) Pick version
-
-Example: `v1.0.0`
-
-## 3) Tag and push
-
-```bash
-git checkout main
-git pull --ff-only
-git tag -a v1.0.0 -m "Pi Desktop v1.0.0"
-git push origin main --tags
-```
-
-This triggers the release workflow.
-
-## 4) Review release page
-
-Open GitHub Releases and verify artifacts for:
-- macOS (`.dmg`, `.app.tar.gz`)
-- Windows (`.msi` / `nsis` bundles)
-- Linux (`.AppImage`, `.deb`)
-
-## 5) Edit release notes
-
-Use **Highlights / Improvements / Fixes / Install notes** format.
-
-For unsigned builds, always include platform guidance:
-- macOS Gatekeeper (`xattr -cr ...` + **Open Anyway** path)
-- Windows SmartScreen (**More info → Run anyway**)
-- Linux AppImage executable bit (`chmod +x ...`)
-
----
-
-## Manual workflow dispatch
-
-You can run `release.yml` manually from the Actions tab and provide a tag input.
-
-For post-release verification, run `release-smoke.yml` with the same tag (for example `v1.0.0`) to validate installer artifacts across macOS/Windows/Linux runners.
-
----
-
-## In-app desktop update behavior
-
-Pi Desktop now checks for new desktop releases in-app (startup + periodic check).
-
-- Update detection source: GitHub `releases/latest`
-- Update entry points: Sidebar update banner and Settings → Desktop updates
-- Update action: opens the best-matching installer asset for the current platform (or release page fallback)
-
-This reduces manual steps for users (no need to browse releases manually each time).
-
-## Notes about signing
-
-Current workflow produces unsigned artifacts unless signing secrets/certificates are configured.
-
-For production distribution, configure platform signing:
-- macOS: Apple Developer signing + notarization
-- Windows: code signing certificate (recommended)
-- Linux: optional signature strategy depending on distro/channel
-
-Without macOS signing/notarization, some users may see Gatekeeper warnings (“app is damaged”).
-Include these workarounds in release notes while unsigned builds are shipped:
-
-1. Terminal workaround:
-
+### macOS (Gatekeeper)
 ```bash
 xattr -cr /Applications/Pi\ Desktop.app
 ```
 
-2. System Settings workaround:
-   - Open **System Settings → Privacy & Security**
-   - Find the blocked Pi Desktop launch warning
-   - Click **Open Anyway** and confirm
+Or: **System Settings → Privacy & Security** → **Open Anyway**

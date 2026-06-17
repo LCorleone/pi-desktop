@@ -11,7 +11,7 @@ Thanks for contributing ❤️
 ## Development setup
 
 ```bash
-git clone https://github.com/gustavonline/pi-desktop.git
+git clone https://github.com/LCorleone/pi-desktop.git
 cd pi-desktop
 npm install
 npm run tauri dev
