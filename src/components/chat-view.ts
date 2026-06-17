@@ -4103,6 +4103,7 @@ export class ChatView {
 					}}
 				>
 					<span class="thinking-label">${thinkingSummary}</span>
+				</button>
 				<div
 					class="thinking-content"
 					data-thinking-for=${msg.id}
