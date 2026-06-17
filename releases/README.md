@@ -7,6 +7,7 @@ This folder stores the release notes for each published release of the
 
 | File | Release | Notes |
 |------|---------|-------|
+| [`v1.2.0.md`](./v1.2.0.md) | PTY Terminal & Auto-Naming | Native PTY backend, pi --print titles, combined Win+Mac CI |
 | [`v1.1.0.md`](./v1.1.0.md) | Auto-naming & Performance | pi --print title generation, streaming rAF coalesce, Windows polish |
 | [`v1.0.0.md`](./v1.0.0.md) | First release | Auto session naming, streaming perf, Windows improvements, UI polish |
 
