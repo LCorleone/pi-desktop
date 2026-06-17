@@ -20,6 +20,7 @@ interface MessageLike {
 	thinking?: string;
 	isStreaming?: boolean;
 	isThinkingStreaming?: boolean;
+	thinkingExpanded?: boolean;
 	errorText?: string;
 }
 
@@ -197,6 +198,7 @@ export function handleMessageStreamEvent(
 				const partialText = context.extractAssistantPartialContent(assistantEvent, "text");
 				assistant.text = context.mergeStreamingText(assistant.text, partialText, assistantEvent.delta);
 				assistant.isThinkingStreaming = false;
+				assistant.thinkingExpanded = false;
 				if (assistant.text.trim().length > 0) {
 					context.markAssistantTextObserved();
 				}
@@ -214,6 +216,8 @@ export function handleMessageStreamEvent(
 				const currentThinking = assistant.thinking || "";
 				assistant.thinking = context.mergeStreamingText(currentThinking, partialThinking, assistantEvent.delta);
 				assistant.isThinkingStreaming = true;
+				// Auto-expand on first thinking content so users see the reasoning
+				if (!assistant.thinkingExpanded) assistant.thinkingExpanded = true;
 				context.scheduleStreamingUiReconcile(1800);
 				if ((assistant.thinking?.length || 0) % 100 === 0) context.render();
 				return true;
@@ -223,6 +227,7 @@ export function handleMessageStreamEvent(
 				context.markToolActivityObserved();
 				const assistant = context.ensureStreamingAssistantMessage();
 				assistant.isThinkingStreaming = false;
+				assistant.thinkingExpanded = false;
 				const toolCall = assistantEvent.toolCall as Record<string, unknown>;
 				if (toolCall) {
 					const rawId = typeof toolCall.id === "string" ? toolCall.id.trim() : "";
@@ -277,6 +282,7 @@ export function handleMessageStreamEvent(
 			if (last?.role === "assistant") {
 				last.isStreaming = false;
 				last.isThinkingStreaming = false;
+				last.thinkingExpanded = false;
 				const completed = event.message as Record<string, unknown> | undefined;
 				const completedError = context.extractAssistantMessageError(completed);
 				if (completedError) {

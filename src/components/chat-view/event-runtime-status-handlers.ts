@@ -5,6 +5,7 @@ interface RuntimeMessageLike {
 	errorText?: string;
 	isStreaming?: boolean;
 	isThinkingStreaming?: boolean;
+	thinkingExpanded?: boolean;
 }
 
 interface HandleRuntimeStatusEventContext {
@@ -90,6 +91,7 @@ export function handleRuntimeStatusEvent(
 			if (last && last.role === "assistant") {
 				last.isStreaming = false;
 				last.isThinkingStreaming = false;
+				last.thinkingExpanded = false;
 			}
 			context.setRetryStatus("");
 			const runError = context.extractRuntimeErrorMessage(event);
