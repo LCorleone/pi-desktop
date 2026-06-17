@@ -4063,17 +4063,7 @@ export class ChatView {
 	private renderThinking(msg: UiMessage): TemplateResult | typeof nothing {
 		if (!msg.thinking) return nothing;
 		const expanded = msg.thinkingExpanded ?? false;
-		const thinkingSummary = (() => {
-			if (msg.isThinkingStreaming) return "Thinking…";
-			const content = msg.thinking || "";
-			// Extract first **bold** text
-			const boldMatch = content.match(/\*\*(.+?)\*\*/);
-			if (boldMatch) return boldMatch[1];
-			// Or first # heading
-			const headingMatch = content.match(/^#{1,4}\s+(.+)$/m);
-			if (headingMatch) return headingMatch[1];
-			return "Thought";
-		})();
+		const thinkingLabel = msg.isThinkingStreaming ? "Thinking…" : "Thought";
 		const toggleClass = `thinking-toggle ${msg.isThinkingStreaming ? "animating" : "done"}`;
 		const thinkingText = this.normalizeThinkingText(msg.thinking.replace(/^\s+/, ""));
 		if (!thinkingText) return nothing;
@@ -4102,7 +4092,7 @@ export class ChatView {
 						}
 					}}
 				>
-					<span class="thinking-label">${thinkingSummary}</span>
+					<span class="thinking-label">${thinkingLabel}</span>
 				</button>
 				<div
 					class="thinking-content"
