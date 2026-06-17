@@ -5408,6 +5408,17 @@ body.file-split-resizing #file-split-resize-handle::after {
 	fill: currentColor;
 }
 
+.tool-workflow-category-icon {
+	width: 14px;
+	height: 14px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: color-mix(in srgb, var(--muted) 76%, var(--text));
+	flex-shrink: 0;
+	margin-right: 4px;
+}
+
 .tool-workflow-count {
 	font-size: 11px;
 	color: color-mix(in srgb, var(--muted) 88%, var(--text));

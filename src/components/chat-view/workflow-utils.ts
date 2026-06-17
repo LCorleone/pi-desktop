@@ -1,3 +1,15 @@
+export type ToolCategory = "terminal" | "file-read" | "file-write" | "edit" | "search" | "default";
+
+export function getToolCategory(name: string): ToolCategory {
+	const n = name.trim().toLowerCase();
+	if (n === "bash" || n.includes("execute") || n.includes("shell") || n.includes("run")) return "terminal";
+	if (n === "read" || n.includes("readfile") || n === "cat") return "file-read";
+	if (n === "write" || n.includes("writefile") || n.includes("create")) return "file-write";
+	if (n === "edit" || n.includes("modify") || n.includes("replace") || n.includes("patch")) return "edit";
+	if (n.includes("search") || n.includes("grep") || n.includes("find") || n.includes("explore") || n.includes("list") || n.includes("ls")) return "search";
+	return "default";
+}
+
 export type WorkflowRole = "user" | "assistant" | "system" | "custom";
 
 export interface WorkflowToolCall {
@@ -28,6 +40,7 @@ export interface WorkflowToolCallGroup {
 	id: string;
 	toolName: string;
 	preview: string;
+	category: ToolCategory;
 	calls: WorkflowToolCall[];
 }
 
@@ -141,6 +154,7 @@ function buildToolCallGroups(
 			id: `${toolCall.id}-group`,
 			toolName: toolCall.name,
 			preview,
+			category: getToolCategory(toolCall.name),
 			calls: [toolCall],
 		});
 	}

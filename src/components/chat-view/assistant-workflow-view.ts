@@ -1,5 +1,23 @@
 import { html, nothing, type TemplateResult } from "lit";
-import type { AssistantWorkflow, WorkflowToolCall, WorkflowToolCallGroup } from "./workflow-utils.js";
+import type { AssistantWorkflow, ToolCategory, WorkflowToolCall, WorkflowToolCallGroup } from "./workflow-utils.js";
+import { getToolCategory } from "./workflow-utils.js";
+
+const toolCategorySvg = (category: ToolCategory): TemplateResult => {
+	switch (category) {
+		case "terminal":
+			return html`<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M3.5 5L5.5 7L3.5 9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 9H10.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`;
+		case "file-read":
+			return html`<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 1.5H8.5L11 4V12.5H3V1.5Z" stroke="currentColor" stroke-width="1.2"/><path d="M8.5 1.5V4H11" stroke="currentColor" stroke-width="1.2"/><circle cx="7" cy="7.5" r="2" stroke="currentColor" stroke-width="1"/><circle cx="7" cy="7.5" r="0.8" fill="currentColor"/></svg>`;
+		case "file-write":
+			return html`<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 1.5H8.5L11 4V12.5H3V1.5Z" stroke="currentColor" stroke-width="1.2"/><path d="M8.5 1.5V4H11" stroke="currentColor" stroke-width="1.2"/><path d="M9.5 7.5L11 6L12.5 7.5L11 9L9.5 7.5Z" fill="currentColor"/></svg>`;
+		case "edit":
+			return html`<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 10.5V12.5H4L10.5 6L8.5 4L2 10.5Z" fill="currentColor"/><path d="M9.5 5L11 3.5L12.5 5L11 6.5L9.5 5Z" fill="currentColor"/></svg>`;
+		case "search":
+			return html`<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4" stroke="currentColor" stroke-width="1.2"/><path d="M9 9L12.5 12.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`;
+		default:
+			return html`<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="4" stroke="currentColor" stroke-width="1.2"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/><path d="M7 3V4.5M7 9.5V11M3 7H4.5M9.5 7H11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`;
+	}
+};
 
 type WorkflowExpansionState = {
 	total: number;
@@ -132,6 +150,7 @@ export function renderAssistantWorkflowView({
 					id: `${toolCall.id}-group`,
 					toolName: toolCall.name,
 					preview,
+					category: getToolCategory(toolCall.name),
 					calls: [toolCall],
 				},
 			});
@@ -193,7 +212,9 @@ export function renderAssistantWorkflowView({
 												class="tool-workflow-line ${groupRunning ? "running" : ""}"
 												@click=${() => toggleToolGroupExpanded(workflow.id, group.id)}
 											>
-												${groupRunning ? html`<span class="tool-workflow-inline-pi" aria-hidden="true">${piGlyphIcon()}</span>` : nothing}
+												${groupRunning
+													? html`<span class="tool-workflow-inline-pi" aria-hidden="true">${piGlyphIcon()}</span>`
+													: html`<span class="tool-workflow-category-icon" aria-hidden="true">${toolCategorySvg(group.category)}</span>`}
 												<span class="tool-workflow-line-text ${groupRunning ? "running" : ""}">${renderToolPreview(group.preview)}</span>
 												${count > 1 ? html`<span class="tool-workflow-count">×${count}</span>` : nothing}
 											</button>
