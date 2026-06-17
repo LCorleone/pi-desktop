@@ -5423,6 +5423,20 @@ body.file-split-resizing #file-split-resize-handle::after {
 	margin-right: 4px;
 }
 
+.tool-workflow-label {
+	font-size: 10px;
+	font-weight: 500;
+	color: color-mix(in srgb, var(--muted) 82%, var(--text));
+	text-transform: lowercase;
+	letter-spacing: 0.02em;
+	flex-shrink: 0;
+	margin-right: 4px;
+	padding: 0 5px;
+	background: color-mix(in srgb, var(--bg-soft) 40%, transparent);
+	border-radius: 3px;
+	line-height: 16px;
+}
+
 .tool-workflow-count {
 	font-size: 11px;
 	color: color-mix(in srgb, var(--muted) 88%, var(--text));

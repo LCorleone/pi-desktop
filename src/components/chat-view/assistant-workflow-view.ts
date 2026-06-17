@@ -1,6 +1,6 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { AssistantWorkflow, ToolCategory, WorkflowToolCall, WorkflowToolCallGroup } from "./workflow-utils.js";
-import { getToolCategory } from "./workflow-utils.js";
+import { getToolCategory, getToolLabel } from "./workflow-utils.js";
 
 const toolCategorySvg = (category: ToolCategory): TemplateResult => {
 	switch (category) {
@@ -151,6 +151,7 @@ export function renderAssistantWorkflowView({
 					toolName: toolCall.name,
 					preview,
 					category: getToolCategory(toolCall.name),
+					label: getToolLabel(getToolCategory(toolCall.name), toolCall.name),
 					calls: [toolCall],
 				},
 			});
@@ -216,7 +217,8 @@ export function renderAssistantWorkflowView({
 												${groupRunning
 													? html`<span class="tool-workflow-inline-pi" aria-hidden="true">${piGlyphIcon()}</span>`
 													: html`<span class="tool-workflow-category-icon" aria-hidden="true">${toolCategorySvg(group.category)}</span>`}
-												<span class="tool-workflow-line-text ${groupRunning ? "running" : ""}">${renderToolPreview(group.preview)}</span>
+												<span class="tool-workflow-label">${group.label}</span>
+									<span class="tool-workflow-line-text ${groupRunning ? "running" : ""}">${renderToolPreview(group.preview)}</span>
 												${count > 1 ? html`<span class="tool-workflow-count">×${count}</span>` : nothing}
 											</button>
 											${groupExpanded
