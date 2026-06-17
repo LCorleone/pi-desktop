@@ -4,17 +4,49 @@ All notable changes to this project are documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+> **Note:** Versions before `v1.1.0` are upstream ([`gustavonline/pi-desktop`](https://github.com/gustavonline/pi-desktop)).
+> This fork's changes start below.
+
 ## [Unreleased]
 
+### Added
+- Auto session naming via `pi --print`. Sessions get descriptive LLM-generated titles
+  automatically. Works with every model in the picker — pi handles credentials, proxy,
+  TLS, and API format; no manual config parsing or separate HTTP calls needed.
+- Real PTY terminal backend (`portable-pty` Rust bridge) replacing xterm.js addons.
+  Terminal now runs as a native PTY with proper resize/input handling.
+- macOS Intel build workflow (`.github/workflows/build-mac.yml`). Cross-compiles
+  x86_64 on Apple Silicon runners to avoid Intel runner congestion.
+- Windows-style window controls on the sidebar (minimize/maximize/close).
+- Clear chat button in the composer toolbar.
+- Windows `pi.cmd` discovery for environments where PATH lookup is unreliable.
+- OpenAI-compatible provider configuration in Settings.
+- `releases/` folder for release note storage.
+
 ### Changed
-- Added a Settings → Updates advanced control for manual Pi binary override (`pi_path`) with browse/save/clear actions, so users can pin an explicit `pi` executable path across all OSes.
-- RPC/CLI command bridge now carries a preferred manual Pi binary override for runtime start and non-runtime CLI actions (status/list/install/update flows).
+- Default app font switched to JetBrains Mono.
+- Windows sidebar layout: controls on the right, toggle on the left.
+- UI polish: wider surface contrast, larger minimum font size, stronger borders.
+- Streamlined the packages page (removed "recommended" section clutter).
+- Release workflow simplified to Windows-only NSIS `.exe` via manual dispatch.
+- README rewritten for the `LCorleone/pi-desktop` fork with accurate build info.
+
+### Performance
+- Streaming text rendering coalesced to one per animation frame (~60fps) via
+  `requestAnimationFrame`. Fixes progressive stutter in long sessions.
 
 ### Fixed
-- Improved Linux/macOS fallback discovery for global npm installs by checking additional common user-prefix locations (including `~/.npm-global/bin/pi`) and npm prefix environment hints.
-- Explicit Pi path resolution now supports `~`-prefixed paths in manual settings/env override flows.
+- Auto-name: harden against tab switches (capture runtime before awaits).
+- Auto-name: prevent clobbering a manual rename during the async LLM window.
+- Auto-name: match provider by name, not just model ID (fixes wrong credentials
+  when multiple providers share the same model).
+- Auto-name: suppress Windows cmd window flash during title generation.
+- Auto-name: use temp file for prompt text to avoid Windows `.cmd` argument limits.
+- Auto-name: populate sessionPath from fresh state when onStateChange is skipped.
 
-## [1.0.0] - 2026-04-13
+---
+
+## Pre-fork (upstream)
 
 ### Changed
 - Reworked the no-project / new-thread welcome view into a cleaner Codex-inspired centered layout with Pi Desktop branding, a project-focused dropdown, and reduced UI chrome.
