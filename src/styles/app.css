@@ -5215,21 +5215,31 @@ body.file-split-resizing #file-split-resize-handle::after {
 	--thinking-active: color-mix(in srgb, var(--text) 80%, var(--muted));
 }
 
-.thinking-char {
-	display: inline-block;
+.thinking-toggle .thinking-label {
+	font-family: inherit;
+	font-size: 12px;
+	font-weight: 500;
 	color: var(--thinking-idle);
-	transition: color var(--duration-fast) var(--ease-standard);
+	letter-spacing: 0.01em;
 }
 
-.thinking-toggle.animating .thinking-char {
-	animation: thinkingCharSweep 1.8s ease-in-out infinite;
-	animation-delay: calc(var(--thinking-char-index, 0) * 0.12s);
+.thinking-toggle.animating .thinking-label {
+	color: transparent;
+	background: linear-gradient(90deg,
+		var(--thinking-idle) 0%,
+		var(--thinking-idle) 35%,
+		var(--text) 50%,
+		var(--thinking-idle) 65%,
+		var(--thinking-idle) 100%
+	);
+	background-size: 200% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	animation: thinking-shimmer 2s ease-in-out infinite;
 }
 
-.thinking-toggle:hover .thinking-char,
-.thinking-toggle:focus-visible .thinking-char,
-.thinking-toggle.done .thinking-char {
-	color: var(--thinking-active);
+.thinking-toggle.done .thinking-label {
+	color: var(--thinking-idle);
 }
 
 .thinking-content {
@@ -5255,15 +5265,9 @@ body.file-split-resizing #file-split-resize-handle::after {
 	margin-top: 6px;
 }
 
-@keyframes thinkingCharSweep {
-	0%,
-	65%,
-	100% {
-		color: var(--thinking-idle);
-	}
-	30% {
-		color: var(--text);
-	}
+@keyframes thinking-shimmer {
+	0% { background-position: -200% 0; }
+	100% { background-position: 200% 0; }
 }
 
 .tool-workflow {
@@ -5544,6 +5548,25 @@ body.file-split-resizing #file-split-resize-handle::after {
 
 .tool-workflow-detail-status.running {
 	color: var(--accent);
+}
+
+.tool-workflow-detail-status .tool-status-dot {
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	margin-right: 4px;
+	flex-shrink: 0;
+}
+.tool-workflow-detail-status.running .tool-status-dot {
+	background: var(--accent);
+	animation: pi-running-breath 3.6s ease-in-out infinite;
+}
+.tool-workflow-detail-status.done .tool-status-dot {
+	background: color-mix(in srgb, var(--success) 82%, var(--text));
+}
+.tool-workflow-detail-status.error .tool-status-dot {
+	background: var(--danger);
 }
 
 .tool-output-empty {

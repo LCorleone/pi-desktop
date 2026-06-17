@@ -211,6 +211,7 @@ export function renderAssistantWorkflowView({
 											<button
 												class="tool-workflow-line ${groupRunning ? "running" : ""}"
 												@click=${() => toggleToolGroupExpanded(workflow.id, group.id)}
+												title=${output ? output.slice(0, 300) : undefined}
 											>
 												${groupRunning
 													? html`<span class="tool-workflow-inline-pi" aria-hidden="true">${piGlyphIcon()}</span>`
@@ -222,7 +223,7 @@ export function renderAssistantWorkflowView({
 												? html`
 													<div class="tool-workflow-details">
 														<pre class="tool-workflow-output">${output || "No output reported."}${groupRunning ? html`<span class="streaming-inline"></span>` : nothing}</pre>
-														<div class="tool-workflow-detail-meta"><span class="tool-workflow-detail-status ${groupRunning ? "running" : groupFailed ? "error" : "done"}">${statusLabel}</span></div>
+														<div class="tool-workflow-detail-meta"><span class="tool-workflow-detail-status ${groupRunning ? "running" : groupFailed ? "error" : "done"}"><span class="tool-status-dot"></span>${statusLabel}</span></div>
 													</div>
 												`
 												: nothing}
