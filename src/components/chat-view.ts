@@ -4092,7 +4092,7 @@ export class ChatView {
 						}
 					}}
 				>
-					<span class="thinking-label">${thinkingLabel}</span>
+					<span class="thinking-label">${!expanded ? html`<span class="thinking-caret">▸</span> ` : ""}${thinkingLabel}</span>
 				</button>
 				<div
 					class="thinking-content"
