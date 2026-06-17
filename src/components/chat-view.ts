@@ -3542,6 +3542,7 @@ export class ChatView {
 			if (message.role !== "assistant") continue;
 			message.isStreaming = false;
 			message.isThinkingStreaming = false;
+			message.thinkingExpanded = false;
 			for (const toolCall of message.toolCalls) {
 				toolCall.isRunning = false;
 				toolCall.streamingOutput = undefined;

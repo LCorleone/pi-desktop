@@ -217,7 +217,9 @@ export function handleMessageStreamEvent(
 				assistant.thinking = context.mergeStreamingText(currentThinking, partialThinking, assistantEvent.delta);
 				assistant.isThinkingStreaming = true;
 				// Auto-expand on first thinking content so users see the reasoning
-				if (!assistant.thinkingExpanded) assistant.thinkingExpanded = true;
+				if (!assistant.thinkingExpanded && (assistant.thinking?.trim().length ?? 0) > 0) {
+					assistant.thinkingExpanded = true;
+				}
 				context.scheduleStreamingUiReconcile(1800);
 				if ((assistant.thinking?.length || 0) % 100 === 0) context.render();
 				return true;
