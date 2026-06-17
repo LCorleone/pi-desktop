@@ -1,6 +1,8 @@
 # Pi Desktop
 
-A native-feeling desktop shell for the **Pi Coding Agent** CLI (`pi --mode rpc`).
+A native-feeling desktop shell for the **Pi Coding Agent**, built with Tauri + Lit.
+Forks and extends [`gustavonline/pi-desktop`](https://github.com/gustavonline/pi-desktop)
+with a real PTY terminal, auto session naming, and tuned Windows + macOS builds.
 
 <p align="left">
   <a href="https://github.com/LCorleone/pi-desktop/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/LCorleone/pi-desktop/ci.yml?branch=july-dev&style=for-the-badge" /></a>
@@ -12,44 +14,34 @@ A native-feeling desktop shell for the **Pi Coding Agent** CLI (`pi --mode rpc`)
   <img src="./assets/branding/pi-desktop-icon.svg" alt="Pi Desktop app icon" width="120" />
 </p>
 
-> **Note — this is a personal fork.** All credit for the original project goes to
-> [`gustavonline/pi-desktop`](https://github.com/gustavonline/pi-desktop). This fork
-> (`LCorleone/pi-desktop`) carries my own build/release workflow and tweaks; please file
-> upstream design issues against the original repo.
-
-<!--
-Screenshot placeholder: the original README linked an upstream user-attachments image.
-Add your own screenshot here, e.g.:
-![Pi Desktop](./assets/screenshots/main.png)
--->
-
 ---
 
-## What it is
+## What this fork adds
 
-Pi Desktop is a minimal desktop shell for the Pi Coding Agent. It is deliberately
-**extension-first**:
+| Feature | Description |
+|---|---|
+| **PTY terminal** | Real pseudo-terminal backend (Rust `portable-pty`) instead of xterm.js addons. Interactive programs, proper resize, no chat-timeline leakage. |
+| **Auto session naming** | Sessions get LLM-generated titles via `pi --print`. Works with every model in the picker. No config parsing or manual API calls. |
+| **Streaming performance** | Text rendering coalesced to one per animation frame (~60fps) — no stutter in long sessions. |
+| **Combined CI** | Single `workflow_dispatch` builds both Windows `.exe` and macOS `.dmg` in parallel. |
+| **Windows polish** | Native-style window controls on sidebar, JetBrains Mono as default font, custom blue app icon. |
+| **Clean docs** | README, CHANGELOG, release notes, and TODO all rewritten for this fork. |
 
-- the desktop app is the host/shell (windows, panes, files, tabs, notifications),
-- the `pi` CLI is the runtime,
-- packages/extensions provide optional behavior and workflows.
-
-The shell stays out of the way — product logic and automation belong in Pi and its
-packages, not hardcoded into the app.
+For the full upstream feature set (multi-workspace, streaming chat, slash palette, model picker, themes, packages), see the original project.
 
 ---
 
 ## Features
 
-- **Multi-workspace** project-aware desktop shell with pin/reorder semantics
-- **Session-first chat** with streaming, tools, and a compact thinking timeline
-- **Composer slash palette** — deterministic built-in commands plus runtime-discovered extension/skill/prompt commands
-- **Model/provider picker** with provider grouping, login/logout actions, and auth diagnostics
-- **Docked terminal** (xterm) panel inside chat
-- **Right-side file split** with resize, drag/drop attachments, and file reference pills
-- **Package manager** pane (`pi install/remove/update/list`) with capability-driven settings
-- **Themes** — bundled desktop themes, CLI-schema-compatible theme handling
-- **Settings & updates** — no-project-safe UX, manual CLI path override, in-app desktop + CLI update checks
+- **Multi-workspace** shell with pin/reorder, project-aware sessions
+- **Streaming chat** with tools, thinking timeline, and interactive workflows
+- **Real PTY docked terminal** — interactive shell inside the chat pane
+- **Auto-naming** — sessions title themselves after the first message
+- **Composer slash palette** with deterministic built-in + extension commands
+- **Model/provider picker** with auth management and diagnostics
+- **Right-side file split** with resize and drag/drop
+- **Package manager** (`pi install/remove/update/list`) with settings UI
+- **Themes & settings** — bundled themes, CLI path override, update checks
 
 Full capability map: [`FEATURE_MAPPING.md`](./FEATURE_MAPPING.md).
 
@@ -57,123 +49,66 @@ Full capability map: [`FEATURE_MAPPING.md`](./FEATURE_MAPPING.md).
 
 ## Download
 
-Releases live at **[github.com/LCorleone/pi-desktop/releases](https://github.com/LCorleone/pi-desktop/releases)**.
+Releases at **[github.com/LCorleone/pi-desktop/releases](https://github.com/LCorleone/pi-desktop/releases)**.
 
-> **Be accurate about this fork's builds:** the release workflow here
-> ([`.github/workflows/release.yml`](./.github/workflows/release.yml)) is a
-> **manual (`workflow_dispatch`) Windows-only** build. It produces an **NSIS `.exe`
-> installer** and uploads it to a **draft release** tagged `manual-build-<run_number>`
-> on the `july-dev` branch.
->
-> - There are **no macOS or Linux artifacts** produced by this fork's workflow.
-> - Drafts may not appear on the "latest" release pointer — check the full
->   [Releases list](https://github.com/LCorleone/pi-desktop/releases) and look for
->   `manual-build-*` tags.
-> - For other platforms, or to customize the build, use **Build from source** below.
+A single [`workflow_dispatch`](./.github/workflows/release.yml) builds both platforms:
 
-### Unsigned build notes (Windows SmartScreen)
+| Platform | Artifact |
+|----------|----------|
+| **Windows** | NSIS `.exe` installer |
+| **macOS** | Unsigned Intel `.dmg` (x86_64, cross-compiled on Apple Silicon) |
 
-Builds are **unsigned**. On first run, Windows SmartScreen may warn:
+Releases are **drafts** tagged `manual-build-<N>`. Check the full [Releases list](https://github.com/LCorleone/pi-desktop/releases) for the latest.
 
-1. Click **More info**
-2. Click **Run anyway**
+### Unsigned builds
+
+**Windows:** SmartScreen → **More info** → **Run anyway**.
+
+**macOS:** `xattr -cr "/Applications/Pi Desktop.app"` after mounting.
 
 ---
 
 ## First run
 
-On launch, Pi Desktop checks for the `pi` CLI. If it is missing, the app shows an
-onboarding card with install instructions:
+Install the Pi CLI:
 
 ```bash
 npm install -g @earendil-works/pi-coding-agent
 ```
 
-- This installs a **public npm package** (`@earendil-works/pi-coding-agent`) — no npm auth token required.
-- Pi Desktop itself is distributed via **GitHub Releases**, not npm.
-
-Then click **Retry** in-app.
+The app shows an onboarding card if `pi` is missing. Requires Node.js ≥ 22.
 
 ---
 
 ## Build from source
 
-### Prerequisites
-
-- Node.js >= 22
-- Rust toolchain
-- Platform build dependencies for Tauri 2
-
-### Dev
-
 ```bash
 npm install
-npm run tauri dev
+npm run tauri dev       # dev
+npm run tauri build     # production (artifacts: src-tauri/target/release/bundle/)
 ```
 
-### Production build
-
-```bash
-npm run check
-npm run build:frontend
-npm run tauri build
-```
-
-Artifacts are generated under:
-
-```
-src-tauri/target/release/bundle/
-```
+Prerequisites: Node.js ≥ 22, Rust toolchain, Tauri 2 platform deps.
 
 ---
 
 ## Architecture
 
-Deep dives: **[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)** and
-**[`docs/CAPABILITY_MODEL.md`](./docs/CAPABILITY_MODEL.md)**.
+- **Lit + TypeScript** frontend (not React)
+- **Tauri 2 / Rust** backend — PTY, RPC process management, filesystem
+- **`pi --mode rpc`** — JSON-RPC line protocol over stdin/stdout for AI chat
+- **`pi --print`** — one-shot mode for title generation
+- **`portable-pty`** — real terminal backend for the docked shell
 
-Short version:
-
-- **Frontend (Lit + TypeScript)** — UI shell, panes, interactions. *(This project uses **Lit**, not React.)*
-- **Tauri backend (Rust)** — native bridge, CLI process management, filesystem/window commands
-- **Pi RPC bridge** — typed JSON-RPC-style line protocol over stdin/stdout
-- **Packages/extensions** — opt-in behavior and UI integrations through the extension UI protocol
+Deeper: [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md), [`docs/CAPABILITY_MODEL.md`](./docs/CAPABILITY_MODEL.md).
 
 ---
 
-## Packages
+## Credit
 
-See **[`docs/PACKAGES.md`](./docs/PACKAGES.md)**. Packages are first-class building blocks:
-install globally or per project, surface loaded resources in-app, and keep policy/automation
-outside the shell when possible.
-
-## Security and permissions
-
-See **[`docs/PERMISSIONS.md`](./docs/PERMISSIONS.md)**. Tauri capabilities currently include the
-filesystem and shell permissions needed to run Pi and manage project resources — review before
-deploying in restricted environments.
-
-## Releases
-
-See **[`docs/RELEASES.md`](./docs/RELEASES.md)** and **[`docs/ICONS.md`](./docs/ICONS.md)**
-(icon source, regeneration, and validation).
-
----
-
-## Contributing
-
-- Read [`CONTRIBUTING.md`](./CONTRIBUTING.md)
-- Open an issue before large changes
-- Keep changes aligned with the extension-first architecture and minimal UX goals
-
----
+Fork of [`gustavonline/pi-desktop`](https://github.com/gustavonline/pi-desktop). The desktop shell,
+multi-session runtime, and extension model are the original project's work.
 
 ## License
 
 MIT — see [`LICENSE`](./LICENSE).
-
----
-
-## Star history
-
-[![Star History Chart](https://api.star-history.com/svg?repos=LCorleone/pi-desktop&type=Date)](https://www.star-history.com/#LCorleone/pi-desktop&Date)
