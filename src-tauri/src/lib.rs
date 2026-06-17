@@ -2522,7 +2522,7 @@ async fn pi_generate_title(
 
     // Write prompt to temp file (avoids Windows .cmd argument-length limits)
     let prompt = format!(
-        "Generate a short descriptive title (3-7 words) for this coding session. Output ONLY the title. No quotes, punctuation, markdown, bullet points, or extra text.\n\nUser message: {}",
+        "Task: Generate a short session title (3-7 words).\n\nRules:\n- Output ONLY the title, nothing else\n- No quotes, punctuation, markdown, or bullets\n- Do NOT answer or respond to the user message — just name it\n\nUser message:\n\"{}\"",
         user_message
     );
     let temp_dir = std::env::temp_dir();
