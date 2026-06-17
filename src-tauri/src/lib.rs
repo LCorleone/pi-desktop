@@ -2553,6 +2553,15 @@ async fn pi_generate_title(
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
 
+    // Ensure pi's bin dir is on PATH so the `#!/usr/bin/env node` shebang
+    // resolves in GUI launches (macOS GUI apps don't inherit shell PATH with
+    // nvm/homebrew-managed node). Mirrors build_command() for the main RPC path.
+    if let PiProcess::PathBinary { path } = &pi {
+        if let Some(parent) = path.parent() {
+            prepend_bin_dir_to_path(&mut cmd, parent);
+        }
+    }
+
     let file_arg = format!("@{}", file_path.display());
     cmd.arg("--print")
         .arg("--no-session")
