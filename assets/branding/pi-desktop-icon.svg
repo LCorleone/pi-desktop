@@ -7,17 +7,81 @@
     </linearGradient>
   </defs>
 
-  <rect width="1024" height="1024" rx="200" fill="url(#bg)"/>
+  <!-- Blue gradient background -->
+  <rect width="1024" height="1024" fill="url(#bg)"/>
 
-  <!-- Classic π — two legs under a top bar, unmistakable -->
-  <g fill="#FFFFFF">
-    <!-- Top bar (full width) -->
-    <rect x="160" y="260" width="704" height="104" rx="30"/>
+  <!-- Pi monogram (upstream original) -->
+  <g fill="#FFFFFF" transform="matrix(0.894702 0 0 0.894702 154.115 32.115)">
+    <path fill-rule="evenodd" d="M165.29 165.29 H517.36 V400 H400 V517.36 H282.65 V634.72 H165.29 Z M282.65 282.65 V400 H400 V282.65 Z"/>
+    <path d="M517.36 400 H634.72 V634.72 H517.36 Z"/>
+  </g>
 
-    <!-- Left leg (starts below top bar) -->
-    <rect x="160" y="364" width="104" height="420" rx="30"/>
-
-    <!-- Right leg (starts below top bar) -->
-    <rect x="760" y="364" width="104" height="420" rx="30"/>
+  <!-- DESK wordmark (upstream original) -->
+  <g fill="#FFFFFF" shape-rendering="crispEdges">
+    <rect x="236" y="676" width="24" height="24"/>
+    <rect x="260" y="676" width="24" height="24"/>
+    <rect x="284" y="676" width="24" height="24"/>
+    <rect x="308" y="676" width="24" height="24"/>
+    <rect x="236" y="700" width="24" height="24"/>
+    <rect x="332" y="700" width="24" height="24"/>
+    <rect x="236" y="724" width="24" height="24"/>
+    <rect x="332" y="724" width="24" height="24"/>
+    <rect x="236" y="748" width="24" height="24"/>
+    <rect x="332" y="748" width="24" height="24"/>
+    <rect x="236" y="772" width="24" height="24"/>
+    <rect x="332" y="772" width="24" height="24"/>
+    <rect x="236" y="796" width="24" height="24"/>
+    <rect x="332" y="796" width="24" height="24"/>
+    <rect x="236" y="820" width="24" height="24"/>
+    <rect x="260" y="820" width="24" height="24"/>
+    <rect x="284" y="820" width="24" height="24"/>
+    <rect x="308" y="820" width="24" height="24"/>
+    <rect x="380" y="676" width="24" height="24"/>
+    <rect x="404" y="676" width="24" height="24"/>
+    <rect x="428" y="676" width="24" height="24"/>
+    <rect x="452" y="676" width="24" height="24"/>
+    <rect x="476" y="676" width="24" height="24"/>
+    <rect x="380" y="700" width="24" height="24"/>
+    <rect x="380" y="724" width="24" height="24"/>
+    <rect x="404" y="724" width="24" height="24"/>
+    <rect x="428" y="724" width="24" height="24"/>
+    <rect x="452" y="724" width="24" height="24"/>
+    <rect x="380" y="748" width="24" height="24"/>
+    <rect x="380" y="772" width="24" height="24"/>
+    <rect x="380" y="796" width="24" height="24"/>
+    <rect x="380" y="820" width="24" height="24"/>
+    <rect x="404" y="820" width="24" height="24"/>
+    <rect x="428" y="820" width="24" height="24"/>
+    <rect x="452" y="820" width="24" height="24"/>
+    <rect x="476" y="820" width="24" height="24"/>
+    <rect x="548" y="676" width="24" height="24"/>
+    <rect x="572" y="676" width="24" height="24"/>
+    <rect x="596" y="676" width="24" height="24"/>
+    <rect x="620" y="676" width="24" height="24"/>
+    <rect x="524" y="700" width="24" height="24"/>
+    <rect x="524" y="724" width="24" height="24"/>
+    <rect x="548" y="748" width="24" height="24"/>
+    <rect x="572" y="748" width="24" height="24"/>
+    <rect x="596" y="748" width="24" height="24"/>
+    <rect x="620" y="772" width="24" height="24"/>
+    <rect x="620" y="796" width="24" height="24"/>
+    <rect x="524" y="820" width="24" height="24"/>
+    <rect x="548" y="820" width="24" height="24"/>
+    <rect x="572" y="820" width="24" height="24"/>
+    <rect x="596" y="820" width="24" height="24"/>
+    <rect x="668" y="676" width="24" height="24"/>
+    <rect x="764" y="676" width="24" height="24"/>
+    <rect x="668" y="700" width="24" height="24"/>
+    <rect x="740" y="700" width="24" height="24"/>
+    <rect x="668" y="724" width="24" height="24"/>
+    <rect x="716" y="724" width="24" height="24"/>
+    <rect x="668" y="748" width="24" height="24"/>
+    <rect x="692" y="748" width="24" height="24"/>
+    <rect x="668" y="772" width="24" height="24"/>
+    <rect x="716" y="772" width="24" height="24"/>
+    <rect x="668" y="796" width="24" height="24"/>
+    <rect x="740" y="796" width="24" height="24"/>
+    <rect x="668" y="820" width="24" height="24"/>
+    <rect x="764" y="820" width="24" height="24"/>
   </g>
 </svg>
