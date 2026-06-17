@@ -2,7 +2,7 @@ export type ToolCategory = "terminal" | "file-read" | "file-write" | "edit" | "s
 
 export function getToolCategory(name: string): ToolCategory {
 	const n = name.trim().toLowerCase();
-	if (n === "bash" || n.includes("execute") || n.includes("shell") || n.includes("run")) return "terminal";
+	if (n === "bash" || n.includes("execute") || n.includes("shell") || n === "run") return "terminal";
 	if (n === "read" || n.includes("readfile") || n === "cat") return "file-read";
 	if (n === "write" || n.includes("writefile") || n.includes("create")) return "file-write";
 	if (n === "edit" || n.includes("modify") || n.includes("replace") || n.includes("patch")) return "edit";
@@ -299,7 +299,7 @@ export function resolveWorkflowExpansionState({
 		isTerminal &&
 		!collapsedAutoWorkflowIds.has(workflowId) &&
 		(hasCompletedTools || (keepWorkflowExpandedUntilAssistantText && (running > 0 || runSawToolActivity || total === 0)));
-	const expanded = (autoExpanded && !collapsedAutoWorkflowIds.has(workflowId)) || manualExpanded;
+	const expanded = autoExpanded || manualExpanded;
 	return {
 		total,
 		running,
