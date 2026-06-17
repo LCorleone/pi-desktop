@@ -8,7 +8,7 @@ Security fixes are provided for the latest release line on `main`.
 
 Please do **not** open public issues for security vulnerabilities.
 
-Email: **your-email@example.com**
+Email: **lcorleone@foxmail.com**
 
 Include:
 - affected version/commit
