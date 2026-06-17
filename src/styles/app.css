@@ -3518,6 +3518,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 
 .sidebar-settings-icon-btn:hover {
 	color: var(--text);
+	background: color-mix(in srgb, var(--bg-soft) 50%, transparent);
 }
 
 .sidebar-workspace-pill,
@@ -3539,8 +3540,8 @@ body.file-split-resizing #file-split-resize-handle::after {
 .sidebar-workspace-pill-emoji {
 	font-size: 12px;
 	line-height: 1;
-	filter: grayscale(1) saturate(0.12) brightness(0.82);
-	opacity: 0.66;
+	filter: grayscale(1) saturate(0.25) brightness(0.82);
+	opacity: 0.82;
 	transition: filter var(--duration-fast) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
 }
 
@@ -4272,7 +4273,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 
 .sidebar-session-pi.running {
 	opacity: 1;
-	animation: pi-running-breath 5.4s ease-in-out infinite;
+	animation: pi-running-breath 3.6s ease-in-out infinite;
 }
 
 .sidebar-inline-input {
@@ -4716,6 +4717,12 @@ body.file-split-resizing #file-split-resize-handle::after {
 	background: color-mix(in srgb, var(--bg-soft) 80%, var(--bg-muted));
 }
 
+.message-action-btn:focus-visible {
+	outline: none;
+	opacity: 1;
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 44%, transparent);
+}
+
 .bubble {
 	max-width: 100%;
 	width: fit-content;
@@ -4741,7 +4748,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 }
 
 :root.light .user-bubble .bubble-text {
-	color: color-mix(in srgb, var(--text) 86%, var(--muted));
+	color: color-mix(in srgb, var(--text) 92%, var(--muted));
 }
 
 .bubble-chip {
@@ -4836,14 +4843,14 @@ body.file-split-resizing #file-split-resize-handle::after {
 }
 
 .chat-working-pi {
-	width: 11px;
-	height: 11px;
+	width: 14px;
+	height: 14px;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	color: color-mix(in srgb, var(--text) 72%, var(--muted));
 	opacity: 0.9;
-	animation: pi-running-breath 5.4s ease-in-out infinite;
+	animation: pi-running-breath 3.6s ease-in-out infinite;
 }
 
 .chat-working-pi svg {
@@ -4861,14 +4868,14 @@ body.file-split-resizing #file-split-resize-handle::after {
 	align-items: baseline;
 	white-space: nowrap;
 	min-height: 14px;
-	animation: pi-running-breath 5.4s ease-in-out infinite;
+	animation: pi-running-breath 3.6s ease-in-out infinite;
 }
 
 .chat-working-label,
 .chat-working-dots {
 	font-family: inherit;
-	font-size: 11px;
-	font-weight: 460;
+	font-size: 12px;
+	font-weight: 500;
 	color: color-mix(in srgb, var(--text) 74%, var(--muted));
 	line-height: 1;
 	text-transform: none;
@@ -5046,6 +5053,11 @@ body.file-split-resizing #file-split-resize-handle::after {
 
 .welcome-project-trigger.active {
 	color: color-mix(in srgb, var(--text) 92%, var(--bg));
+}
+
+.welcome-project-trigger:focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 44%, transparent);
 }
 
 .welcome-project-caret {
@@ -5237,7 +5249,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 }
 
 .thinking-block.expanded .thinking-content {
-	max-height: 280px;
+	max-height: 480px;
 	overflow: auto;
 	opacity: 1;
 	margin-top: 6px;
@@ -5250,7 +5262,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 		color: var(--thinking-idle);
 	}
 	30% {
-		color: var(--thinking-active);
+		color: var(--text);
 	}
 }
 
@@ -5350,7 +5362,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 .tool-workflow-line:hover,
 .tool-workflow-line:focus-visible {
 	color: inherit;
-	background: transparent;
+	background: color-mix(in srgb, var(--bg-soft) 40%, transparent);
 }
 
 .tool-workflow-line-text {
@@ -5371,7 +5383,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 
 .tool-workflow-line-text.running {
 	color: color-mix(in srgb, var(--text) 72%, var(--muted));
-	animation: pi-running-breath 5.4s ease-in-out infinite;
+	animation: pi-running-breath 3.6s ease-in-out infinite;
 }
 
 .tool-workflow-inline-pi {
@@ -5382,7 +5394,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 	justify-content: center;
 	color: color-mix(in srgb, var(--text) 72%, var(--muted));
 	opacity: 0.9;
-	animation: pi-running-breath 5.4s ease-in-out infinite;
+	animation: pi-running-breath 3.6s ease-in-out infinite;
 	flex-shrink: 0;
 }
 
@@ -5432,7 +5444,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 }
 
 .tool-workflow-thinking-toggle.animating .tool-workflow-thinking-text {
-	animation: pi-running-breath 5.4s ease-in-out infinite;
+	animation: pi-running-breath 3.6s ease-in-out infinite;
 }
 
 .tool-workflow-thinking-toggle.done .tool-workflow-thinking-text,
@@ -5448,7 +5460,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 	line-height: 1.45;
 	color: color-mix(in srgb, var(--text) 74%, var(--muted));
 	white-space: pre-wrap;
-	max-height: 220px;
+	max-height: 360px;
 	overflow: auto;
 	border-left: 1px solid color-mix(in srgb, var(--border) 54%, transparent);
 }
@@ -5505,7 +5517,8 @@ body.file-split-resizing #file-split-resize-handle::after {
 }
 
 .tool-workflow-detail-status {
-	font-size: 11px;
+	font-size: 12px;
+	font-weight: 600;
 	text-transform: lowercase;
 	letter-spacing: 0.02em;
 }
@@ -5652,7 +5665,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 }
 
 .system-text {
-	font-size: 11px;
+	font-size: 12px;
 	color: var(--muted);
 	white-space: pre-wrap;
 }
@@ -5826,7 +5839,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 	justify-content: space-between;
 	align-items: center;
 	gap: 8px;
-	padding: 6px 2px 0;
+	padding: 6px 8px 0;
 	margin-top: 0;
 	border-top: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
 }
@@ -5868,6 +5881,11 @@ body.file-split-resizing #file-split-resize-handle::after {
 .composer-icon-btn:hover {
 	background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
 	color: var(--text);
+}
+
+.composer-icon-btn:focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 44%, transparent);
 }
 
 .model-picker-root {
@@ -5994,7 +6012,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 }
 
 .model-picker-provider.unauth {
-	color: color-mix(in srgb, var(--muted) 72%, var(--bg));
+	color: color-mix(in srgb, var(--muted) 90%, var(--text));
 }
 
 .model-picker-provider-auth {
@@ -6061,7 +6079,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 	border-radius: 8px;
 	font-size: 11px;
 	line-height: 1.35;
-	color: var(--muted-2);
+	color: var(--muted);
 	background: color-mix(in srgb, var(--bg-soft) 74%, transparent);
 }
 
@@ -6186,6 +6204,11 @@ body.file-split-resizing #file-split-resize-handle::after {
 	stroke-linejoin: round;
 }
 
+.send-btn:focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 44%, transparent);
+}
+
 .primary-send .send-arrow-icon {
 	width: 15px;
 	height: 15px;
@@ -6237,6 +6260,11 @@ body.file-split-resizing #file-split-resize-handle::after {
 
 .stop-btn:hover:not(:disabled) {
 	background: color-mix(in srgb, var(--text) 98%, var(--bg) 2%);
+}
+
+.stop-btn:focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 44%, transparent);
 }
 
 .stop-btn .stop-square-icon {
@@ -6413,7 +6441,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 
 .composer-slash-section {
 	font-size: 11px;
-	color: var(--muted-2);
+	color: var(--muted);
 	padding: 6px 9px 4px;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
@@ -6499,7 +6527,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 }
 
 .composer-queued-label {
-	font-size: 9px;
+	font-size: 11px;
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
@@ -6563,7 +6591,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 .composer-attachment-thumb.file {
 	display: inline-grid;
 	place-items: center;
-	font-size: 7px;
+	font-size: 10px;
 	font-weight: 700;
 	letter-spacing: 0.02em;
 	color: var(--muted-2);

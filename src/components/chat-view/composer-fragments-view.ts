@@ -100,7 +100,7 @@ export function renderComposerSkillDraftPillView(
 ): TemplateResult | typeof nothing {
 	if (!draft) return nothing;
 	return html`
-		<div class="composer-skill-draft-pill inline">
+		<div class="composer-skill-draft-pill inline" title=${draft.name}>
 			<span class="composer-skill-draft-icon" aria-hidden="true">${skillIcon}</span>
 			<span class="composer-skill-draft-name">${draft.name}</span>
 			<button class="composer-skill-draft-remove" title="Remove skill" @click=${onRemoveDraft}>✕</button>
