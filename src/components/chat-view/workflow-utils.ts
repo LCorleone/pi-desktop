@@ -92,7 +92,11 @@ function pickToolArg(args: Record<string, unknown>, keys: string[]): string {
 }
 
 export function normalizeThinkingText(value: string): string {
-	let text = value.replace(/^\s*thinking\.\.\.\s*/i, "").trim();
+	// Strip ANSI escape sequences (pi emits 256-color SGR codes in thinking
+	// output; these render as colors in a terminal but as literal
+	// "[38;5;66m..." garbage in the web UI since the ESC byte is non-printing).
+	let text = value.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "");
+	text = text.replace(/^\s*thinking\.\.\.\s*/i, "").trim();
 	if (!text) return "";
 	const paragraphs = text
 		.split(/\n{2,}/)
