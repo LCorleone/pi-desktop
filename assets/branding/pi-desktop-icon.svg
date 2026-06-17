@@ -1,33 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
   <defs>
-    <!-- Vibrant blue gradient background — stands out on any taskbar -->
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#3b82f6"/>
       <stop offset="50%" stop-color="#2563eb"/>
       <stop offset="100%" stop-color="#1e40af"/>
     </linearGradient>
-    <!-- Subtle inner shadow for depth -->
-    <radialGradient id="inner" cx="0.5" cy="0.4" r="0.55">
-      <stop offset="70%" stop-color="transparent"/>
-      <stop offset="100%" stop-color="rgba(0,0,0,0.15)"/>
-    </radialGradient>
   </defs>
 
-  <!-- Rounded square background -->
   <rect width="1024" height="1024" rx="200" fill="url(#bg)"/>
 
-  <!-- Inner depth -->
-  <rect width="1024" height="1024" rx="200" fill="url(#inner)"/>
+  <!-- Classic π — two legs under a top bar, unmistakable -->
+  <g fill="#FFFFFF">
+    <!-- Top bar (full width) -->
+    <rect x="160" y="260" width="704" height="104" rx="30"/>
 
-  <!-- White Pi monogram — bold, geometric, centered -->
-  <g fill="#FFFFFF" transform="translate(112, 100)">
-    <!-- Top bar -->
-    <rect x="120" y="120" width="560" height="110" rx="20"/>
-    <!-- Left leg -->
-    <rect x="120" y="120" width="110" height="695" rx="20"/>
-    <!-- Right leg -->
-    <rect x="570" y="120" width="110" height="695" rx="20"/>
-    <!-- Gap in left leg -->
-    <rect x="120" y="420" width="260" height="110" rx="20"/>
+    <!-- Left leg (starts below top bar) -->
+    <rect x="160" y="364" width="104" height="420" rx="30"/>
+
+    <!-- Right leg (starts below top bar) -->
+    <rect x="760" y="364" width="104" height="420" rx="30"/>
   </g>
 </svg>
