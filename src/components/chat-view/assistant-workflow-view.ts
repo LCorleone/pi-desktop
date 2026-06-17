@@ -189,11 +189,12 @@ export function renderAssistantWorkflowView({
 									if (entry.kind === "thinking") {
 										const thinkingExpanded = isWorkflowThinkingExpanded(entry.id);
 										const thinkingAnimating = running === 0 && entry.animating;
+										const thinkingLabel = thinkingAnimating ? "Thinking…" : "Thought";
 										return html`
 											<div class="tool-workflow-thinking">
 												<button class="tool-workflow-thinking-toggle ${thinkingAnimating ? "animating" : "done"}" @click=${() => toggleWorkflowThinkingExpanded(entry.id)}>
 													${thinkingAnimating ? html`<span class="tool-workflow-inline-pi" aria-hidden="true">${piGlyphIcon()}</span>` : nothing}
-													<span class="tool-workflow-thinking-text">Thinking…</span>
+													<span class="tool-workflow-thinking-text">${thinkingLabel}</span>
 												</button>
 												${thinkingExpanded ? html`<div class="tool-workflow-thinking-content">${entry.text}</div>` : nothing}
 											</div>
