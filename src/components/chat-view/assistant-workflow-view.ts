@@ -16,6 +16,86 @@ function trimAgentOutput(output: string, running: boolean): string {
 	return `...\n${lines.slice(-limit).join("\n")}`;
 }
 
+function formatTokenCount(n: number): string {
+	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M token`;
+	if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k token`;
+	return `${n} token`;
+}
+
+function formatDuration(ms: number): string {
+	if (ms < 1000) return `${ms}ms`;
+	const s = ms / 1000;
+	if (s < 60) return `${s.toFixed(1)}s`;
+	const m = Math.floor(s / 60);
+	const rem = Math.round(s % 60);
+	return `${m}m${rem}s`;
+}
+
+interface SubagentNotification {
+	description: string | null;
+	status: string | null;
+	summary: string | null;
+	result: string | null;
+	totalTokens: number | null;
+	toolUses: number | null;
+	durationMs: number | null;
+}
+
+/**
+ * Parse a pi-subagents <task-notification> XML block from agent tool output.
+ * Returns null if no task-notification block is present.
+ * Tolerant: handles missing fields, XML-escaped entities, and surrounding text.
+ */
+function parseSubagentNotification(raw: string): SubagentNotification | null {
+	const match = raw.match(/<task-notification>([\s\S]*?)<\/task-notification>/);
+	if (!match) return null;
+	const block = match[1];
+	const pickTag = (tag: string): string | null => {
+		const m = block.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+		if (!m) return null;
+		return unescapeXml(m[1].trim());
+	};
+	const num = (tag: string): number | null => {
+		const v = pickTag(tag);
+		if (v === null) return null;
+		const n = Number(v);
+		return Number.isFinite(n) ? n : null;
+	};
+	let description: string | null = null;
+	const summary = pickTag("summary");
+	if (summary) {
+		// summary looks like: Agent "description" completed
+		const dm = summary.match(/Agent\s+"([^"]*)"\s+(.*)$/);
+		if (dm) {
+			description = dm[1];
+		}
+	}
+	return {
+		description,
+		status: pickTag("status"),
+		summary,
+		result: pickTag("result"),
+		totalTokens: num("total_tokens"),
+		toolUses: num("tool_uses"),
+		durationMs: num("duration_ms"),
+	};
+}
+
+function unescapeXml(s: string): string {
+	return s
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&quot;/g, '"')
+		.replace(/&apos;/g, "'")
+		.replace(/&amp;/g, "&");
+}
+
+/** Strip ANSI escape sequences from text (for cleaning streaming output). */
+function stripAnsi(s: string): string {
+	// eslint-disable-next-line no-control-regex
+	return s.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "").replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, "");
+}
+
 const toolCategorySvg = (category: ToolCategory): TemplateResult => {
 	switch (category) {
 		case "terminal":
@@ -245,7 +325,31 @@ export function renderAssistantWorkflowView({
 											${groupExpanded
 												? html`
 													<div class="tool-workflow-details">
-														<pre class="tool-workflow-output">${output || "No output reported."}${groupRunning ? html`<span class="streaming-inline"></span>` : nothing}</pre>
+														${group.category === "agent"
+															? (() => {
+																	const notif = parseSubagentNotification(rawOutput);
+																	if (notif) {
+																		const stats: string[] = [];
+																		if (notif.toolUses !== null) stats.push(`${notif.toolUses} tool use${notif.toolUses === 1 ? "" : "s"}`);
+																		if (notif.totalTokens !== null) stats.push(formatTokenCount(notif.totalTokens));
+																		if (notif.durationMs !== null) stats.push(formatDuration(notif.durationMs));
+																		const statusOk = notif.status !== "error" && notif.status !== "stopped" && notif.status !== "aborted";
+																		return html`
+																			<div class="ext-agent-card">
+																				<div class="ext-agent-card-header">
+																					<span class="ext-agent-card-status ${statusOk ? "ok" : "err"}">${statusOk ? "✓" : "✗"}</span>
+																					<span class="ext-agent-card-desc">${notif.description ?? group.preview}</span>
+																					${notif.status ? html`<span class="ext-agent-card-state">${notif.status}</span>` : nothing}
+																				</div>
+																				${stats.length ? html`<div class="ext-agent-card-stats">${stats.map((s) => html`<span>${s}</span>`)}</div>` : nothing}
+																				${notif.result ? html`<pre class="ext-agent-card-result">${notif.result}</pre>` : nothing}
+																			</div>
+																		`;
+																	}
+																	// No task-notification XML — fall back to cleaned text
+																	return html`<pre class="tool-workflow-output">${groupRunning ? "working…" : (output || "No output reported.")}${groupRunning ? html`<span class="streaming-inline"></span>` : nothing}</pre>`;
+															})()
+															: html`<pre class="tool-workflow-output">${output || "No output reported."}${groupRunning ? html`<span class="streaming-inline"></span>` : nothing}</pre>`}
 														<div class="tool-workflow-detail-meta"><span class="tool-workflow-detail-status ${groupRunning ? "running" : groupFailed ? "error" : "done"}"><span class="tool-status-dot"></span>${statusLabel}</span></div>
 													</div>
 												`

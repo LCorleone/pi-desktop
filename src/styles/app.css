@@ -9240,3 +9240,82 @@ button:active:not(:disabled),
 	display: flex;
 	flex-direction: column;
 }
+
+.ext-agent-card {
+	margin-top: 6px;
+	padding: 8px 10px;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--bg-soft) 40%, transparent);
+	border: 1px solid var(--border);
+}
+
+.ext-agent-card-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 4px;
+}
+
+.ext-agent-card-status {
+	font-size: 13px;
+	font-weight: 600;
+	flex-shrink: 0;
+}
+.ext-agent-card-status.ok {
+	color: color-mix(in srgb, var(--success) 82%, var(--text));
+}
+.ext-agent-card-status.err {
+	color: var(--danger);
+}
+
+.ext-agent-card-desc {
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--text);
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ext-agent-card-state {
+	font-size: 11px;
+	color: var(--muted);
+	text-transform: lowercase;
+	flex-shrink: 0;
+}
+
+.ext-agent-card-stats {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 6px;
+	font-size: 11px;
+	color: var(--muted);
+}
+
+.ext-agent-card-stats > span::after {
+	content: "·";
+	margin-left: 6px;
+	color: color-mix(in srgb, var(--muted) 50%, transparent);
+}
+.ext-agent-card-stats > span:last-child::after {
+	content: "";
+	margin-left: 0;
+}
+
+.ext-agent-card-result {
+	margin: 0;
+	padding: 8px 10px;
+	background: var(--bg);
+	border-radius: 4px;
+	border: 1px solid var(--border);
+	font-size: 12px;
+	line-height: 1.5;
+	color: color-mix(in srgb, var(--text) 88%, var(--muted));
+	white-space: pre-wrap;
+	max-height: 200px;
+	overflow: auto;
+	font-family: inherit;
+}
