@@ -7,6 +7,8 @@ This folder stores the release notes for each published release of the
 
 | File | Release | Notes |
 |------|---------|-------|
+| [`v1.5.0.md`](./v1.5.0.md) | Subagent Display & Ext UI Fix | Structured subagent card, robot icon, fixed invisible permission-gate dialogs |
+| [`v1.4.0.md`](./v1.4.0.md) | Thinking Render Fix | ANSI stripping, workflow thinking label, macOS PATH fix |
 | [`v1.3.0.md`](./v1.3.0.md) | UI Polish & Thinking | Shimmer animation, tool icons, 24 CSS fixes, grey icon, terminal fixes |
 | [`v1.2.0.md`](./v1.2.0.md) | PTY Terminal & Auto-Naming | Native PTY backend, pi --print titles, combined Win+Mac CI |
 | [`v1.1.0.md`](./v1.1.0.md) | Auto-naming & Performance | pi --print title generation, streaming rAF coalesce, Windows polish |
