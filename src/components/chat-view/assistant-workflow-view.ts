@@ -2,6 +2,20 @@ import { html, nothing, type TemplateResult } from "lit";
 import type { AssistantWorkflow, ToolCategory, WorkflowToolCall, WorkflowToolCallGroup } from "./workflow-utils.js";
 import { getToolCategory, getToolLabel } from "./workflow-utils.js";
 
+/**
+ * Trim agent (subagent) streamed output to a rolling window so the live
+ * progress view stays compact instead of dumping every status ping.
+ * Subagents emit lines like "0 tool uses", "1 tool uses", ... as they work;
+ * showing only the tail keeps the panel readable.
+ */
+function trimAgentOutput(output: string, running: boolean): string {
+	const lines = output.split("\n").filter((l) => l.trim().length > 0);
+	if (lines.length === 0) return output.trim();
+	const limit = running ? 4 : 15;
+	if (lines.length <= limit) return lines.join("\n");
+	return `...\n${lines.slice(-limit).join("\n")}`;
+}
+
 const toolCategorySvg = (category: ToolCategory): TemplateResult => {
 	switch (category) {
 		case "terminal":
@@ -207,11 +221,12 @@ export function renderAssistantWorkflowView({
 									const groupRunning = group.calls.some((toolCall) => toolCall.isRunning);
 									const groupFailed = group.calls.some((toolCall) => toolCall.isError);
 									const groupExpanded = isToolGroupExpanded(workflow.id, group.id);
-									const output =
+									const rawOutput =
 										[...group.calls]
 											.reverse()
 											.map((call) => (call.streamingOutput ?? call.result ?? "").trim())
 											.find((value) => value.length > 0) ?? "";
+									const output = group.category === "agent" ? trimAgentOutput(rawOutput, groupRunning) : rawOutput;
 									const statusLabel = groupRunning ? "running" : groupFailed ? "failed" : "success";
 									return html`
 										<div class="tool-workflow-item">
