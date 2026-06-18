@@ -22,15 +22,6 @@ function formatTokenCount(n: number): string {
 	return `${n} token`;
 }
 
-function formatDuration(ms: number): string {
-	if (ms < 1000) return `${ms}ms`;
-	const s = ms / 1000;
-	if (s < 60) return `${s.toFixed(1)}s`;
-	const m = Math.floor(s / 60);
-	const rem = Math.round(s % 60);
-	return `${m}m${rem}s`;
-}
-
 interface SubagentNotification {
 	description: string | null;
 	status: string | null;
@@ -88,12 +79,6 @@ function unescapeXml(s: string): string {
 		.replace(/&quot;/g, '"')
 		.replace(/&apos;/g, "'")
 		.replace(/&amp;/g, "&");
-}
-
-/** Strip ANSI escape sequences from text (for cleaning streaming output). */
-function stripAnsi(s: string): string {
-	// eslint-disable-next-line no-control-regex
-	return s.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "").replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, "");
 }
 
 const toolCategorySvg = (category: ToolCategory): TemplateResult => {
