@@ -512,7 +512,7 @@ export class ExtensionUiHandler {
 		// Overlay for dialogs
 		this.overlayContainer = document.createElement("div");
 		this.overlayContainer.id = "extension-ui-overlay";
-		this.overlayContainer.className = "fixed inset-0 z-50 flex items-center justify-center bg-black/50 hidden";
+		this.overlayContainer.className = "ext-ui-overlay hidden";
 		document.body.appendChild(this.overlayContainer);
 
 		// Status bar container (above input)
@@ -584,13 +584,13 @@ export class ExtensionUiHandler {
 			let selectedIndex = -1;
 
 			const template = html`
-				<div class="bg-background rounded-lg shadow-xl border border-border w-full max-w-md p-4">
-					<h3 class="text-sm font-medium mb-3">${request.title || "Select"}</h3>
-					<div class="space-y-1 max-h-60 overflow-y-auto">
+				<div class="ext-ui-dialog">
+					<h3 class="ext-ui-title">${request.title || "Select"}</h3>
+					<div class="ext-ui-options">
 						${options.map(
 							(opt, i) => html`
 								<button
-									class="w-full text-left px-3 py-2 rounded text-sm hover:bg-secondary transition-colors"
+									class="ext-ui-option"
 									@click=${() => {
 										selectedIndex = i;
 										this.closeOverlay();
@@ -604,7 +604,7 @@ export class ExtensionUiHandler {
 						)}
 					</div>
 					<button
-						class="mt-3 w-full px-3 py-2 rounded text-sm border border-border hover:bg-secondary transition-colors"
+						class="ext-ui-btn ext-ui-btn-block"
 						@click=${() => {
 							this.closeOverlay();
 							this.sendResponse(request.id, { cancelled: true });
@@ -636,12 +636,12 @@ export class ExtensionUiHandler {
 
 		return new Promise((resolve) => {
 			const template = html`
-				<div class="bg-background rounded-lg shadow-xl border border-border w-full max-w-sm p-4">
-					<h3 class="text-sm font-medium mb-2">${request.title || "Confirm"}</h3>
-					<p class="text-sm text-muted-foreground mb-4">${request.message || "Are you sure?"}</p>
-					<div class="flex gap-2 justify-end">
+				<div class="ext-ui-dialog">
+					<h3 class="ext-ui-title">${request.title || "Confirm"}</h3>
+					<p class="ext-ui-message">${request.message || "Are you sure?"}</p>
+					<div class="ext-ui-actions">
 						<button
-							class="px-3 py-1.5 rounded text-sm border border-border hover:bg-secondary transition-colors"
+							class="ext-ui-btn"
 							@click=${() => {
 								this.closeOverlay();
 								this.sendResponse(request.id, { confirmed: false });
@@ -651,7 +651,7 @@ export class ExtensionUiHandler {
 							Cancel
 						</button>
 						<button
-							class="px-3 py-1.5 rounded text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+							class="ext-ui-btn ext-ui-btn-primary"
 							@click=${() => {
 								this.closeOverlay();
 								this.sendResponse(request.id, { confirmed: true });
@@ -684,11 +684,11 @@ export class ExtensionUiHandler {
 			let inputValue = "";
 
 			const template = html`
-				<div class="bg-background rounded-lg shadow-xl border border-border w-full max-w-md p-4">
-					<h3 class="text-sm font-medium mb-3">${request.title || "Enter value"}</h3>
+				<div class="ext-ui-dialog">
+					<h3 class="ext-ui-title">${request.title || "Enter value"}</h3>
 					<input
 						type="text"
-						class="w-full px-3 py-2 rounded border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+						class="ext-ui-input"
 						placeholder="${request.placeholder || ""}"
 						@input=${(e: Event) => {
 							inputValue = (e.target as HTMLInputElement).value;
@@ -701,9 +701,9 @@ export class ExtensionUiHandler {
 							}
 						}}
 					/>
-					<div class="flex gap-2 justify-end mt-3">
+					<div class="ext-ui-actions">
 						<button
-							class="px-3 py-1.5 rounded text-sm border border-border hover:bg-secondary transition-colors"
+							class="ext-ui-btn"
 							@click=${() => {
 								this.closeOverlay();
 								this.sendResponse(request.id, { cancelled: true });
@@ -713,7 +713,7 @@ export class ExtensionUiHandler {
 							Cancel
 						</button>
 						<button
-							class="px-3 py-1.5 rounded text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+							class="ext-ui-btn ext-ui-btn-primary"
 							@click=${() => {
 								this.closeOverlay();
 								this.sendResponse(request.id, { value: inputValue });
@@ -743,17 +743,17 @@ export class ExtensionUiHandler {
 			let editorValue = request.prefill || "";
 
 			const template = html`
-				<div class="bg-background rounded-lg shadow-xl border border-border w-full max-w-2xl h-96 p-4 flex flex-col">
-					<h3 class="text-sm font-medium mb-3">${request.title || "Edit"}</h3>
+				<div class="ext-ui-dialog ext-ui-dialog-wide">
+					<h3 class="ext-ui-title">${request.title || "Edit"}</h3>
 					<textarea
-						class="flex-1 w-full px-3 py-2 rounded border border-border bg-background text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+						class="ext-ui-textarea"
 						@input=${(e: Event) => {
 							editorValue = (e.target as HTMLTextAreaElement).value;
 						}}
 					>${request.prefill || ""}</textarea>
-					<div class="flex gap-2 justify-end mt-3">
+					<div class="ext-ui-actions">
 						<button
-							class="px-3 py-1.5 rounded text-sm border border-border hover:bg-secondary transition-colors"
+							class="ext-ui-btn"
 							@click=${() => {
 								this.closeOverlay();
 								this.sendResponse(request.id, { cancelled: true });
@@ -763,7 +763,7 @@ export class ExtensionUiHandler {
 							Cancel
 						</button>
 						<button
-							class="px-3 py-1.5 rounded text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+							class="ext-ui-btn ext-ui-btn-primary"
 							@click=${() => {
 								this.closeOverlay();
 								this.sendResponse(request.id, { value: editorValue });
@@ -895,7 +895,7 @@ export class ExtensionUiHandler {
 			}
 			this.statusContainer.classList.remove("hidden");
 			render(
-				html`<div class="text-xs text-muted-foreground px-3 py-1">${text}</div>`,
+				html`<div style="font-size:12px; color:var(--muted); padding:4px 12px;">${text}</div>`,
 				this.statusContainer,
 			);
 		}
@@ -916,7 +916,7 @@ export class ExtensionUiHandler {
 			container.classList.remove("hidden");
 			render(
 				html`
-					<div class="text-xs text-muted-foreground px-3 py-2 bg-secondary/50 border-t border-b border-border">
+					<div style="font-size:12px; color:var(--muted); padding:6px 12px; background:color-mix(in srgb, var(--bg-soft) 50%, transparent); border-top:1px solid var(--border); border-bottom:1px solid var(--border);">
 						${lines.map((line) => html`<div>${line}</div>`)}
 					</div>
 				`,

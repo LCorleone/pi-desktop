@@ -9093,3 +9093,147 @@ button:active:not(:disabled),
 .sidebar-window-row .sidebar-window-controls.win-controls {
 	margin-left: auto;
 }
+
+/* Extension UI dialogs (confirm / select / input) */
+.ext-ui-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 50;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: color-mix(in srgb, var(--bg) 50%, transparent);
+}
+
+.ext-ui-dialog {
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+	padding: 16px;
+	width: 100%;
+	max-width: 420px;
+	color: var(--text);
+}
+
+.ext-ui-title {
+	font-size: 13px;
+	font-weight: 600;
+	margin-bottom: 8px;
+	color: var(--text);
+}
+
+.ext-ui-message {
+	font-size: 13px;
+	color: var(--muted);
+	margin-bottom: 16px;
+	line-height: 1.5;
+}
+
+.ext-ui-options {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	max-height: 240px;
+	overflow-y: auto;
+	margin-bottom: 12px;
+}
+
+.ext-ui-option {
+	width: 100%;
+	text-align: left;
+	padding: 8px 12px;
+	border-radius: 6px;
+	font-size: 13px;
+	color: var(--text);
+	background: transparent;
+	border: none;
+	cursor: pointer;
+	transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.ext-ui-option:hover {
+	background: color-mix(in srgb, var(--bg-soft) 60%, transparent);
+}
+
+.ext-ui-input {
+	width: 100%;
+	padding: 8px 12px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--bg);
+	color: var(--text);
+	font-size: 13px;
+	font-family: inherit;
+	outline: none;
+	margin-bottom: 12px;
+}
+
+.ext-ui-input:focus {
+	border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.ext-ui-actions {
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
+}
+
+.ext-ui-btn {
+	padding: 7px 14px;
+	border-radius: 6px;
+	font-size: 13px;
+	font-family: inherit;
+	cursor: pointer;
+	border: 1px solid var(--border);
+	background: transparent;
+	color: var(--text);
+	transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.ext-ui-btn:hover {
+	background: color-mix(in srgb, var(--bg-soft) 60%, transparent);
+}
+
+.ext-ui-btn-primary {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: var(--bg);
+	font-weight: 500;
+}
+
+.ext-ui-btn-primary:hover {
+	background: color-mix(in srgb, var(--accent) 88%, var(--text));
+}
+
+.ext-ui-btn-block {
+	width: 100%;
+	margin-top: 12px;
+}
+
+.ext-ui-textarea {
+	flex: 1;
+	width: 100%;
+	padding: 10px 12px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: var(--bg);
+	color: var(--text);
+	font-size: 13px;
+	font-family: var(--font-mono, ui-monospace, monospace);
+	resize: none;
+	outline: none;
+}
+
+.ext-ui-textarea:focus {
+	border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.ext-ui-dialog-wide {
+	max-width: 640px;
+	height: 384px;
+	display: flex;
+	flex-direction: column;
+}
