@@ -1,4 +1,4 @@
-export type ToolCategory = "terminal" | "file-read" | "file-write" | "edit" | "search" | "default";
+export type ToolCategory = "terminal" | "file-read" | "file-write" | "edit" | "search" | "agent" | "default";
 
 export function getToolCategory(name: string): ToolCategory {
 	const n = name.trim().toLowerCase();
@@ -7,6 +7,7 @@ export function getToolCategory(name: string): ToolCategory {
 	if (n === "write" || n.includes("writefile") || n.includes("create")) return "file-write";
 	if (n === "edit" || n.includes("modify") || n.includes("replace") || n.includes("patch")) return "edit";
 	if (n.includes("search") || n.includes("grep") || n.includes("find") || n.includes("explore") || n.includes("list") || n.includes("ls")) return "search";
+	if (n === "subagent" || n === "task" || n === "agent" || n === "delegate") return "agent";
 	return "default";
 }
 
@@ -139,6 +140,13 @@ export function summarizeToolCall(
 	const path = pickToolArg(toolCall.args, ["path", "filePath", "targetPath", "from", "to"]);
 	const query = pickToolArg(toolCall.args, ["query", "pattern", "glob", "name"]);
 	const filename = path ? extractFilename(path) : null;
+	const subagentType = pickToolArg(toolCall.args, ["subagent_type", "subagentType", "type", "agent"]);
+	const subagentPrompt = pickToolArg(toolCall.args, ["prompt", "description", "task", "message"]);
+	if (name === "subagent" || name === "task" || name === "agent" || name === "delegate") {
+		const typeLabel = subagentType ? `[${subagentType}] ` : "";
+		const promptText = subagentPrompt ? truncateText(subagentPrompt, 60) : "subagent task";
+		return `${typeLabel}${promptText}`;
+	}
 	if (name === "bash" && command) return truncateText(command, 84);
 	if ((name === "read" || name === "readfile") && filename) return filename;
 	if ((name === "write" || name === "writefile") && filename) return filename;
@@ -156,6 +164,7 @@ export function getToolLabel(category: ToolCategory, name: string): string {
 		case "file-write": return "write";
 		case "edit": return "edit";
 		case "search": return "search";
+		case "agent": return "agent";
 		default: return name;
 	}
 }

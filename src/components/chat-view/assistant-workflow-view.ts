@@ -14,6 +14,8 @@ const toolCategorySvg = (category: ToolCategory): TemplateResult => {
 			return html`<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 10.5V12.5H4L10.5 6L8.5 4L2 10.5Z" fill="currentColor"/><path d="M9.5 5L11 3.5L12.5 5L11 6.5L9.5 5Z" fill="currentColor"/></svg>`;
 		case "search":
 			return html`<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4" stroke="currentColor" stroke-width="1.2"/><path d="M9 9L12.5 12.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`;
+		case "agent":
+			return html`<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2.5" y="3.5" width="9" height="7" rx="1.5" stroke="currentColor" stroke-width="1.2"/><circle cx="5" cy="7" r="0.9" fill="currentColor"/><circle cx="9" cy="7" r="0.9" fill="currentColor"/><path d="M7 3.5V2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="7" cy="1.5" r="0.6" fill="currentColor"/><path d="M4.5 10.5V11.5M9.5 10.5V11.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`;
 		default:
 			return html`<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="4" stroke="currentColor" stroke-width="1.2"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/><path d="M7 3V4.5M7 9.5V11M3 7H4.5M9.5 7H11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`;
 	}
