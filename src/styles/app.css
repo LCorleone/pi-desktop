@@ -9104,6 +9104,9 @@ button:active:not(:disabled),
 	justify-content: center;
 	background: color-mix(in srgb, var(--bg) 50%, transparent);
 }
+.ext-ui-overlay.hidden {
+	display: none;
+}
 
 .ext-ui-dialog {
 	background: var(--bg-elev);

@@ -144,7 +144,7 @@ export function summarizeToolCall(
 	const subagentPrompt = pickToolArg(toolCall.args, ["prompt", "description", "task", "message"]);
 	if (name === "subagent" || name === "task" || name === "agent" || name === "delegate") {
 		const typeLabel = subagentType ? `[${subagentType}] ` : "";
-		const promptText = subagentPrompt ? truncateText(subagentPrompt, 60) : "subagent task";
+		const promptText = subagentPrompt ? truncateText(subagentPrompt.replace(/\s+/g, " ").trim(), 60) : "subagent task";
 		return `${typeLabel}${promptText}`;
 	}
 	if (name === "bash" && command) return truncateText(command, 84);
