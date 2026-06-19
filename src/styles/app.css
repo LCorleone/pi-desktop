@@ -1442,9 +1442,10 @@ body.file-split-resizing #file-split-resize-handle::after {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 12px;
+	gap: 8px;
 	padding: 13px 16px 9px;
 	background: color-mix(in srgb, var(--bg) 92%, transparent);
+	flex-wrap: wrap;
 }
 
 .file-viewer-header.minimal {
@@ -1454,7 +1455,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 
 .file-viewer-meta {
 	min-width: 0;
-	flex: 1;
+	flex: 1 1 100%;
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
