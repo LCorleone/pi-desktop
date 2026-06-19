@@ -81,6 +81,140 @@ function unescapeXml(s: string): string {
 		.replace(/&amp;/g, "&");
 }
 
+/** A single line in a unified diff. */
+export interface DiffLine {
+	kind: "added" | "removed" | "context";
+	text: string;
+}
+
+interface ModifiedFile {
+	path: string;
+	name: string;
+	operation: "created" | "modified";
+	diffLines?: DiffLine[];
+}
+
+/** Extract the file path from a write/edit/create tool call's args. */
+function extractToolFilePath(args: Record<string, unknown>): string | null {
+	const keys = ["path", "filePath", "file_path", "targetPath", "target_path", "filename", "fileName"];
+	for (const key of keys) {
+		const v = args[key];
+		if (typeof v === "string" && v.trim().length > 0) return v.trim();
+	}
+	return null;
+}
+
+function isWriteTool(name: string): boolean {
+	const n = name.trim().toLowerCase();
+	return (
+		n === "write" ||
+		n === "writefile" ||
+		n === "write_file" ||
+		n === "edit" ||
+		n === "editfile" ||
+		n === "edit_file" ||
+		n === "create" ||
+		n === "createfile" ||
+		n === "create_file" ||
+		n === "notebookedit" ||
+		n === "notebook_edit"
+	);
+}
+
+function isCreateTool(name: string): boolean {
+	const n = name.trim().toLowerCase();
+	return n === "create" || n === "createfile" || n === "create_file";
+}
+
+/** Scan a workflow's tool calls for write/edit/create ops and return deduped modified files. */
+function extractModifiedFiles(toolCalls: WorkflowToolCall[]): ModifiedFile[] {
+	const out: ModifiedFile[] = [];
+	for (const tc of toolCalls) {
+		if (!isWriteTool(tc.name)) continue;
+		if (tc.isError) continue;
+		if (tc.isRunning) continue;
+		const path = extractToolFilePath(tc.args);
+		if (!path) continue;
+		const name = basename(path);
+		const operation: "created" | "modified" = isCreateTool(tc.name) ? "created" : "modified";
+		// For edit tools, compute a diff from oldText/newText args.
+		let diffLines: DiffLine[] | undefined;
+		const normalizedName = tc.name.trim().toLowerCase();
+		if (normalizedName === "edit" || normalizedName === "editfile" || normalizedName === "edit_file") {
+			const pairs = extractEditPairs(tc.args);
+			if (pairs.length > 0) {
+				diffLines = pairs.flatMap((p) => computeLineDiff(p.oldText, p.newText));
+			}
+		}
+		out.push({ path, name, operation, diffLines });
+	}
+	// Dedupe by path; last op wins (create then edit → modified)
+	const map = new Map<string, ModifiedFile>();
+	for (const f of out) map.set(f.path, f);
+	return [...map.values()];
+}
+
+function basename(path: string): string {
+	const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
+	return parts[parts.length - 1] || path;
+}
+
+/**
+ * Compute a compact unified line diff between old and new text.
+ * Dependency-free: a simple LCS-free approach that emits one "removed" line
+ * per old line that isn't a prefix of new, and one "added" line per new line.
+ * Good enough for short edit hunks (which is what edit tools produce).
+ */
+
+/** Count added/removed lines for a compact "diff +n -m" stat label. */
+function computeDiffStats(diffLines: DiffLine[]): { added: number; removed: number } {
+	let added = 0;
+	let removed = 0;
+	for (const line of diffLines) {
+		if (line.kind === "added") added += 1;
+		else if (line.kind === "removed") removed += 1;
+	}
+	return { added, removed };
+}
+function computeLineDiff(oldText: string, newText: string): DiffLine[] {
+	const oldLines = oldText.replace(/\r\n/g, "\n").split("\n");
+	const newLines = newText.replace(/\r\n/g, "\n").split("\n");
+	const out: DiffLine[] = [];
+	const max = Math.max(oldLines.length, newLines.length);
+	for (let i = 0; i < max; i += 1) {
+		const o = oldLines[i];
+		const n = newLines[i];
+		if (o === n) {
+			if (o !== undefined) out.push({ kind: "context", text: o });
+		} else {
+			if (o !== undefined) out.push({ kind: "removed", text: o });
+			if (n !== undefined) out.push({ kind: "added", text: n });
+		}
+	}
+	return out;
+}
+
+/** Extract oldText/newText edit pairs from an edit tool call's args. */
+function extractEditPairs(args: Record<string, unknown>): { oldText: string; newText: string }[] {
+	const pairs: { oldText: string; newText: string }[] = [];
+	// Single-edit form: { oldText, newText }
+	if (typeof args.oldText === "string" && typeof args.newText === "string") {
+		pairs.push({ oldText: args.oldText, newText: args.newText });
+	}
+	// Multi-edit form: { edits: [{ oldText, newText }, ...] }
+	if (Array.isArray(args.edits)) {
+		for (const e of args.edits) {
+			if (e && typeof e === "object") {
+				const eo = e as Record<string, unknown>;
+				if (typeof eo.oldText === "string" && typeof eo.newText === "string") {
+					pairs.push({ oldText: eo.oldText, newText: eo.newText });
+				}
+			}
+		}
+	}
+	return pairs;
+}
+
 const toolCategorySvg = (category: ToolCategory): TemplateResult => {
 	switch (category) {
 		case "terminal":
@@ -124,6 +258,9 @@ interface RenderAssistantWorkflowViewParams {
 	toggleToolGroupExpanded: (workflowId: string, groupId: string) => void;
 	toggleToolWorkflowExpanded: (workflowId: string, autoExpanded: boolean, currentlyExpanded: boolean) => void;
 	clearCollapsedWorkflowState: (workflowId: string) => void;
+	onOpenFile?: (filePath: string) => void;
+	onDiffToggle?: () => void;
+	onOpenDiff?: (filePath: string, diffLines: DiffLine[], fileName: string) => void;
 	piGlyphIcon: () => TemplateResult;
 }
 
@@ -139,6 +276,12 @@ type WorkflowDetailEntry =
 		group: WorkflowToolCallGroup;
 	};
 
+/**
+ * Tracks which modified-file diff cards are expanded. Module scope so the
+ * expansion state persists across re-renders.
+ */
+const modifiedFileDiffExpanded = new Set<string>();
+
 export function renderAssistantWorkflowView({
 	workflow,
 	resolveWorkflowExpansionState,
@@ -152,6 +295,9 @@ export function renderAssistantWorkflowView({
 	toggleToolGroupExpanded,
 	toggleToolWorkflowExpanded,
 	clearCollapsedWorkflowState,
+	onOpenFile,
+	onDiffToggle,
+	onOpenDiff,
 	piGlyphIcon,
 }: RenderAssistantWorkflowViewParams): TemplateResult {
 	const { total, running, autoExpanded, expanded } = resolveWorkflowExpansionState(
@@ -160,6 +306,59 @@ export function renderAssistantWorkflowView({
 		workflow.isTerminal,
 	);
 	const failed = workflow.toolCalls.filter((toolCall) => toolCall.isError).length;
+	const modifiedFiles = extractModifiedFiles(workflow.toolCalls);
+	const renderModifiedFiles = (): TemplateResult | typeof nothing => {
+		if (modifiedFiles.length === 0) return nothing;
+		return html`
+			<div class="workflow-modified-files">
+				${modifiedFiles.map((f) => {
+					const hasDiff = Boolean(f.diffLines && f.diffLines.length > 0);
+					const expanded = modifiedFileDiffExpanded.has(f.path);
+					const stats = hasDiff ? computeDiffStats(f.diffLines!) : null;
+					return html`
+						<div class="workflow-modified-file-row">
+							<div class="workflow-modified-file-actions">
+								<button
+									class="workflow-modified-file ${onOpenFile ? "" : "no-action"}"
+									title=${f.path}
+									@click=${onOpenFile ? () => onOpenFile(f.path) : undefined}
+								>
+									<span class="workflow-modified-file-icon">${toolCategorySvg(f.operation === "created" ? "file-write" : "edit")}</span>
+									<span class="workflow-modified-file-name">${f.name}</span>
+									<span class="workflow-modified-file-op">${stats ? html`diff <span class="diff-stat-add">+${stats.added}</span> <span class="diff-stat-remove">-${stats.removed}</span>` : f.operation}</span>
+								</button>
+								${hasDiff
+									? html`<button
+										class="workflow-modified-file-diff-toggle"
+										title=${expanded ? "Hide diff" : "Show diff"}
+										aria-label=${expanded ? "Hide diff" : "Show diff"}
+										aria-expanded=${expanded}
+										@click=${() => {
+											if (onOpenDiff) {
+												onOpenDiff(f.path, f.diffLines!, f.name);
+											} else {
+												if (expanded) modifiedFileDiffExpanded.delete(f.path);
+												else modifiedFileDiffExpanded.add(f.path);
+												onDiffToggle?.();
+											}
+										}}
+									>${expanded ? "▾" : "▸"}</button>`
+									: nothing}
+							</div>
+							${hasDiff && expanded && !onOpenDiff
+								? html`<pre class="workflow-modified-file-diff">${(f.diffLines ?? []).map((line) => {
+										const cls =
+											line.kind === "added" ? "diff-add" : line.kind === "removed" ? "diff-remove" : "diff-context";
+										const prefix = line.kind === "added" ? "+" : line.kind === "removed" ? "-" : " ";
+										return html`<span class=${cls}>${prefix} ${line.text}</span>`;
+									})}</pre>`
+								: nothing}
+						</div>
+					`;
+				})}
+			</div>
+		`;
+	};
 	const durationMs =
 		workflow.startedAt > 0
 			? (running > 0 ? Date.now() : Math.max(workflow.endedAt, workflow.startedAt)) - workflow.startedAt
@@ -348,12 +547,14 @@ export function renderAssistantWorkflowView({
 								? html`<div class="assistant-content"><markdown-block .content=${workflow.finalText}></markdown-block></div>`
 								: nothing}
 							${workflow.errorText ? html`<div class="assistant-error-line">${workflow.errorText}</div>` : nothing}
+							${renderModifiedFiles()}
 						`
 						: html`
 							${workflow.finalText
 								? html`<div class="assistant-content workflow-final-collapsed"><markdown-block .content=${workflow.finalText}></markdown-block></div>`
 								: nothing}
 							${workflow.errorText ? html`<div class="assistant-error-line">${workflow.errorText}</div>` : nothing}
+							${renderModifiedFiles()}
 						`}
 				</div>
 			</div>

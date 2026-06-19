@@ -6,6 +6,7 @@ import "@mariozechner/mini-lit/dist/CodeBlock.js";
 import "@mariozechner/mini-lit/dist/MarkdownBlock.js";
 import { invoke } from "@tauri-apps/api/core";
 import { html, nothing, render } from "lit";
+import type { DiffLine } from "./chat-view/assistant-workflow-view.js";
 
 type FileViewMode = "rendered" | "raw";
 
@@ -64,6 +65,8 @@ export class FileViewer {
 	private dirty = false;
 	private error = "";
 	private viewMode: FileViewMode = "raw";
+	private diffLines: DiffLine[] | null = null;
+	private diffName: string | null = null;
 	private openingExternal = false;
 	private autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 	private onDraftFileCreated: ((filePath: string) => void) | null = null;
@@ -90,12 +93,29 @@ export class FileViewer {
 		this.onClose = cb;
 	}
 
-	async openFile(filePath: string): Promise<void> {
-		if (this.filePath === filePath && !this.draftId && !this.loading) return;
+	setDiff(diffLines: DiffLine[] | null, diffName: string | null = null): void {
+		const wasDiffing = this.diffLines !== null;
+		this.diffLines = diffLines;
+		this.diffName = diffName;
+		// When clearing the diff and a file is open, reload the file content
+		// so the user sees the actual file (not a stale diff).
+		if (diffLines === null && wasDiffing && this.filePath) {
+			void this.openFile(this.filePath, { force: true });
+			return;
+		}
+		this.render();
+	}
+
+	async openFile(filePath: string, options: { force?: boolean } = {}): Promise<void> {
+		if (!options.force && this.filePath === filePath && !this.draftId && !this.loading) return;
 		if (this.filePath && this.filePath !== filePath && this.dirty) {
 			await this.persistOpenedFile({ silent: true });
 		}
 		this.clearAutoSaveTimer();
+		if (this.filePath !== filePath) {
+			this.diffLines = null;
+			this.diffName = null;
+		}
 		this.filePath = filePath;
 		this.draftId = null;
 		this.draftName = pathBaseName(filePath);
@@ -131,6 +151,8 @@ export class FileViewer {
 
 	openDraft(draftId: string, suggestedName = DEFAULT_DRAFT_NAME): void {
 		this.clearAutoSaveTimer();
+		this.diffLines = null;
+		this.diffName = null;
 		const firstOpen = this.draftId !== draftId || this.filePath !== null;
 		this.filePath = null;
 		this.loading = false;
@@ -155,6 +177,8 @@ export class FileViewer {
 
 	clear(): void {
 		this.clearAutoSaveTimer();
+		this.diffLines = null;
+		this.diffName = null;
 		this.filePath = null;
 		this.draftId = null;
 		this.draftName = DEFAULT_DRAFT_NAME;
@@ -310,7 +334,14 @@ export class FileViewer {
 		const template = html`
 			<div class="file-viewer-root">
 				<div class="file-viewer-header minimal">
-					${isDraft
+					${this.diffLines
+						? html`
+							<div class="file-viewer-meta">
+								<div class="file-viewer-path">Diff</div>
+								<div class="file-viewer-title">${this.diffName ?? ""}</div>
+							</div>
+						`
+						: isDraft
 						? html`
 							<input
 								class="file-viewer-draft-name"
@@ -369,20 +400,30 @@ export class FileViewer {
 						? html`<div class="file-viewer-empty">Loading file…</div>`
 						: this.error
 							? html`<div class="file-viewer-empty error">${this.error}</div>`
-							: markdown && this.viewMode === "rendered"
+							: this.diffLines
 								? html`
-									<div class="file-viewer-markdown">
-										<markdown-block .content=${this.editorText}></markdown-block>
+									<div class="file-viewer-diff">
+										<pre class="file-viewer-diff-content">${this.diffLines.map((line) => {
+											const cls = line.kind === "added" ? "diff-add" : line.kind === "removed" ? "diff-remove" : "diff-context";
+											const prefix = line.kind === "added" ? "+" : line.kind === "removed" ? "-" : " ";
+											return html`<span class=${cls}>${prefix} ${line.text}</span>`;
+										})}</pre>
 									</div>
 								`
-								: html`
-									<textarea
-										class="file-viewer-editor"
-										.value=${this.editorText}
-										placeholder=${isDraft ? "Write file content…" : ""}
-										@input=${(e: Event) => this.updateEditorText((e.target as HTMLTextAreaElement).value)}
-									></textarea>
-								`}
+								: markdown && this.viewMode === "rendered"
+									? html`
+										<div class="file-viewer-markdown">
+											<markdown-block .content=${this.editorText}></markdown-block>
+										</div>
+									`
+									: html`
+										<textarea
+											class="file-viewer-editor"
+											.value=${this.editorText}
+											placeholder=${isDraft ? "Write file content…" : ""}
+											@input=${(e: Event) => this.updateEditorText((e.target as HTMLTextAreaElement).value)}
+										></textarea>
+									`}
 					${this.filePath && this.saving
 						? html`<div class="file-viewer-status-row"><span class="file-viewer-status-dirty">Saving…</span></div>`
 						: nothing}

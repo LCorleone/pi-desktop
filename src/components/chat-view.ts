@@ -62,7 +62,7 @@ import { renderHistoryViewerView } from "./chat-view/history-viewer-view.js";
 import type { ForkOption, HistoryTreeRow, HistoryViewerRole } from "./chat-view/history-viewer-types.js";
 import { loadWelcomeDashboardInventory } from "./chat-view/welcome-dashboard-data.js";
 import { renderCenteredWelcomeView } from "./chat-view/welcome-dashboard-view.js";
-import { renderAssistantWorkflowView } from "./chat-view/assistant-workflow-view.js";
+import { renderAssistantWorkflowView, type DiffLine } from "./chat-view/assistant-workflow-view.js";
 import { mapBackendMessages as mapBackendMessagesView } from "./chat-view/backend-message-mapper.js";
 import {
 	handleCompactionAndRetryEvent,
@@ -471,6 +471,8 @@ export class ChatView {
 	private onSelectWelcomeProject: ((projectId: string) => void) | null = null;
 	private onPromptSubmitted: (() => void) | null = null;
 	private onRunStateChange: ((running: boolean) => void) | null = null;
+	private onOpenFile: ((filePath: string) => void) | null = null;
+	private onOpenDiff: ((filePath: string, diffLines: DiffLine[], fileName: string) => void) | null = null;
 	private availableModels: ModelOption[] = [];
 	private modelCatalog: ModelOption[] = [];
 	private loadingModels = false;
@@ -697,6 +699,14 @@ export class ChatView {
 
 	setOnRunStateChange(cb: (running: boolean) => void): void {
 		this.onRunStateChange = cb;
+	}
+
+	setOnOpenFile(cb: ((filePath: string) => void) | null): void {
+		this.onOpenFile = cb;
+	}
+
+	setOnOpenDiff(cb: ((filePath: string, diffLines: DiffLine[], fileName: string) => void) | null): void {
+		this.onOpenDiff = cb;
 	}
 
 	private resetSessionUiTransientState(): void {
@@ -4221,6 +4231,13 @@ export class ChatView {
 				this.expandedToolGroupByWorkflowId.delete(workflowId);
 				this.clearWorkflowThinkingExpansion(workflowId);
 			},
+			onOpenFile: (filePath) => {
+				if (this.onOpenFile) this.onOpenFile(filePath);
+			},
+			onOpenDiff: this.onOpenDiff
+				? (filePath: string, diffLines: DiffLine[], fileName: string) => this.onOpenDiff!(filePath, diffLines, fileName)
+				: undefined,
+			onDiffToggle: () => this.render(),
 			piGlyphIcon,
 		});
 	}

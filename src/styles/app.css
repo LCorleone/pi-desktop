@@ -1437,6 +1437,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 }
 
 .file-viewer-header {
+	min-width: 0;
 	min-height: 68px;
 	display: flex;
 	align-items: center;
@@ -5842,6 +5843,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 	padding: 0 56px 24px;
 	background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--bg) 76%, transparent) 36%, var(--bg) 100%);
 	pointer-events: none;
+	z-index: 40;
 }
 
 .composer-inner {
@@ -6006,7 +6008,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 	position: absolute;
 	left: 0;
 	bottom: calc(100% + 8px);
-	z-index: 35;
+	z-index: 50;
 	display: grid;
 	grid-template-columns: minmax(132px, 176px) minmax(188px, 270px);
 	min-width: 340px;
@@ -9318,4 +9320,175 @@ button:active:not(:disabled),
 	max-height: 200px;
 	overflow: auto;
 	font-family: inherit;
+}
+
+.workflow-modified-files {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 10px;
+}
+
+.workflow-modified-file {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	border-radius: 6px;
+	border: 1px solid var(--border);
+	background: color-mix(in srgb, var(--bg-soft) 40%, transparent);
+	color: var(--text);
+	font-size: 12px;
+	font-family: inherit;
+	cursor: pointer;
+	transition: background var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+	max-width: 100%;
+}
+
+.workflow-modified-file:hover {
+	background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
+	border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.workflow-modified-file.no-action {
+	cursor: default;
+}
+
+.workflow-modified-file-icon {
+	display: inline-flex;
+	color: color-mix(in srgb, var(--muted) 76%, var(--text));
+	flex-shrink: 0;
+}
+
+.workflow-modified-file-name {
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 220px;
+}
+
+.workflow-modified-file-op {
+	font-size: 10px;
+	color: var(--muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	flex-shrink: 0;
+	padding-left: 4px;
+	border-left: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+	margin-left: 2px;
+}
+
+.workflow-modified-file-row {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.workflow-modified-file-actions {
+	display: flex;
+	align-items: stretch;
+	gap: 0;
+}
+
+.workflow-modified-file-diff-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	border: 1px solid var(--border);
+	border-left: none;
+	border-radius: 0 6px 6px 0;
+	background: color-mix(in srgb, var(--bg-soft) 40%, transparent);
+	color: var(--muted);
+	font-size: 11px;
+	cursor: pointer;
+	flex-shrink: 0;
+	transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.workflow-modified-file-diff-toggle:hover {
+	background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
+	color: var(--text);
+}
+
+/* The existing .workflow-modified-file should lose its right border-radius when
+   a diff toggle follows it, so they connect. */
+.workflow-modified-file-actions .workflow-modified-file:not(.no-action) {
+	border-radius: 6px 0 0 6px;
+}
+
+.workflow-modified-file-diff {
+	margin: 0;
+	padding: 8px 10px;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 11px;
+	line-height: 1.5;
+	color: color-mix(in srgb, var(--text) 88%, var(--muted));
+	white-space: pre-wrap;
+	max-height: 240px;
+	overflow: auto;
+}
+
+.workflow-modified-file-diff .diff-add {
+	color: color-mix(in srgb, var(--success) 82%, var(--text));
+	background: color-mix(in srgb, var(--success) 8%, transparent);
+	display: block;
+}
+
+.workflow-modified-file-diff .diff-remove {
+	color: var(--danger);
+	background: color-mix(in srgb, var(--danger) 8%, transparent);
+	display: block;
+}
+
+.workflow-modified-file-diff .diff-context {
+	color: color-mix(in srgb, var(--muted) 80%, var(--text));
+	display: block;
+}
+
+.file-viewer-diff {
+	overflow: auto;
+	flex: 1;
+}
+
+.file-viewer-diff-content {
+	margin: 0;
+	padding: 12px;
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 12px;
+	line-height: 1.6;
+	white-space: pre-wrap;
+	background: var(--bg);
+	color: color-mix(in srgb, var(--text) 88%, var(--muted));
+	border: none;
+	min-height: 100%;
+}
+
+.file-viewer-diff-content .diff-add {
+	color: color-mix(in srgb, var(--success) 82%, var(--text));
+	background: color-mix(in srgb, var(--success) 8%, transparent);
+	display: block;
+}
+
+.file-viewer-diff-content .diff-remove {
+	color: var(--danger);
+	background: color-mix(in srgb, var(--danger) 8%, transparent);
+	display: block;
+}
+
+.file-viewer-diff-content .diff-context {
+	color: color-mix(in srgb, var(--muted) 80%, var(--text));
+	display: block;
+}
+
+.workflow-modified-file-op .diff-stat-add {
+	color: color-mix(in srgb, var(--success) 82%, var(--text));
+}
+.workflow-modified-file-op .diff-stat-remove {
+	color: var(--danger);
 }

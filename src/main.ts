@@ -4,6 +4,7 @@
 
 import { html, nothing, render } from "lit";
 import { ChatView } from "./components/chat-view.js";
+import type { DiffLine } from "./components/chat-view/assistant-workflow-view.js";
 import { CommandPalette } from "./components/command-palette.js";
 import { ContentTabs } from "./components/content-tabs.js";
 import { ExtensionUiHandler, normalizeExtensionUiRequest, type NotificationActionTarget } from "./components/extension-ui-handler.js";
@@ -1121,6 +1122,9 @@ function ensureNotificationAttentionListeners(): void {
 	document.addEventListener("visibilitychange", () => {
 		if (document.visibilityState === "visible") {
 			clearVisibleActiveSessionAttention();
+			// Files may have changed while the app was unfocused (external
+			// editor, git, etc.) — refresh the active project's file tree.
+			sidebar?.refreshActiveProjectFiles(true);
 		}
 	});
 }
@@ -3378,6 +3382,40 @@ async function initialize(): Promise<void> {
 				scheduleSidebarSessionsRefresh(0);
 				flushPendingAuthConfigReload();
 				autoNameSessionIfNew();
+				// Refresh the file tree after a run — the agent may have created/
+				// edited/deleted files via tools.
+				sidebar?.refreshActiveProjectFiles(true);
+			}
+		});
+		chatView.setOnOpenFile((filePath) => {
+			const workspace = getActiveWorkspace();
+			const projectPath = workspace?.activeProjectPath;
+			if (!workspace || !projectPath) return;
+			const projectId = workspace.activeProjectId;
+			// Clear any active diff so the file content shows instead.
+			fileViewer?.setDiff(null, null);
+			// Resolve relative paths (tools often emit paths relative to cwd)
+			// against the project root so the file viewer finds them.
+			const isAbsolute = /^([a-zA-Z]:[\\/]|[\\/])/.test(filePath);
+			const resolved = isAbsolute ? filePath : joinFsPath(projectPath, filePath);
+			openOrActivateFileTab(workspace, resolved, projectId, projectPath, { allowCreateTab: false });
+			persistWorkspaces();
+			syncWorkspaceTabsBar();
+			syncContentTabsBar(workspace);
+			void applyWorkspacePane(workspace);
+		});
+		chatView.setOnOpenDiff((filePath, diffLines, fileName) => {
+			fileViewer?.setDiff(diffLines, fileName);
+			const workspace = getActiveWorkspace();
+			const projectPath = workspace?.activeProjectPath;
+			if (workspace && projectPath) {
+				const isAbsolute = /^([a-zA-Z]:[\\/]|[\\/])/.test(filePath);
+				const resolved = isAbsolute ? filePath : joinFsPath(projectPath, filePath);
+				openOrActivateFileTab(workspace, resolved, workspace.activeProjectId, projectPath, { allowCreateTab: false });
+				persistWorkspaces();
+				syncWorkspaceTabsBar();
+				syncContentTabsBar(workspace);
+				void applyWorkspacePane(workspace);
 			}
 		});
 		chatView.render();
@@ -4208,8 +4246,13 @@ function renderApp(): void {
 				}
 			};
 
+			// Dispose the removed runtime synchronously, before enqueueing the
+			// next-tab setup task. If we deferred this into the task body, a
+			// stale task (rapid tab switch / workspace change) would skip
+			// disposal and leak a zombie pi subprocess.
+			disposeRemovedRuntime();
+
 			if (!wasActive) {
-				disposeRemovedRuntime();
 				void applyWorkspacePane(workspace);
 				return;
 			}
@@ -4223,7 +4266,6 @@ function renderApp(): void {
 						await chatView?.refreshFromBackend({ throwOnError: true });
 					}
 					assertProjectTaskCurrent(version);
-					disposeRemovedRuntime();
 					scheduleSidebarSessionsRefresh(0);
 					await applyWorkspacePane(workspace);
 				},
@@ -4732,8 +4774,12 @@ function renderApp(): void {
 			removedTabs.forEach((tab) => removeRuntimeForTab(workspace.id, tab.id));
 		};
 
+		// Dispose removed runtimes synchronously, before enqueueing the
+		// next-session setup task. Deferring into the task body risks
+		// leaking zombie pi subprocesses if the task goes stale.
+		disposeRemovedRuntimes();
+
 		if (!activeWasRemoved) {
-			disposeRemovedRuntimes();
 			void applyWorkspacePane(workspace);
 			return;
 		}
@@ -4749,7 +4795,6 @@ function renderApp(): void {
 					await chatView?.refreshFromBackend({ throwOnError: true });
 				}
 				assertProjectTaskCurrent(version);
-				disposeRemovedRuntimes();
 				scheduleSidebarSessionsRefresh(0);
 				await applyWorkspacePane(workspace);
 			},
