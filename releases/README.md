@@ -21,3 +21,15 @@ This folder stores the release notes for each published release of the
   `v<version>.md` (e.g. `v1.0.0.md`, `v1.1.0.md`).
 - The file content is what gets pasted into the GitHub Release description.
 - Update this README's table when adding a new release note.
+
+## Auto-release
+
+Merging to `main` with a new or changed `releases/v*.md` automatically builds
+the Windows `.exe` + macOS `.dmg`, tags `v<version>`, and publishes a
+**pre-release** whose body is that release note.
+
+- Workflow: [`.github/workflows/release-on-merge.yml`](../.github/workflows/release-on-merge.yml)
+- Trigger: any push to `main` that changes a file matching `releases/v*.md`.
+- Idempotent: if tag `v<version>` already exists, the build is skipped (safe to re-merge).
+- To cut a release: add `releases/vX.Y.Z.md`, update the index table above, merge to `main`.
+- The manual `release.yml` workflow (draft `manual-build-<N>`) remains available on any branch.
