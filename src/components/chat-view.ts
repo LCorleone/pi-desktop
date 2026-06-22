@@ -197,10 +197,16 @@ interface UiMessage {
 	collapsibleExpanded?: boolean;
 }
 
+interface NoticeAction {
+	label: string;
+	onClick: () => void;
+}
+
 interface Notice {
 	id: string;
 	text: string;
 	kind: "info" | "success" | "error";
+	action?: NoticeAction;
 }
 
 interface SessionStatsSummary {
@@ -261,8 +267,9 @@ interface CompactionCycleState {
 	expanded: boolean;
 }
 
-const MODEL_PICKER_AUTH_CACHE_MS = 15_000;
-const MODEL_PICKER_CATALOG_CACHE_MS = 60_000;
+const MODEL_PICKER_AUTH_CACHE_MS = 60_000;
+const MODEL_PICKER_CATALOG_CACHE_MS = 120_000;
+const MODEL_PICKER_MODELS_CACHE_MS = 30_000;
 
 function uid(prefix = "id"): string {
 	return `${prefix}_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
@@ -480,6 +487,7 @@ export class ChatView {
 	private loadingProviderAuth = false;
 	private modelLoadRequestSeq = 0;
 	private modelCatalogLoadedAt = 0;
+	private modelsLoadedAt = 0;
 	private providerAuthLoadedAt = 0;
 	private providerAuthById = new Map<string, Pick<PiAuthProviderStatus, "source" | "kind">>();
 	private providerAuthConfigured = new Set<string>();
@@ -1348,7 +1356,8 @@ export class ChatView {
 	}
 
 	private ensureModelPickerDataLoaded(): void {
-		if (!this.loadingModels && this.availableModels.length === 0) {
+		const modelsStale = Date.now() - this.modelsLoadedAt > MODEL_PICKER_MODELS_CACHE_MS;
+		if (!this.loadingModels && (this.availableModels.length === 0 || modelsStale)) {
 			void this.loadAvailableModels();
 		}
 		if (!this.loadingProviderAuth) {
@@ -1357,7 +1366,8 @@ export class ChatView {
 		if (!this.oauthProviderCatalogLoading) {
 			void this.loadOAuthProviderCatalog();
 		}
-		if (!this.loadingModelCatalog && this.modelCatalog.length === 0) {
+		const catalogStale = Date.now() - this.modelCatalogLoadedAt > MODEL_PICKER_CATALOG_CACHE_MS;
+		if (!this.loadingModelCatalog && (this.modelCatalog.length === 0 || catalogStale)) {
 			void this.loadModelCatalog();
 		}
 	}
@@ -1725,16 +1735,16 @@ export class ChatView {
 			this.scrollToBottom();
 			void this.refreshSessionStats(true);
 			void this.refreshGitSummary(true);
-			if (!this.loadingModels && this.availableModels.length === 0) {
+			if (!this.loadingModels && (this.availableModels.length === 0 || Date.now() - this.modelsLoadedAt > MODEL_PICKER_MODELS_CACHE_MS)) {
 				void this.loadAvailableModels();
 			}
-			if (!this.loadingProviderAuth && this.providerAuthLoadedAt === 0) {
+			if (!this.loadingProviderAuth && (this.providerAuthLoadedAt === 0 || Date.now() - this.providerAuthLoadedAt > MODEL_PICKER_AUTH_CACHE_MS)) {
 				void this.loadProviderAuthStatus();
 			}
-			if (!this.oauthProviderCatalogLoading && this.oauthProviderCatalogLoadedAt === 0) {
+			if (!this.oauthProviderCatalogLoading && (this.oauthProviderCatalogLoadedAt === 0 || Date.now() - this.oauthProviderCatalogLoadedAt > MODEL_PICKER_AUTH_CACHE_MS)) {
 				void this.loadOAuthProviderCatalog();
 			}
-			if (!this.loadingModelCatalog && this.modelCatalog.length === 0) {
+			if (!this.loadingModelCatalog && (this.modelCatalog.length === 0 || Date.now() - this.modelCatalogLoadedAt > MODEL_PICKER_CATALOG_CACHE_MS)) {
 				void this.loadModelCatalog();
 			}
 			push?.(`chat:refreshFromBackend ok session=${state.sessionFile ?? "-"} messages=${backendMessages.length}`);
@@ -1788,7 +1798,11 @@ export class ChatView {
 		return extractAssistantPartialContentValue(assistantEvent, mode);
 	}
 
-	private async loadAvailableModels(): Promise<void> {
+	private async loadAvailableModels(force = false): Promise<void> {
+		if (this.loadingModels) return;
+		const stale = Date.now() - this.modelsLoadedAt > MODEL_PICKER_MODELS_CACHE_MS;
+		if (!force && this.modelsLoadedAt > 0 && !stale && this.availableModels.length > 0) return;
+
 		const push = (window as typeof window & {
 			__PI_DESKTOP_PUSH_TRACE__?: (message: string) => void;
 		}).__PI_DESKTOP_PUSH_TRACE__;
@@ -1817,6 +1831,7 @@ export class ChatView {
 			}
 			const mapped = mapAvailableModelsFromRpc(models);
 			this.availableModels = mapped;
+			this.modelsLoadedAt = Date.now();
 			this.recomputeProviderAuthConfigured();
 			this.lastModelLoadError = null;
 			push?.(`chat:loadModels ok count=${mapped.length}`);
@@ -2753,9 +2768,9 @@ export class ChatView {
 		});
 	}
 
-	private pushNotice(text: string, kind: Notice["kind"]): void {
+	private pushNotice(text: string, kind: Notice["kind"], action?: NoticeAction): void {
 		const id = uid("notice");
-		this.notices = [...this.notices, { id, text, kind }];
+		this.notices = [...this.notices, { id, text, kind, action }];
 		this.render();
 		setTimeout(() => {
 			this.notices = this.notices.filter((n) => n.id !== id);
@@ -3912,7 +3927,14 @@ export class ChatView {
 							: notice.kind === "success"
 								? "bg-emerald-500/95"
 								: "bg-zinc-800/95";
-					return html`<div class="rounded-xl px-3 py-2 text-xs text-white shadow-xl backdrop-blur ${cls}">${notice.text}</div>`;
+					return html`
+						<div class="rounded-xl px-3 py-2 text-xs text-white shadow-xl backdrop-blur flex items-center gap-2 ${cls}">
+							<span>${notice.text}</span>
+							${notice.action ? html`
+								<button class="underline font-semibold hover:opacity-80 whitespace-nowrap" @click=${notice.action.onClick}>${notice.action.label}</button>
+							` : nothing}
+						</div>
+					`;
 				})}
 			</div>
 		`;
@@ -4849,8 +4871,8 @@ export class ChatView {
 		this.ensureActiveSlashItemVisible();
 	}
 
-	notify(text: string, kind: "info" | "success" | "error" = "info"): void {
-		this.pushNotice(text, kind);
+	notify(text: string, kind: "info" | "success" | "error" = "info", action?: NoticeAction): void {
+		this.pushNotice(text, kind, action);
 	}
 
 	getDebugInfo(): {

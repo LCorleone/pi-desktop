@@ -23,6 +23,7 @@ import {
 } from "../rpc/bridge.js";
 import { applyDesktopTheme, getResolvedDesktopTheme, readStoredDesktopTheme, type DesktopThemeMode } from "../theme/theme-manager.js";
 import { buildPiThemeDocument } from "../theme/pi-theme-document.js";
+import { PROVIDER_PRESETS, getProviderPresetByKey, type ProviderPreset } from "../models/provider-presets.js";
 
 interface ThemeOption {
 	id: string;
@@ -142,6 +143,8 @@ export class SettingsPanel {
 	private providerConfigError = "";
 	private providerConfigMessage = "";
 	private editingProviderKey: string | null = null;
+	private selectedPresetKey: string = "";
+	private providerTestResults: Record<string, { testing: boolean; ok?: boolean; message?: string }> = {};
 	private activeSection: SettingsSectionId = "general";
 
 	constructor(container: HTMLElement) {
@@ -2169,6 +2172,32 @@ export class SettingsPanel {
 		}
 	}
 
+	private async testProviderConnection(key: string): Promise<void> {
+		const p = this.providerConfig?.providers?.[key];
+		if (!p?.baseUrl || !p?.apiKey) {
+			this.providerTestResults[key] = { testing: false, ok: false, message: "Base URL and API Key are required." };
+			this.render();
+			return;
+		}
+		this.providerTestResults[key] = { testing: true };
+		this.render();
+		try {
+			const { invoke } = await import("@tauri-apps/api/core");
+			const result = await invoke<{ ok: boolean; message: string; took_ms: number }>("test_provider_connection", {
+				baseUrl: p.baseUrl,
+				apiKey: p.apiKey,
+			});
+			this.providerTestResults[key] = { testing: false, ok: result.ok, message: `${result.message} (${result.took_ms}ms)` };
+		} catch (err) {
+			this.providerTestResults[key] = {
+				testing: false,
+				ok: false,
+				message: err instanceof Error ? err.message : String(err),
+			};
+		}
+		this.render();
+	}
+
 	private renderProvidersSection(): TemplateResult {
 		const providers = this.providerConfig?.providers ?? {};
 		const providerKeys = Object.keys(providers);
@@ -2222,12 +2251,20 @@ export class SettingsPanel {
 												}}>+ Add Model</button>
 
 												<div class="provider-actions">
+													<button class="settings-btn-secondary" ?disabled=${this.providerTestResults[key]?.testing} @click=${() => this.testProviderConnection(key)}>
+														${this.providerTestResults[key]?.testing ? "Testing..." : "Test Connection"}
+													</button>
 													<button class="settings-btn-danger" @click=${() => {
 														delete providers[key];
 														this.editingProviderKey = null;
 														this.render();
 													}}>Delete Provider</button>
 												</div>
+												${this.providerTestResults[key] ? html`
+													<div class="provider-test-result ${this.providerTestResults[key].ok ? "test-ok" : "test-fail"}">
+														${this.providerTestResults[key].testing ? "Testing..." : this.providerTestResults[key].message ?? ""}
+													</div>
+												` : nothing}
 											</div>
 										</details>
 									`;
@@ -2239,6 +2276,33 @@ export class SettingsPanel {
 						<details class="provider-card provider-save-row">
 							<summary class="provider-header">+ Add Provider</summary>
 							<div class="provider-body">
+								<div class="provider-field">
+									<span class="settings-label">Preset (optional)</span>
+									<select class="settings-input preset-select" @change=${(e: Event) => {
+										const val = (e.target as HTMLSelectElement).value;
+										this.selectedPresetKey = val;
+										if (val) {
+											const preset = getProviderPresetByKey(val);
+											if (preset) {
+												const keyInput = document.getElementById("new-provider-key") as HTMLInputElement;
+												const urlInput = document.getElementById("new-provider-url") as HTMLInputElement;
+												const apiKeyInput = document.getElementById("new-provider-apikey") as HTMLInputElement;
+												if (keyInput) keyInput.value = preset.key;
+												if (urlInput) urlInput.value = preset.baseUrl;
+												if (apiKeyInput) apiKeyInput.placeholder = preset.apiKeyPlaceholder ?? "sk-...";
+											}
+										}
+										this.render();
+									}}>
+										<option value="">-- Select a preset --</option>
+										${PROVIDER_PRESETS.map((p) => html`
+											<option value=${p.key} ?selected=${this.selectedPresetKey === p.key}>${p.name}</option>
+										`)}
+									</select>
+									${this.selectedPresetKey && getProviderPresetByKey(this.selectedPresetKey)?.docsUrl ? html`
+										<a class="settings-doc-link" href=${getProviderPresetByKey(this.selectedPresetKey)!.docsUrl!} target="_blank" rel="noopener noreferrer">API docs ↗</a>
+									` : nothing}
+								</div>
 								<div class="provider-field">
 									<span class="settings-label">Provider Key</span>
 									<input id="new-provider-key" class="settings-input" type="text" placeholder="e.g. my-provider" />
@@ -2260,14 +2324,24 @@ export class SettingsPanel {
 										if (!url) { this.providerConfigError = "Base URL is required."; this.render(); return; }
 										if (!this.providerConfig.providers) this.providerConfig.providers = {};
 										if (this.providerConfig.providers[key]) { this.providerConfigError = "Provider key already exists."; this.render(); return; }
+										const preset = this.selectedPresetKey ? getProviderPresetByKey(this.selectedPresetKey) : undefined;
+										const defaultModels = preset?.defaultModels?.map((m) => ({
+											id: m.id,
+											name: m.name,
+											reasoning: m.reasoning ?? false,
+											input: ["text"],
+											contextWindow: m.contextWindow ?? 128000,
+											maxTokens: m.maxTokens ?? 32000,
+										})) ?? [];
 										this.providerConfig.providers[key] = {
 											baseUrl: url,
 											api: "openai-completions",
 											apiKey: apiKey,
-											compat: { supportsDeveloperRole: false, supportsReasoningEffort: false },
-											models: [],
+											compat: preset?.compat ?? { supportsDeveloperRole: false, supportsReasoningEffort: false },
+											models: defaultModels,
 										};
 										this.editingProviderKey = key;
+										this.selectedPresetKey = "";
 										this.providerConfigError = "";
 										this.render();
 									}}>Create</button>

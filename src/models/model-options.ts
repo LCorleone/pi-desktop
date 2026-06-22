@@ -52,6 +52,20 @@ export function formatProviderDisplayName(provider: string): string {
 		case "kilo":
 		case "kilocode":
 			return "Kilo Code";
+		case "deepseek":
+			return "DeepSeek";
+		case "together":
+			return "Together AI";
+		case "perplexity":
+			return "Perplexity";
+		case "fireworks":
+			return "Fireworks AI";
+		case "cerebras":
+			return "Cerebras";
+		case "github-models":
+			return "GitHub Models";
+		case "mistral":
+			return "Mistral";
 		default:
 			return normalized
 				.split(/[-_\s]+/)
