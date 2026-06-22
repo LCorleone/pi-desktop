@@ -493,9 +493,9 @@ export function renderAssistantWorkflowView({
 									const output = group.category === "agent" ? trimAgentOutput(rawOutput, groupRunning) : rawOutput;
 									const statusLabel = groupRunning ? "running" : groupFailed ? "failed" : "success";
 									return html`
-										<div class="tool-workflow-item">
+										<div class="tool-workflow-item ${groupRunning ? "running" : groupFailed ? "failed" : "done"}">
 											<button
-												class="tool-workflow-line ${groupRunning ? "running" : ""}"
+												class="tool-workflow-line ${groupRunning ? "running" : groupFailed ? "failed" : "done"}"
 												@click=${() => toggleToolGroupExpanded(workflow.id, group.id)}
 												title=${output ? output.slice(0, 300) : undefined}
 											>

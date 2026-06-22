@@ -19,7 +19,8 @@
 	--space-10: calc(var(--space-unit) * 10);
 
 	/* Typography */
-	--font-family-sans: "JetBrains Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+	/* UI chrome uses a proportional system sans; code/terminal stay mono via --font-family-mono */
+	--font-family-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
 	--font-family-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
 	--font-size-xs: 11px;
 	--font-size-sm: 12px;

@@ -4187,8 +4187,19 @@ body.file-split-resizing #file-split-resize-handle::after {
 }
 
 .sidebar-session.active-session {
+	position: relative;
 	background: color-mix(in srgb, var(--bg-soft) 65%, transparent);
 	color: var(--text);
+}
+.sidebar-session.active-session::before {
+	content: "";
+	position: absolute;
+	left: 6px;
+	top: 7px;
+	bottom: 7px;
+	width: 2px;
+	border-radius: 999px;
+	background: var(--accent);
 }
 
 .sidebar-session-action {
@@ -4628,7 +4639,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 
 .chat-row {
 	width: min(760px, calc(100% - 112px));
-	margin: 0 auto 16px;
+	margin: 0 auto 20px;
 	padding: 0;
 }
 
@@ -5351,6 +5362,42 @@ body.file-split-resizing #file-split-resize-handle::after {
 	gap: 2px;
 }
 
+/* Variation B — workflow timeline rail + status nodes */
+.tool-workflow-list {
+	position: relative;
+	padding-left: 14px;
+}
+.tool-workflow-list::before {
+	content: "";
+	position: absolute;
+	left: 5px;
+	top: 8px;
+	bottom: 8px;
+	width: 1px;
+	background: color-mix(in srgb, var(--border) 90%, transparent);
+}
+.tool-workflow-item {
+	position: relative;
+}
+.tool-workflow-item::before {
+	content: "";
+	position: absolute;
+	left: -14px;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 7px;
+	height: 7px;
+	border-radius: 999px;
+	background: var(--muted);
+	box-sizing: content-box;
+	margin-left: -3px;
+	border: 2px solid var(--bg);
+	z-index: 1;
+}
+.tool-workflow-item.running::before { background: var(--accent); animation: pi-running-breath 3.6s ease-in-out infinite; }
+.tool-workflow-item.failed::before { background: var(--danger); }
+.tool-workflow-item.done::before { background: var(--success); }
+
 .tool-workflow-flat .tool-workflow-list {
 	margin-top: 0;
 }
@@ -5366,7 +5413,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 	min-width: 0;
 	border: none;
 	background: transparent;
-	padding: 5px 8px;
+	padding: 7px 8px;
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -5620,6 +5667,17 @@ body.file-split-resizing #file-split-resize-handle::after {
 	background: color-mix(in srgb, var(--border) 64%, transparent);
 	flex: 1;
 }
+.assistant-final-divider > span {
+	font-size: 0;
+}
+.assistant-final-divider > span::before {
+	content: "";
+	display: block;
+	width: 5px;
+	height: 5px;
+	border-radius: 999px;
+	background: var(--accent);
+}
 
 .compaction-row {
 	margin-top: 2px;
@@ -5857,7 +5915,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 }
 
 .composer-panel {
-	padding: 12px 14px 10px;
+	padding: 14px 14px 12px;
 	border-radius: 24px;
 	border: 1px solid color-mix(in srgb, var(--border) 46%, transparent);
 	background: color-mix(in srgb, var(--bg-elev) 72%, var(--bg));
