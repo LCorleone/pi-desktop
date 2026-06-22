@@ -7,6 +7,7 @@ This folder stores the release notes for each published release of the
 
 | File | Release | Notes |
 |------|---------|-------|
+| [`v1.7.0.md`](./v1.7.0.md) | Sans-Refresh UI Polish | Sans chrome / mono code split, workflow status rail + nodes, agent divider + active-session bar, density polish |
 | [`v1.6.0.md`](./v1.6.0.md) | Modified Files & Diff Viewer | File cards with diff stats, diff viewer in file panel, session stability, mac fixes |
 | [`v1.4.0.md`](./v1.4.0.md) | Thinking Render Fix | ANSI stripping, workflow thinking label, macOS PATH fix |
 | [`v1.3.0.md`](./v1.3.0.md) | UI Polish & Thinking | Shimmer animation, tool icons, 24 CSS fixes, grey icon, terminal fixes |
