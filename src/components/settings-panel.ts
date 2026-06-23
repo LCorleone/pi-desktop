@@ -1109,7 +1109,7 @@ export class SettingsPanel {
 		try {
 			const result = await rpcBridge.updateCliViaNpm();
 			if (result.exit_code === 0) {
-				this.cliActionMessage = "CLI updated successfully.";
+				this.cliActionMessage = "CLI updated";
 			} else {
 				this.cliActionMessage = `CLI update failed (exit ${result.exit_code}).`;
 			}
@@ -2160,7 +2160,7 @@ export class SettingsPanel {
 			const { invoke } = await import("@tauri-apps/api/core");
 			const raw = JSON.stringify(this.providerConfig, null, 2);
 			await invoke("save_models_config", { config: raw });
-			this.providerConfigMessage = "Saved successfully.";
+			this.providerConfigMessage = "Settings saved";
 		} catch (err) {
 			this.providerConfigError = err instanceof Error ? err.message : String(err);
 		} finally {

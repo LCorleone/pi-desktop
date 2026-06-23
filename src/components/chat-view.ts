@@ -3706,7 +3706,7 @@ export class ChatView {
 				if (firstKeptEntry) {
 					this.compactionCycle.details.push(`First kept entry: ${truncate(firstKeptEntry, 48)}`);
 				}
-				this.compactionCycle.details.push("Compaction completed successfully.");
+				this.compactionCycle.details.push("Context compacted");
 			}
 			this.markContextUsageUnknown();
 			this.render();

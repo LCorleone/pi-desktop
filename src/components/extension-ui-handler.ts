@@ -637,7 +637,7 @@ export class ExtensionUiHandler {
 		return new Promise((resolve) => {
 			const template = html`
 				<div class="ext-ui-dialog">
-					<h3 class="ext-ui-title">${request.title || "Confirm"}</h3>
+					<h3 class="ext-ui-title">${request.title || "Confirm Action"}</h3>
 					<p class="ext-ui-message">${request.message || "Are you sure?"}</p>
 					<div class="ext-ui-actions">
 						<button
@@ -658,7 +658,7 @@ export class ExtensionUiHandler {
 								resolve();
 							}}
 						>
-							Confirm
+							${request.title || "Confirm Action"}
 						</button>
 					</div>
 				</div>
