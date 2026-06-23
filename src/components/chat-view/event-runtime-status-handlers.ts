@@ -1,7 +1,10 @@
+import { computeTurnStats, type CacheState, type TurnStats } from "./turn-stats-utils.js";
+
 type NoticeKind = "info" | "success" | "error";
 
 interface RuntimeMessageLike {
 	role: string;
+	id?: string;
 	errorText?: string;
 	isStreaming?: boolean;
 	isThinkingStreaming?: boolean;
@@ -39,6 +42,11 @@ interface HandleRuntimeStatusEventContext {
 	refreshFromBackend: () => Promise<void>;
 	loadAvailableModels: () => Promise<void>;
 	refreshStateAfterAgentEnd: () => void;
+	markTurnStart: () => void;
+	getTurnStartMs: () => number | null;
+	getTurnAssistantMessages: () => Array<Record<string, unknown>>;
+	getCacheState: () => CacheState;
+	setLastTurnStats: (stats: TurnStats, messageId: string) => void;
 }
 
 function readPath(source: Record<string, unknown>, path: string): unknown {
@@ -78,6 +86,7 @@ export function handleRuntimeStatusEvent(
 			context.setStateStreaming(true);
 			context.setAutoFollowChat(true);
 			context.onRunStateChange(true);
+			context.markTurnStart();
 			context.scheduleStreamingUiReconcile(2400);
 			context.render();
 			context.scrollToBottom();
@@ -92,6 +101,20 @@ export function handleRuntimeStatusEvent(
 				last.isStreaming = false;
 				last.isThinkingStreaming = false;
 				last.thinkingExpanded = false;
+			}
+			// Per-turn stats footer (ports pi-emote's agent_end telemetry).
+			const turnStartMs = context.getTurnStartMs();
+			if (turnStartMs !== null) {
+				const stats = computeTurnStats({
+					startMs: turnStartMs,
+					endMs: Date.now(),
+					assistantMessages: context.getTurnAssistantMessages(),
+					cache: context.getCacheState(),
+				});
+				// Skip turns with no output tokens (matches the extension's output>0 gate).
+				if (stats.output > 0 && last && last.role === "assistant" && typeof last.id === "string") {
+					context.setLastTurnStats(stats, last.id);
+				}
 			}
 			context.setRetryStatus("");
 			const runError = context.extractRuntimeErrorMessage(event);

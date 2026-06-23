@@ -4838,6 +4838,49 @@ body.file-split-resizing #file-split-resize-handle::after {
 	color: color-mix(in srgb, var(--danger) 88%, #7f1d1d);
 }
 
+/* Per-turn stats footer (ports pi-emote agent_end telemetry). --muted-2 is the
+   dim text token (the spec's --text-3 is not defined in this token set). */
+.turn-stats {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 14px;
+	margin-top: 12px;
+	padding-top: 8px;
+	font-family: var(--font-family-mono);
+	font-size: 11px;
+	color: var(--muted-2);
+	border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.turn-stat {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 3px;
+}
+
+.turn-stat-label {
+	color: var(--muted-2);
+}
+
+.turn-stat-value {
+	color: color-mix(in srgb, var(--text) 82%, var(--muted-2));
+	font-variant-numeric: tabular-nums;
+}
+
+/* Cache hit-rate colors (C/T/R) — match pi-emote's colorByCacheThreshold:
+   ≥95 success, ≥85 default (no class), ≥75 warning, <75 danger. */
+.turn-stat-value.cache-good {
+	color: var(--success);
+}
+
+.turn-stat-value.cache-mid {
+	color: var(--warning);
+}
+
+.turn-stat-value.cache-low {
+	color: var(--danger);
+}
+
 .working-row {
 	margin-top: 10px;
 	margin-bottom: 2px;

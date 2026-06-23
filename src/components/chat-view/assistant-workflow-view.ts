@@ -1,6 +1,7 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { AssistantWorkflow, ToolCategory, WorkflowToolCall, WorkflowToolCallGroup } from "./workflow-utils.js";
 import { getToolCategory, getToolLabel } from "./workflow-utils.js";
+import { renderTurnStatsFooter, type TurnStats } from "./turn-stats-utils.js";
 
 /**
  * Trim agent (subagent) streamed output to a rolling window so the live
@@ -262,6 +263,7 @@ interface RenderAssistantWorkflowViewParams {
 	onDiffToggle?: () => void;
 	onOpenDiff?: (filePath: string, diffLines: DiffLine[], fileName: string) => void;
 	piGlyphIcon: () => TemplateResult;
+	getTurnStats?: (messageId: string) => TurnStats | undefined;
 }
 
 type WorkflowDetailEntry =
@@ -299,6 +301,7 @@ export function renderAssistantWorkflowView({
 	onDiffToggle,
 	onOpenDiff,
 	piGlyphIcon,
+	getTurnStats,
 }: RenderAssistantWorkflowViewParams): TemplateResult {
 	const { total, running, autoExpanded, expanded } = resolveWorkflowExpansionState(
 		workflow.id,
@@ -444,6 +447,10 @@ export function renderAssistantWorkflowView({
 		clearCollapsedWorkflowState(workflow.id);
 	}
 
+	// Per-turn stats footer attaches to the turn's final assistant message id.
+	const lastWorkflowMessageId = workflow.messages[workflow.messages.length - 1]?.id ?? workflow.id;
+	const turnStats = getTurnStats?.(lastWorkflowMessageId);
+
 	return html`
 		<div class="chat-row assistant-row assistant-workflow-row" data-message-id=${workflow.id}>
 			<div class="message-shell assistant-message-shell">
@@ -548,6 +555,7 @@ export function renderAssistantWorkflowView({
 								: nothing}
 							${workflow.errorText ? html`<div class="assistant-error-line">${workflow.errorText}</div>` : nothing}
 							${renderModifiedFiles()}
+							${turnStats ? renderTurnStatsFooter(turnStats) : nothing}
 						`
 						: html`
 							${workflow.finalText
@@ -555,6 +563,7 @@ export function renderAssistantWorkflowView({
 								: nothing}
 							${workflow.errorText ? html`<div class="assistant-error-line">${workflow.errorText}</div>` : nothing}
 							${renderModifiedFiles()}
+							${turnStats ? renderTurnStatsFooter(turnStats) : nothing}
 						`}
 				</div>
 			</div>
