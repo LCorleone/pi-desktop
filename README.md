@@ -23,7 +23,7 @@ with a real PTY terminal, auto session naming, and tuned Windows + macOS builds.
 | **PTY terminal** | Real pseudo-terminal backend (Rust `portable-pty`) instead of xterm.js addons. Interactive programs, proper resize, no chat-timeline leakage. |
 | **Auto session naming** | Sessions get LLM-generated titles via `pi --print`. Works with every model in the picker. No config parsing or manual API calls. |
 | **Streaming performance** | Text rendering coalesced to one per animation frame (~60fps) — no stutter in long sessions. |
-| **Combined CI** | Single `workflow_dispatch` builds both Windows `.exe` and macOS `.dmg` in parallel. |
+| **Combined CI** | Auto-release on merge to main (build + tag + publish) + manual `workflow_dispatch` for Windows `.exe` + macOS `.dmg`. |
 | **Windows polish** | Native-style window controls on sidebar, JetBrains Mono as default font, custom blue app icon. |
 | **Clean docs** | README, CHANGELOG, release notes, and TODO all rewritten for this fork. |
 
@@ -37,6 +37,8 @@ For the full upstream feature set (multi-workspace, streaming chat, slash palett
 - **Streaming chat** with tools, thinking timeline, and interactive workflows
 - **Real PTY docked terminal** — interactive shell inside the chat pane
 - **Auto-naming** — sessions title themselves after the first message
+- **Per-turn stats** — tps (tokens/sec) + cache hit-rate after each agent turn
+- **Modified files cards** — file cards with diff stats; red/green unified diff in file panel
 - **Composer slash palette** with deterministic built-in + extension commands
 - **Model/provider picker** with auth management and diagnostics
 - **Right-side file split** with resize and drag/drop
@@ -51,7 +53,8 @@ Full capability map: [`FEATURE_MAPPING.md`](./FEATURE_MAPPING.md).
 
 Releases at **[github.com/LCorleone/pi-desktop/releases](https://github.com/LCorleone/pi-desktop/releases)**.
 
-A single [`workflow_dispatch`](./.github/workflows/release.yml) builds both platforms:
+A single [`workflow_dispatch`](./.github/workflows/release.yml) builds both platforms.
+Merging a `releases/v*.md` to `main` triggers [`release-on-merge.yml`](./.github/workflows/release-on-merge.yml) for fully automated builds + version tagging:
 
 | Platform | Artifact |
 |----------|----------|

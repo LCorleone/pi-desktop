@@ -10,39 +10,37 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0
 ## [Unreleased]
 
 ### Added
-- Auto session naming via `pi --print`. Sessions get descriptive LLM-generated titles
-  automatically. Works with every model in the picker — pi handles credentials, proxy,
-  TLS, and API format; no manual config parsing or separate HTTP calls needed.
-- Real PTY terminal backend (`portable-pty` Rust bridge) replacing xterm.js addons.
-  Terminal now runs as a native PTY with proper resize/input handling.
-- macOS Intel build workflow (`.github/workflows/build-mac.yml`). Cross-compiles
-  x86_64 on Apple Silicon runners to avoid Intel runner congestion.
-- Windows-style window controls on the sidebar (minimize/maximize/close).
-- Clear chat button in the composer toolbar.
-- Windows `pi.cmd` discovery for environments where PATH lookup is unreliable.
-- OpenAI-compatible provider configuration in Settings.
-- `releases/` folder for release note storage.
+- **Modified files cards** — after agent edits, clickable file cards appear with diff stats (`diff +N -M`). Click a card to open the file; click the ▸ toggle to view the diff in the file panel.
+- **Diff viewer in file panel** — red/green unified diff computed from edit tool args' `oldText`/`newText`. No disk reads, no dependencies.
+- **Per-turn stats footer** — tps (tokens/sec) + cache hit-rate after each agent turn.
+- **Subagent display** — robot icon, `[Type] prompt` summary, structured completion card (parses `<task-notification>` XML), rolling output window.
+- **Tool-type icons** — 6 categories (terminal, read, write, edit, search, agent) with label pills + colored status dots.
+- **Thinking display overhaul** — shimmer animation, auto-expand during streaming, auto-collapse when done, caret toggle.
+- **Workflow timeline status rail** — vertical rail with colored nodes (blue running, red failed, green done).
+- **Sans-refresh typography** — system sans-serif for chrome, JetBrains Mono for code/terminal/tools.
+- **CI auto-release** — `release-on-merge.yml` auto-builds + tags + publishes when `releases/v*.md` hits main.
+- **Real PTY terminal backend** — `portable-pty` Rust bridge replacing xterm.js addons.
+- **Auto session naming via `pi --print`** — works with any provider/model.
+- **macOS build workflow** — cross-compile x86_64 on Apple Silicon.
+- **Grey gradient app icon.**
 
 ### Changed
-- Default app font switched to JetBrains Mono.
-- Windows sidebar layout: controls on the right, toggle on the left.
-- UI polish: wider surface contrast, larger minimum font size, stronger borders.
-- Streamlined the packages page (removed "recommended" section clutter).
-- Release workflow simplified to Windows-only NSIS `.exe` via manual dispatch.
-- README rewritten for the `LCorleone/pi-desktop` fork with accurate build info.
+- Default chrome font switched to system sans-serif; code/terminal/tools stay JetBrains Mono.
+- File panel header wraps to two lines so filenames stay visible.
+- 24 UI polish fixes (text sizes, focus rings, working indicator, model-picker contrast).
+- Windows-style window controls on sidebar.
 
 ### Performance
-- Streaming text rendering coalesced to one per animation frame (~60fps) via
-  `requestAnimationFrame`. Fixes progressive stutter in long sessions.
+- Streaming text rendering coalesced to one per animation frame (~60fps) via `requestAnimationFrame`.
 
 ### Fixed
-- Auto-name: harden against tab switches (capture runtime before awaits).
-- Auto-name: prevent clobbering a manual rename during the async LLM window.
-- Auto-name: match provider by name, not just model ID (fixes wrong credentials
-  when multiple providers share the same model).
-- Auto-name: suppress Windows cmd window flash during title generation.
-- Auto-name: use temp file for prompt text to avoid Windows `.cmd` argument limits.
-- Auto-name: populate sessionPath from fresh state when onStateChange is skipped.
+- **Session runtime dispose** — closing a running session tab no longer leaks a zombie `pi` process.
+- **File tree refresh** — left-panel file list refreshes after agent runs and on window focus.
+- **macOS model picker** — fixed popover clipping behind chat content (WebKit stacking context).
+- **Extension UI dialogs** — confirm/select/input dialogs rendered invisible (unthemed Tailwind classes); now use proper CSS.
+- **Extension UI overlay** — fixed overlay not hiding after dialog close (stacking context).
+- **File panel close button** — stays visible with long filenames.
+- Auto-name: multiple hardening fixes (tab switches, manual renames, provider matching, Windows cmd flash, temp file).
 
 ---
 
