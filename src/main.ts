@@ -134,6 +134,9 @@ let fileViewer: FileViewer | null = null;
 let terminalPanel: TerminalPanel | null = null;
 let packagesView: PackagesView | null = null;
 let connectionError: string | null = null;
+let cliInstallState: "idle" | "installing" | "success" | "error" = "idle";
+let cliInstallError: string | null = null;
+let cliInstallOutput: string | null = null;
 
 let settingsPanel: SettingsPanel | null = null;
 let commandPalette: CommandPalette | null = null;
@@ -1971,7 +1974,7 @@ function stopSidebarSessionsWarmRefresh(): void {
 	}
 }
 
-function startSidebarSessionsWarmRefresh(durationMs = 90_000, intervalMs = 1_200): void {
+function startSidebarSessionsWarmRefresh(durationMs = 90_000, intervalMs = 5_000): void {
 	scheduleSidebarSessionsRefresh(0);
 	if (!sidebarSessionsWarmInterval) {
 		sidebarSessionsWarmInterval = setInterval(() => {
@@ -3073,8 +3076,9 @@ async function refreshCliUpdateStatus(): Promise<void> {
 		cliUpdateStatus = await rpcBridge.getCliUpdateStatus();
 		if (cliUpdateStatus?.update_available && shouldNotifyCliUpdate()) {
 			chatView?.notify(
-				`A Pi CLI update is available${cliUpdateStatus.latest_version ? ` (v${cliUpdateStatus.latest_version})` : ""}. Open Settings → CLI updates to install it.`,
+				`A Pi CLI update is available${cliUpdateStatus.latest_version ? ` (v${cliUpdateStatus.latest_version})` : ""}. `,
 				"info",
+				{ label: "Open Updates", onClick: () => requestOpenSettingsPanel("updates") },
 			);
 			markCliUpdateNotified();
 		}
@@ -4002,33 +4006,71 @@ function renderApp(): void {
 		removeSidebarResizeHandlers = null;
 		const cliMissing = isCliMissingError(connectionError);
 		const windowsHost = isLikelyWindowsHost();
+		const displayInstallError = cliInstallState === "error" ? cliInstallError : null;
 		render(
 			html`
 				<div class="error-shell">
 					<div class="error-card ${cliMissing ? "onboarding-card" : ""}">
 						<h1>${cliMissing ? "Install Pi CLI to continue" : "Connection failed"}</h1>
-						${cliMissing
+						${cliMissing && cliInstallState !== "success"
 							? html`
 								<p>Pi Desktop could not find the <code>pi</code> CLI on your machine.</p>
-								<div class="onboarding-command-block">
-									<div class="onboarding-command-label">Run this in Terminal</div>
-									<code>${CLI_INSTALL_COMMAND}</code>
-								</div>
-								${windowsHost
+
+								${cliInstallState === "installing"
 									? html`
 										<div class="onboarding-command-block">
-											<div class="onboarding-command-label">If npm is missing, install Node.js first</div>
-											<code>${WINDOWS_NODE_INSTALL_COMMAND}</code>
+											<div class="onboarding-command-label">Installing Pi CLI...</div>
+											<div class="install-spinner"></div>
+											${cliInstallOutput ? html`<pre class="install-output">${cliInstallOutput}</pre>` : nothing}
 										</div>
 									`
-									: nothing}
+									: html`
+										<div class="onboarding-command-block">
+											<div class="onboarding-command-label">Run this in Terminal</div>
+											<code>${CLI_INSTALL_COMMAND}</code>
+										</div>
+										${windowsHost
+											? html`
+												<div class="onboarding-command-block">
+													<div class="onboarding-command-label">If npm is missing, install Node.js first</div>
+													<code>${WINDOWS_NODE_INSTALL_COMMAND}</code>
+												</div>
+											`
+											: nothing}
+									`}
+
+								${displayInstallError ? html`<div class="install-error">${displayInstallError}</div>` : nothing}
+
 								<div class="onboarding-actions">
 									<button class="ghost-btn" @click=${() => void copyCliInstallCommand()}>Copy install command</button>
 									${windowsHost
 										? html`<button class="ghost-btn" @click=${() => void copyWindowsNodeInstallCommand()}>Copy Node.js command</button>`
 										: nothing}
+									<button ?disabled=${cliInstallState === "installing"} @click=${() => {
+										cliInstallState = "installing";
+										cliInstallError = null;
+										cliInstallOutput = null;
+										renderApp();
+										rpcBridge.updateCliViaNpm().then((result) => {
+											cliInstallOutput = result.stdout || result.stderr || "(no output)";
+											if (result.exit_code === 0) {
+												cliInstallState = "success";
+											} else {
+												cliInstallState = "error";
+												cliInstallError = result.stderr || `npm install exited with code ${result.exit_code}`;
+											}
+											renderApp();
+										}).catch((err) => {
+											cliInstallState = "error";
+											cliInstallError = err instanceof Error ? err.message : String(err);
+											renderApp();
+										});
+									}}>${cliInstallState === "installing" ? "Installing..." : "Install Pi CLI"}</button>
 									<button @click=${() => {
 										connectionError = null;
+										cliInstallState = "idle";
+										cliInstallError = null;
+										cliInstallOutput = null;
 										void initialize();
 									}}>I installed it · Retry</button>
 								</div>
@@ -4041,13 +4083,39 @@ function renderApp(): void {
 									`
 									: nothing}
 							`
-							: html`
-								<p>${connectionError}</p>
-								<button @click=${() => {
-									connectionError = null;
-									void initialize();
-								}}>Retry</button>
-							`}
+							: cliMissing && cliInstallState === "success"
+								? html`
+									<p>Pi CLI installed successfully!</p>
+									<div class="onboarding-actions">
+										<button @click=${() => {
+											connectionError = null;
+											cliInstallState = "idle";
+											cliInstallError = null;
+											cliInstallOutput = null;
+											void initialize();
+										}}>Launch Pi Desktop</button>
+									</div>
+								`
+								: html`
+									<p>${connectionError}</p>
+									<button @click=${() => {
+										connectionError = null;
+										void initialize();
+									}}>Retry</button>
+								`}
+
+						<div class="onboarding-footer-actions">
+							<button class="ghost-btn" @click=${() => {
+								void (async () => {
+									try {
+										const { getCurrentWindow } = await import("@tauri-apps/api/window");
+										await getCurrentWindow().close();
+									} catch {
+										window.close();
+									}
+								})();
+							}}>Close Pi Desktop</button>
+						</div>
 					</div>
 				</div>
 			`,
