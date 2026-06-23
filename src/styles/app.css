@@ -5946,11 +5946,6 @@ body.file-split-resizing #file-split-resize-handle::after {
 	background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--bg) 76%, transparent) 36%, var(--bg) 100%);
 	pointer-events: none;
 	z-index: 40;
-	/* Promote to a compositing layer so z-index:40 is honored above the
-	   hardware-accelerated .chat-scroll. Without this, WebKit paints the
-	   composited chat-scroll above the composer and its popovers (model
-	   picker) overlap the chat content. */
-	will-change: transform;
 }
 
 .composer-inner {
