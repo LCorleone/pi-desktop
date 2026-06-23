@@ -144,6 +144,9 @@ export class SettingsPanel {
 	private providerConfigMessage = "";
 	private editingProviderKey: string | null = null;
 	private selectedPresetKey: string = "";
+	private newProviderKey = "";
+	private newProviderUrl = "";
+	private newProviderApiKey = "";
 	private providerTestResults: Record<string, { testing: boolean; ok?: boolean; message?: string }> = {};
 	private activeSection: SettingsSectionId = "general";
 
@@ -2284,12 +2287,9 @@ export class SettingsPanel {
 										if (val) {
 											const preset = getProviderPresetByKey(val);
 											if (preset) {
-												const keyInput = document.getElementById("new-provider-key") as HTMLInputElement;
-												const urlInput = document.getElementById("new-provider-url") as HTMLInputElement;
-												const apiKeyInput = document.getElementById("new-provider-apikey") as HTMLInputElement;
-												if (keyInput) keyInput.value = preset.key;
-												if (urlInput) urlInput.value = preset.baseUrl;
-												if (apiKeyInput) apiKeyInput.placeholder = preset.apiKeyPlaceholder ?? "sk-...";
+												this.newProviderKey = preset.key;
+												this.newProviderUrl = preset.baseUrl;
+												this.newProviderApiKey = "";
 											}
 										}
 										this.render();
@@ -2305,21 +2305,21 @@ export class SettingsPanel {
 								</div>
 								<div class="provider-field">
 									<span class="settings-label">Provider Key</span>
-									<input id="new-provider-key" class="settings-input" type="text" placeholder="e.g. my-provider" />
+									<input id="new-provider-key" class="settings-input" type="text" placeholder="e.g. my-provider" .value=${this.newProviderKey} @input=${(e: InputEvent) => { this.newProviderKey = (e.target as HTMLInputElement).value; }} />
 								</div>
 								<div class="provider-field">
 									<span class="settings-label">Base URL</span>
-									<input id="new-provider-url" class="settings-input" type="text" placeholder="https://api.example.com/v1" />
+									<input id="new-provider-url" class="settings-input" type="text" placeholder="https://api.example.com/v1" .value=${this.newProviderUrl} @input=${(e: InputEvent) => { this.newProviderUrl = (e.target as HTMLInputElement).value; }} />
 								</div>
 								<div class="provider-field">
 									<span class="settings-label">API Key</span>
-									<input id="new-provider-apikey" class="settings-input" type="password" placeholder="sk-..." />
+									<input id="new-provider-apikey" class="settings-input" type="password" placeholder=${getProviderPresetByKey(this.selectedPresetKey)?.apiKeyPlaceholder ?? "sk-..."} .value=${this.newProviderApiKey} @input=${(e: InputEvent) => { this.newProviderApiKey = (e.target as HTMLInputElement).value; }} />
 								</div>
 								<div class="provider-actions">
 									<button class="settings-btn-primary" @click=${() => {
-										const key = (document.getElementById("new-provider-key") as HTMLInputElement)?.value?.trim();
-										const url = (document.getElementById("new-provider-url") as HTMLInputElement)?.value?.trim();
-										const apiKey = (document.getElementById("new-provider-apikey") as HTMLInputElement)?.value?.trim();
+										const key = this.newProviderKey.trim();
+										const url = this.newProviderUrl.trim();
+										const apiKey = this.newProviderApiKey.trim();
 										if (!key) { this.providerConfigError = "Provider key is required."; this.render(); return; }
 										if (!url) { this.providerConfigError = "Base URL is required."; this.render(); return; }
 										if (!this.providerConfig.providers) this.providerConfig.providers = {};
@@ -2342,6 +2342,9 @@ export class SettingsPanel {
 										};
 										this.editingProviderKey = key;
 										this.selectedPresetKey = "";
+										this.newProviderKey = "";
+										this.newProviderUrl = "";
+										this.newProviderApiKey = "";
 										this.providerConfigError = "";
 										this.render();
 									}}>Create</button>

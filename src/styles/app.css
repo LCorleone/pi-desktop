@@ -8930,7 +8930,7 @@ kbd {
 	padding: 0 14px;
 	border-radius: 10px;
 	border: 1px solid var(--border);
-	background: var(--bg-muted);
+	background: transparent;
 	color: var(--text);
 	font-size: 12px;
 	font-weight: 600;
@@ -8938,26 +8938,11 @@ kbd {
 	transition: background var(--duration-fast) var(--ease-standard);
 }
 .settings-btn-secondary:hover {
-	background: var(--bg-soft);
+	background: color-mix(in srgb, var(--bg-soft) 80%, transparent);
 }
 .settings-btn-secondary:disabled {
 	opacity: 0.5;
 	cursor: not-allowed;
-}
-
-.settings-btn-secondary {
-	height: 32px;
-	padding: 0 14px;
-	border-radius: 10px;
-	border: 1px solid var(--border);
-	background: transparent;
-	color: var(--text);
-	font-size: 12px;
-	cursor: pointer;
-	transition: background var(--duration-fast) var(--ease-standard);
-}
-.settings-btn-secondary:hover {
-	background: color-mix(in srgb, var(--bg-soft) 80%, transparent);
 }
 
 .settings-btn-danger {
