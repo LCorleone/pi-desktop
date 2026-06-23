@@ -6120,6 +6120,10 @@ body.file-split-resizing #file-split-resize-handle::after {
 	border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
 	background: color-mix(in srgb, var(--bg-elev) 94%, var(--bg));
 	box-shadow: var(--shadow-modal);
+	/* Promote to its own compositing layer so the opaque background paints
+	   correctly above the ancestor's backdrop-filter (WebKit bug: descendants
+	   that overflow a backdrop-filter layer bleed through). */
+	transform: translateZ(0);
 	overflow: hidden;
 }
 
