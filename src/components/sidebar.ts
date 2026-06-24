@@ -6,7 +6,7 @@ import { html, nothing, render, type TemplateResult } from "lit";
 import { clearActiveDraggedFilePaths, setActiveDraggedFilePaths } from "./file-drag-transfer.js";
 import { captionIconSvg, getMaximized, subscribeMaximized } from "./window-chrome.js";
 import { EMOJI_CATALOG } from "./emoji-catalog.js";
-import { getCachedSessionList, setCachedSessionList } from "../rpc/session-cache.js";
+import { fetchAndCacheSessionList, getCachedSessionList, invalidateSessionListCache } from "../rpc/session-cache.js";
 
 export type SidebarMode = "projects" | "files";
 
@@ -942,6 +942,7 @@ export class Sidebar {
 			});
 		}
 		project.sessionsLoaded = true;
+		invalidateSessionListCache();
 		this.render();
 	}
 
@@ -1669,21 +1670,19 @@ export class Sidebar {
 				}>;
 			if (cached && !cached.stale) {
 					sessions = cached.data;
-				} else {
-					const { invoke } = await import("@tauri-apps/api/core");
-					sessions = await invoke<Array<{
-						id: string;
-						name: string | null;
-						path: string;
-						cwd: string | null;
-						created_at: number;
-						modified_at: number;
-						tokens: number;
-						cost: number;
-					}>>("list_sessions");
-					setCachedSessionList(sessions);
-				}
-				if (isStale()) return;
+			} else {
+				sessions = await fetchAndCacheSessionList() as Array<{
+					id: string;
+					name: string | null;
+					path: string;
+					cwd: string | null;
+					created_at: number;
+					modified_at: number;
+					tokens: number;
+					cost: number;
+				}>;
+			}
+			if (isStale()) return;
 
 				const projectPath = normalizePath(project.path);
 				const byProject = sessions.filter((s) => {

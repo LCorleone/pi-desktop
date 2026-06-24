@@ -4048,6 +4048,7 @@ function renderApp(): void {
 										? html`<button class="ghost-btn" @click=${() => void copyWindowsNodeInstallCommand()}>Copy Node.js command</button>`
 										: nothing}
 									<button ?disabled=${cliInstallState === "installing"} @click=${() => {
+										if (cliInstallState === "installing") return;
 										cliInstallState = "installing";
 										cliInstallError = null;
 										cliInstallOutput = null;

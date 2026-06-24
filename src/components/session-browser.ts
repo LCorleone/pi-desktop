@@ -4,7 +4,7 @@
 
 import { html, nothing, render } from "lit";
 import { rpcBridge } from "../rpc/bridge.js";
-import { getCachedSessionList, setCachedSessionList } from "../rpc/session-cache.js";
+import { fetchAndCacheSessionList, getCachedSessionList } from "../rpc/session-cache.js";
 
 interface SessionInfo {
 	id: string;
@@ -120,9 +120,7 @@ export class SessionBrowser {
 			if (cached && !cached.stale) {
 				sessions = cached.data;
 			} else {
-				const { invoke } = await import("@tauri-apps/api/core");
-				sessions = await invoke<
-				Array<{
+				sessions = await fetchAndCacheSessionList() as Array<{
 					id: string;
 					name: string | null;
 					path: string;
@@ -130,9 +128,7 @@ export class SessionBrowser {
 					modified_at: number;
 					tokens: number;
 					cost: number;
-				}>
-			>("list_sessions");
-				setCachedSessionList(sessions);
+				}>;
 			}
 
 			this.sessions = sessions.map((s) => ({

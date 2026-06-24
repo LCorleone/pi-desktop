@@ -2148,6 +2148,7 @@ export class SettingsPanel {
 			const { invoke } = await import("@tauri-apps/api/core");
 			const raw = await invoke<string>("load_models_config");
 			this.providerConfig = JSON.parse(raw || "{}");
+			this.providerTestResults = {};
 		} catch (err) {
 			this.providerConfigError = err instanceof Error ? err.message : String(err);
 			this.providerConfig = {};
@@ -2190,6 +2191,7 @@ export class SettingsPanel {
 				baseUrl: p.baseUrl,
 				apiKey: p.apiKey,
 			});
+			if (!this.providerConfig?.providers?.[key]) return;
 			this.providerTestResults[key] = { testing: false, ok: result.ok, message: `${result.message} (${result.took_ms}ms)` };
 		} catch (err) {
 			this.providerTestResults[key] = {
@@ -2292,6 +2294,10 @@ export class SettingsPanel {
 												this.newProviderUrl = preset.baseUrl;
 												this.newProviderApiKey = "";
 											}
+										} else {
+											this.newProviderKey = "";
+											this.newProviderUrl = "";
+											this.newProviderApiKey = "";
 										}
 										this.render();
 									}}>
