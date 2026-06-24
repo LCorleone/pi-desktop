@@ -23,6 +23,7 @@ import {
 } from "../rpc/bridge.js";
 import { applyDesktopTheme, getResolvedDesktopTheme, readStoredDesktopTheme, type DesktopThemeMode } from "../theme/theme-manager.js";
 import { buildPiThemeDocument } from "../theme/pi-theme-document.js";
+import { isBundledThemeId } from "../theme/bundled-themes.js";
 
 interface ThemeOption {
 	id: string;
@@ -872,6 +873,51 @@ export class SettingsPanel {
 		this.themeCatalogMessage = `Created theme ${fileStem}.json in ~/.pi/agent/themes`;
 	}
 
+	private async updateThemeFromProfile(theme: ThemeVariant): Promise<void> {
+		const profile = this.getProfile(theme);
+		if (isBundledThemeId(profile.themeName)) return;
+
+		const preview = this.profilePreview(theme);
+		const accent = preview.accent;
+		const background = preview.background;
+		const foreground = preview.foreground;
+		const fileStem = profile.themeName;
+		const doc = buildPiThemeDocument({
+			name: profile.themeName,
+			variant: theme,
+			accent,
+			surface: background,
+			ink: foreground,
+			contrast: profile.contrast,
+			fonts: {
+				ui: profile.uiFont || null,
+				code: profile.codeFont || null,
+			},
+			opaqueWindows: !profile.translucentSidebar,
+			source: "pi-desktop-theme-v1",
+		});
+
+		const { homeDir } = await import("@tauri-apps/api/path");
+		const { mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
+		const home = (await homeDir()).replace(/\\/g, "/").replace(/\/+$/, "");
+		const themesRoot = this.joinFsPath(this.joinFsPath(this.joinFsPath(home, ".pi"), "agent"), "themes");
+		await mkdir(themesRoot, { recursive: true });
+
+		const targetPath = this.joinFsPath(themesRoot, `${fileStem}.json`);
+		await writeTextFile(targetPath, `${JSON.stringify(doc, null, 2)}\n`);
+		profile.themeName = fileStem;
+		profile.accent = "";
+		profile.background = "";
+		profile.foreground = "";
+		this.colorDrafts[theme] = { accent: "", background: "", foreground: "" };
+		this.saveAppearanceProfiles();
+		if (theme === this.getCurrentResolvedTheme()) {
+			this.applyAppearanceProfileForCurrentResolvedTheme();
+		}
+		await this.refreshThemeCatalog();
+		this.themeCatalogMessage = `Updated theme ${fileStem}.json in ~/.pi/agent/themes`;
+	}
+
 	private normalizePiBinaryPath(value: string | null | undefined): string | null {
 		const normalized = typeof value === "string" ? value.trim() : "";
 		return normalized.length > 0 ? normalized : null;
@@ -1663,10 +1709,20 @@ export class SettingsPanel {
 			? selectedOption.id
 			: this.resolveDefaultThemeId(theme);
 		const canCreateTheme = this.hasThemeDraftChanges(theme);
+		const hasUpdate = canCreateTheme && !isBundledThemeId(selected);
 		return html`
 			<section class="appearance-profile-card">
 				<div class="appearance-profile-header">
 					<div class="appearance-profile-title">${title}</div>
+					${!isBundledThemeId(selected) && hasUpdate
+						? html`<button
+								class="appearance-profile-action-btn"
+								title=${"Save changes to the current theme"}
+								@click=${() => void this.updateThemeFromProfile(theme)}
+							>
+							Update theme
+							</button>`
+						: nothing}
 					<button
 						class="appearance-profile-action-btn"
 						?disabled=${!canCreateTheme}
