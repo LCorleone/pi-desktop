@@ -1,5 +1,6 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { AssistantWorkflow, AssistantWorkflowCandidate, WorkflowRole } from "./workflow-utils.js";
+import { renderTurnStatsFooter, type TurnStats } from "./turn-stats-utils.js";
 
 interface TimelineMessage {
 	id: string;
@@ -29,6 +30,7 @@ interface RenderAssistantMessageRowParams<Message extends TimelineMessage> {
 	isStandaloneCodeBlockMarkdown: (value: string) => boolean;
 	copyIcon: TemplateResult;
 	onCopyMessage: (message: Message) => void;
+	getTurnStats?: (messageId: string) => TurnStats | undefined;
 }
 
 interface RenderSystemMessageRowParams<Message extends TimelineMessage> {
@@ -66,6 +68,7 @@ export function renderAssistantMessageRow<Message extends TimelineMessage>({
 	isStandaloneCodeBlockMarkdown,
 	copyIcon,
 	onCopyMessage,
+	getTurnStats,
 }: RenderAssistantMessageRowParams<Message>): TemplateResult {
 	const trimmedText = message.text.trim();
 	const errorLine = (message.errorText ?? "").trim();
@@ -74,6 +77,7 @@ export function renderAssistantMessageRow<Message extends TimelineMessage>({
 	const formattedErrorLine = errorLine
 		? (/^error\b[:\s-]*/i.test(errorLine) ? errorLine : `Error: ${errorLine}`)
 		: "";
+	const turnStats = getTurnStats?.(message.id);
 
 	return html`
 		<div class="chat-row assistant-row" data-message-id=${message.id}>
@@ -88,6 +92,7 @@ export function renderAssistantMessageRow<Message extends TimelineMessage>({
 						`
 						: nothing}
 					${formattedErrorLine ? html`<div class="assistant-error-line">${formattedErrorLine}</div>` : nothing}
+					${turnStats ? renderTurnStatsFooter(turnStats) : nothing}
 				</div>
 				<div class="message-actions">
 					${canCopy

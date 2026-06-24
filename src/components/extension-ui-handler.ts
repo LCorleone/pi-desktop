@@ -11,7 +11,7 @@
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { type Options as DesktopNotificationOptions, isPermissionGranted, onAction, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-import { html, render, type TemplateResult } from "lit";
+import { html, nothing, render, type TemplateResult } from "lit";
 import { rpcBridge } from "../rpc/bridge.js";
 
 /**
@@ -635,14 +635,18 @@ export class ExtensionUiHandler {
 		if (!this.overlayContainer) return;
 
 		return new Promise((resolve) => {
+			let resolved = false;
+			let timeoutId: ReturnType<typeof setTimeout> | undefined;
 			const template = html`
 				<div class="ext-ui-dialog">
-					<h3 class="ext-ui-title">${request.title || "Confirm"}</h3>
+					<h3 class="ext-ui-title">${request.title || "Confirm Action"}</h3>
 					<p class="ext-ui-message">${request.message || "Are you sure?"}</p>
 					<div class="ext-ui-actions">
 						<button
 							class="ext-ui-btn"
 							@click=${() => {
+								resolved = true;
+								if (timeoutId) clearTimeout(timeoutId);
 								this.closeOverlay();
 								this.sendResponse(request.id, { confirmed: false });
 								resolve();
@@ -653,12 +657,14 @@ export class ExtensionUiHandler {
 						<button
 							class="ext-ui-btn ext-ui-btn-primary"
 							@click=${() => {
+								resolved = true;
+								if (timeoutId) clearTimeout(timeoutId);
 								this.closeOverlay();
 								this.sendResponse(request.id, { confirmed: true });
 								resolve();
 							}}
 						>
-							Confirm
+							${request.title || "Confirm Action"}
 						</button>
 					</div>
 				</div>
@@ -666,9 +672,10 @@ export class ExtensionUiHandler {
 
 			this.showOverlay(template);
 
-			// Handle timeout
+			// Handle timeout — guard against a response already sent (mirrors showSelectDialog)
 			if (request.timeout) {
-				setTimeout(() => {
+				timeoutId = setTimeout(() => {
+					if (resolved) return;
 					this.closeOverlay();
 					this.sendResponse(request.id, { cancelled: true });
 					resolve();
@@ -951,7 +958,10 @@ export class ExtensionUiHandler {
 	private closeOverlay(): void {
 		if (!this.overlayContainer) return;
 		this.overlayContainer.classList.add("hidden");
-		this.overlayContainer.innerHTML = "";
+		// Clear through lit (not innerHTML) so lit's cached part stays consistent.
+		// Wiping innerHTML directly detaches lit's marker nodes, which makes the
+		// next render commit into a detached subtree (empty overlay, no buttons).
+		render(nothing, this.overlayContainer);
 	}
 
 	private async sendResponse(id: string, data: Record<string, unknown>): Promise<void> {

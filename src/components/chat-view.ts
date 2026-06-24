@@ -104,6 +104,12 @@ import {
 import { sendMessageFlow } from "./chat-view/send-message-flow.js";
 import { deriveLatestAssistantContextTokens as deriveLatestAssistantContextTokensFromMessages } from "./chat-view/session-stats-utils.js";
 import {
+	computeTurnStats,
+	createEmptyCacheState,
+	type CacheState,
+	type TurnStats,
+} from "./chat-view/turn-stats-utils.js";
+import {
 	renderAssistantMessageRow,
 	renderChangelogMessageRow,
 	renderCompactionCycleRow,
@@ -514,6 +520,9 @@ export class ChatView {
 	private loadingChangelog = false;
 	private allThinkingExpanded = false;
 	private retryStatus = "";
+	private turnStartMs: number | null = null;
+	private cacheState: CacheState = createEmptyCacheState();
+	private turnStatsByMessage = new Map<string, TurnStats>();
 	private compactionCycle: CompactionCycleState | null = null;
 	private compactionInsertIndex: number | null = null;
 	private lastRuntimeNoticeSignature = "";
@@ -1664,6 +1673,10 @@ export class ChatView {
 			this.recomputeProviderAuthConfigured();
 			this.lastBackendSessionFile = currentSessionFile;
 			if ((previousSessionFile ?? "") !== (currentSessionFile ?? "")) {
+				// session_start boundary: reset cumulative cache metrics + turn footers.
+				this.cacheState = createEmptyCacheState();
+				this.turnStatsByMessage.clear();
+				this.turnStartMs = null;
 				this.sessionStats = {
 					tokens: null,
 					lifetimeTokens: null,
@@ -1856,6 +1869,8 @@ export class ChatView {
 		this.render();
 		try {
 			await rpcBridge.setModel(provider, modelId);
+			// model_select resets cumulative cache metrics (matches pi-emote).
+			this.cacheState = createEmptyCacheState();
 			this.state = await rpcBridge.getState();
 			this.syncComposerQueueFromState(this.state);
 			this.recomputeProviderAuthConfigured();
@@ -2014,6 +2029,8 @@ export class ChatView {
 	}
 
 	private refreshAfterCompaction(): void {
+		// session_compact resets cumulative cache metrics (matches pi-emote).
+		this.cacheState = createEmptyCacheState();
 		void (async () => {
 			try {
 				await this.refreshFromBackend();
@@ -2022,6 +2039,22 @@ export class ChatView {
 			}
 			await this.refreshSessionStats(true);
 		})();
+	}
+
+	private markTurnStart(): void {
+		this.turnStartMs = Date.now();
+	}
+
+	private getTurnStartMs(): number | null {
+		return this.turnStartMs;
+	}
+
+	private getCacheState(): CacheState {
+		return this.cacheState;
+	}
+
+	private setLastTurnStats(stats: TurnStats, messageId: string): void {
+		this.turnStatsByMessage.set(messageId, stats);
 	}
 
 	private async refreshSessionStats(force = false): Promise<void> {
@@ -2705,6 +2738,20 @@ export class ChatView {
 							/* ignore */
 						});
 				},
+				markTurnStart: this.markTurnStart.bind(this),
+				getTurnStartMs: this.getTurnStartMs.bind(this),
+				getTurnAssistantMessages: () => {
+					const messages = event.messages;
+					if (!Array.isArray(messages)) return [];
+					return messages.filter(
+						(message) =>
+							!!message &&
+							typeof message === "object" &&
+							(message as Record<string, unknown>).role === "assistant",
+					) as Array<Record<string, unknown>>;
+				},
+				getCacheState: this.getCacheState.bind(this),
+				setLastTurnStats: this.setLastTurnStats.bind(this),
 			})
 		) {
 			return;
@@ -3674,7 +3721,7 @@ export class ChatView {
 				if (firstKeptEntry) {
 					this.compactionCycle.details.push(`First kept entry: ${truncate(firstKeptEntry, 48)}`);
 				}
-				this.compactionCycle.details.push("Compaction completed successfully.");
+				this.compactionCycle.details.push("Context compacted");
 			}
 			this.markContextUsageUnknown();
 			this.render();
@@ -4261,6 +4308,7 @@ export class ChatView {
 				: undefined,
 			onDiffToggle: () => this.render(),
 			piGlyphIcon,
+			getTurnStats: (messageId) => this.turnStatsByMessage.get(messageId),
 		});
 	}
 
@@ -4287,6 +4335,7 @@ export class ChatView {
 			isStandaloneCodeBlockMarkdown: (value) => this.isStandaloneCodeBlockMarkdown(value),
 			copyIcon: uiIcon("copy"),
 			onCopyMessage: (message) => this.copyMessage(message),
+			getTurnStats: (messageId) => this.turnStatsByMessage.get(messageId),
 		});
 	}
 

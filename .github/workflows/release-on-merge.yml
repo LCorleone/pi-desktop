@@ -1,0 +1,142 @@
+name: Release on Merge
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'releases/v*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-on-merge
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Detect version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.detect.outputs.version }}
+      should_build: ${{ steps.detect.outputs.should_build }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect version + idempotency check
+        id: detect
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          git fetch --tags --force >/dev/null 2>&1
+          files=( releases/v*.md )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No release notes found — nothing to release."
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          VERSION="$( printf '%s\n' "${files[@]}" | sed 's#^releases/v##; s#\.md$##' | sort -V | tail -n1 )"
+          echo "Detected latest version: ${VERSION}"
+          if git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${VERSION} already exists — v${VERSION} already released. Skipping."
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.os_name }})
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            os_name: Windows
+            artifact_name: Pi-Desktop-Windows
+            tauri_build_args: ""
+            bundle_glob: "src-tauri/target/release/bundle/nsis/*.exe"
+          - platform: macos-latest
+            os_name: macOS
+            artifact_name: Pi-Desktop-macOS
+            tauri_build_args: "--target x86_64-apple-darwin"
+            bundle_glob: "src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg"
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (${{ matrix.os_name }})
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.tauri_build_args }}" ]; then
+            npm run tauri build -- ${{ matrix.tauri_build_args }}
+          else
+            npm run tauri build
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.bundle_glob }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: [prepare, build]
+    if: needs.prepare.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          mapfile -t ASSETS < <( find artifacts -type f \( -name '*.exe' -o -name '*.dmg' \) )
+          if [ ${#ASSETS[@]} -eq 0 ]; then
+            echo "No installers found — aborting release."
+            exit 1
+          fi
+          echo "Publishing v${VERSION} with ${#ASSETS[@]} asset(s):"
+          printf '  %s\n' "${ASSETS[@]}"
+          gh release create "v${VERSION}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "v${VERSION}" \
+            --notes-file "releases/v${VERSION}.md" \
+            --prerelease \
+            "${ASSETS[@]}"

@@ -19,7 +19,8 @@
 	--space-10: calc(var(--space-unit) * 10);
 
 	/* Typography */
-	--font-family-sans: "JetBrains Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+	/* UI chrome uses a proportional system sans; code/terminal stay mono via --font-family-mono */
+	--font-family-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
 	--font-family-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
 	--font-size-xs: 11px;
 	--font-size-sm: 12px;
@@ -130,4 +131,12 @@
 	--color-state-danger: #ef4444;
 	--color-state-success: #22c55e;
 	--color-state-warning: #f59e0b;
+
+	/* Focus ring — two-layer (Geist-style): surface gap + full-strength accent */
+	--focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+
+	/* Elevation — layered, low-alpha (Geist dark). Reads on light too (black shadow). */
+	--shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.16);
+	--shadow-popover: 0 1px 1px rgba(0, 0, 0, 0.02), 0 4px 8px -4px rgba(0, 0, 0, 0.04), 0 16px 24px -8px rgba(0, 0, 0, 0.06);
+	--shadow-modal: 0 1px 1px rgba(0, 0, 0, 0.02), 0 8px 16px -4px rgba(0, 0, 0, 0.04), 0 24px 32px -8px rgba(0, 0, 0, 0.06);
 }

@@ -446,7 +446,7 @@ export function handleCompactionAndRetryEvent(
 				if (typeof tokensBefore === "number" && Number.isFinite(tokensBefore)) {
 					compactionCycle.details.push(`Context before compaction: ${Math.round(tokensBefore).toLocaleString()} tokens`);
 				}
-				compactionCycle.details.push("Compaction completed successfully.");
+				compactionCycle.details.push("Context compacted");
 				context.markContextUsageUnknown();
 				context.pushNotice("Auto-compaction complete", "success");
 				context.refreshAfterCompaction();
