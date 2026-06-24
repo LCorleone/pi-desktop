@@ -12,6 +12,7 @@ import {
 	type ThinkingLevel,
 	rpcBridge,
 } from "../rpc/bridge.js";
+import { restoreOutput } from "../security/valut.js";
 import { buildGitBranchIndex, findGitBranchEntryByQuery, type GitBranchEntry } from "../git/branches.js";
 import {
 	createSlashPaletteItems,
@@ -4078,14 +4079,14 @@ export class ChatView {
 			</div>
 		`;
 	}
-
 	private renderUserMessage(msg: UiMessage): TemplateResult {
+		const displayText = restoreOutput(msg.text);
 		return html`
 			<div class="chat-row user-row" data-message-id=${msg.id}>
 				<div class="message-shell user-message-shell">
 					<div class="bubble user-bubble">
 						${msg.deliveryMode === "steer" ? html`<div class="bubble-chip">steer</div>` : nothing}
-						${msg.text ? html`<div class="bubble-text">${msg.text}</div>` : nothing}
+						${displayText ? html`<div class="bubble-text">${displayText}</div>` : nothing}
 						${msg.attachments && msg.attachments.length > 0
 							? html`
 								<div class="attachment-grid">
@@ -4305,10 +4306,10 @@ export class ChatView {
 			renderCompactionCycle: () => this.renderCompactionCycle(),
 		});
 	}
-
 	private renderAssistantMessage(msg: UiMessage): TemplateResult {
+		const displayText = restoreOutput(msg.text);
 		return renderAssistantMessageRow({
-			message: msg,
+			message: { ...msg, text: displayText },
 			renderThinking: (message) => this.renderThinking(message),
 			isStandaloneCodeBlockMarkdown: (value) => this.isStandaloneCodeBlockMarkdown(value),
 			copyIcon: uiIcon("copy"),

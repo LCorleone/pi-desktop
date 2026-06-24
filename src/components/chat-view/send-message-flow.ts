@@ -1,3 +1,4 @@
+import { sanitizeInput } from "../../security/valut.js";
 import { rpcBridge, type RpcImageInput, type RpcSessionState } from "../../rpc/bridge.js";
 
 type NoticeKind = "info" | "success" | "error";
@@ -99,13 +100,14 @@ export async function sendMessageFlow<ImageItem>({
 	render();
 
 	try {
+		const agentText = await sanitizeInput(text);
 		const rpcImages = toRpcImages(images);
 		if (actualMode === "prompt") {
-			await rpcBridge.prompt(text, { images: rpcImages });
+			await rpcBridge.prompt(agentText, { images: rpcImages });
 		} else if (actualMode === "steer") {
-			await rpcBridge.steer(text, rpcImages);
+			await rpcBridge.steer(agentText, rpcImages);
 		} else {
-			await rpcBridge.followUp(text, rpcImages);
+			await rpcBridge.followUp(agentText, rpcImages);
 			void rpcBridge
 				.getState()
 				.then((state) => {
