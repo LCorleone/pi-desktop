@@ -1087,7 +1087,7 @@ struct PiAuthStatus {
     configured_providers: Vec<PiAuthProviderStatus>,
 }
 
-fn provider_env_var_map() -> [(&'static str, &'static str); 16] {
+fn provider_env_var_map() -> [(&'static str, &'static str); 20] {
     [
         ("anthropic", "ANTHROPIC_API_KEY"),
         ("azure-openai-responses", "AZURE_OPENAI_API_KEY"),
@@ -1105,6 +1105,10 @@ fn provider_env_var_map() -> [(&'static str, &'static str); 16] {
         ("kimi-coding", "KIMI_API_KEY"),
         ("minimax", "MINIMAX_API_KEY"),
         ("minimax-cn", "MINIMAX_CN_API_KEY"),
+        ("deepseek", "DEEPSEEK_API_KEY"),
+        ("together", "TOGETHER_API_KEY"),
+        ("perplexity", "PERPLEXITY_API_KEY"),
+        ("fireworks", "FIREWORKS_API_KEY"),
     ]
 }
 
@@ -2622,6 +2626,68 @@ async fn save_models_config(config: String) -> Result<(), String> {
     fs::write(path, config).map_err(|e| format!("Failed to write models.json: {}", e))
 }
 
+#[derive(Debug, Serialize)]
+struct ProviderTestResult {
+    ok: bool,
+    message: String,
+    took_ms: u64,
+}
+
+#[tauri::command]
+async fn test_provider_connection(base_url: String, api_key: String) -> ProviderTestResult {
+    let started = std::time::Instant::now();
+    let url = format!("{}/models", base_url.trim_end_matches('/'));
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build();
+
+    let client = match client {
+        Ok(c) => c,
+        Err(e) => return ProviderTestResult {
+            ok: false,
+            message: format!("Failed to create HTTP client: {}", e),
+            took_ms: started.elapsed().as_millis() as u64,
+        },
+    };
+
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                let took_ms = started.elapsed().as_millis() as u64;
+                ProviderTestResult {
+                    ok: true,
+                    message: format!("Connected successfully (HTTP {})", resp.status().as_u16()),
+                    took_ms,
+                }
+            } else {
+                let status = resp.status().as_u16();
+                let body = resp.text().await.unwrap_or_default();
+                let took_ms = started.elapsed().as_millis() as u64;
+                ProviderTestResult {
+                    ok: false,
+                    message: format!("HTTP {}: {}", status, body.chars().take(200).collect::<String>()),
+                    took_ms,
+                }
+            }
+        }
+        Err(e) => {
+            let took_ms = started.elapsed().as_millis() as u64;
+            ProviderTestResult {
+                ok: false,
+                message: format!("Connection failed: {}", e),
+                took_ms,
+            }
+        }
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -2671,6 +2737,7 @@ pub fn run() {
             save_models_config,
             generate_session_title,
             pi_generate_title,
+            test_provider_connection,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
