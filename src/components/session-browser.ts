@@ -116,7 +116,7 @@ export class SessionBrowser {
 				tokens: number;
 				cost: number;
 			}>;
-			if (cached) {
+			if (cached && !cached.stale) {
 				sessions = cached.data;
 			} else {
 				const { invoke } = await import("@tauri-apps/api/core");

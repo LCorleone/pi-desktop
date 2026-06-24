@@ -1668,7 +1668,7 @@ export class Sidebar {
 					tokens: number;
 					cost: number;
 				}>;
-				if (cached && (!silent || !cached.stale)) {
+			if (cached && !cached.stale) {
 					sessions = cached.data;
 				} else {
 					const { invoke } = await import("@tauri-apps/api/core");

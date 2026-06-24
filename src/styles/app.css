@@ -9023,7 +9023,7 @@ kbd {
 }
 .settings-doc-link {
 	font-size: var(--font-size-sm);
-	color: var(--color-accent);
+	color: var(--accent);
 	text-decoration: none;
 	margin-left: 8px;
 	white-space: nowrap;
