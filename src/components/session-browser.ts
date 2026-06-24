@@ -54,6 +54,7 @@ export class SessionBrowser {
 	}
 
 	async open(options: { query?: string } = {}): Promise<void> {
+		if (this.loading) return;
 		this.isOpen = true;
 		this.loading = true;
 		this.query = options.query?.trim() ?? "";

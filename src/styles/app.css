@@ -9304,7 +9304,7 @@ button:active:not(:disabled),
 	background: var(--bg);
 	color: var(--text);
 	font-size: 13px;
-	font-family: var(--font-mono, ui-monospace, monospace);
+	font-family: var(--font-family-mono, ui-monospace, monospace);
 	resize: none;
 	outline: none;
 }
@@ -9503,7 +9503,7 @@ button:active:not(:disabled),
 	background: var(--bg);
 	border: 1px solid var(--border);
 	border-radius: 6px;
-	font-family: var(--font-mono, ui-monospace, monospace);
+	font-family: var(--font-family-mono, ui-monospace, monospace);
 	font-size: 11px;
 	line-height: 1.5;
 	color: color-mix(in srgb, var(--text) 88%, var(--muted));
@@ -9537,7 +9537,7 @@ button:active:not(:disabled),
 .file-viewer-diff-content {
 	margin: 0;
 	padding: 12px;
-	font-family: var(--font-mono, ui-monospace, monospace);
+	font-family: var(--font-family-mono, ui-monospace, monospace);
 	font-size: 12px;
 	line-height: 1.6;
 	white-space: pre-wrap;

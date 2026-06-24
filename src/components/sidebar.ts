@@ -942,7 +942,6 @@ export class Sidebar {
 			});
 		}
 		project.sessionsLoaded = true;
-		project.lastSessionsLoadedAt = Date.now();
 		this.render();
 	}
 

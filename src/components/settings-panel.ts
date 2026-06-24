@@ -2259,6 +2259,7 @@ export class SettingsPanel {
 													</button>
 													<button class="settings-btn-danger" @click=${() => {
 														delete providers[key];
+														delete this.providerTestResults[key];
 														this.editingProviderKey = null;
 														this.render();
 													}}>Delete Provider</button>

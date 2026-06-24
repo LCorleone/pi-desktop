@@ -3099,8 +3099,9 @@ async function refreshDesktopUpdateStatus(): Promise<void> {
 		desktopUpdateStatus = await fetchDesktopUpdateStatus();
 		if (desktopUpdateStatus.updateAvailable && shouldNotifyDesktopUpdate()) {
 			chatView?.notify(
-				`A Pi Desktop update is available${desktopUpdateStatus.latestVersion ? ` (v${desktopUpdateStatus.latestVersion})` : ""}. Open Settings → Desktop updates to install it.`,
+				`A Pi Desktop update is available${desktopUpdateStatus.latestVersion ? ` (v${desktopUpdateStatus.latestVersion})` : ""}.`,
 				"info",
+				{ label: "Open Updates", onClick: () => requestOpenSettingsPanel("updates") },
 			);
 			markDesktopUpdateNotified();
 		}
