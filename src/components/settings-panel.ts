@@ -114,6 +114,7 @@ export class SettingsPanel {
 	private themeCatalogLoading = false;
 	private themeCatalogError = "";
 	private themeCatalogMessage = "";
+	private themeUpdating = false;
 	private createThemeDialogOpen = false;
 	private createThemeDialogTheme: ThemeVariant = "dark";
 	private createThemeDialogName = "";
@@ -874,48 +875,56 @@ export class SettingsPanel {
 	}
 
 	private async updateThemeFromProfile(theme: ThemeVariant): Promise<void> {
+		if (this.themeUpdating) return;
 		const profile = this.getProfile(theme);
 		if (isBundledThemeId(profile.themeName)) return;
 
-		const preview = this.profilePreview(theme);
-		const accent = preview.accent;
-		const background = preview.background;
-		const foreground = preview.foreground;
-		const fileStem = profile.themeName;
-		const doc = buildPiThemeDocument({
-			name: profile.themeName,
-			variant: theme,
-			accent,
-			surface: background,
-			ink: foreground,
-			contrast: profile.contrast,
-			fonts: {
-				ui: profile.uiFont || null,
-				code: profile.codeFont || null,
-			},
-			opaqueWindows: !profile.translucentSidebar,
-			source: "pi-desktop-theme-v1",
-		});
+		this.themeUpdating = true;
+		try {
+			const preview = this.profilePreview(theme);
+			const accent = preview.accent;
+			const background = preview.background;
+			const foreground = preview.foreground;
+			const fileStem = profile.themeName;
+			const doc = buildPiThemeDocument({
+				name: profile.themeName,
+				variant: theme,
+				accent,
+				surface: background,
+				ink: foreground,
+				contrast: profile.contrast,
+				fonts: {
+					ui: profile.uiFont || null,
+					code: profile.codeFont || null,
+				},
+				opaqueWindows: !profile.translucentSidebar,
+				source: "pi-desktop-theme-v1",
+			});
 
-		const { homeDir } = await import("@tauri-apps/api/path");
-		const { mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
-		const home = (await homeDir()).replace(/\\/g, "/").replace(/\/+$/, "");
-		const themesRoot = this.joinFsPath(this.joinFsPath(this.joinFsPath(home, ".pi"), "agent"), "themes");
-		await mkdir(themesRoot, { recursive: true });
+			const { homeDir } = await import("@tauri-apps/api/path");
+			const { mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
+			const home = (await homeDir()).replace(/\\/g, "/").replace(/\/+$/, "");
+			const themesRoot = this.joinFsPath(this.joinFsPath(this.joinFsPath(home, ".pi"), "agent"), "themes");
+			await mkdir(themesRoot, { recursive: true });
 
-		const targetPath = this.joinFsPath(themesRoot, `${fileStem}.json`);
-		await writeTextFile(targetPath, `${JSON.stringify(doc, null, 2)}\n`);
-		profile.themeName = fileStem;
-		profile.accent = "";
-		profile.background = "";
-		profile.foreground = "";
-		this.colorDrafts[theme] = { accent: "", background: "", foreground: "" };
-		this.saveAppearanceProfiles();
-		if (theme === this.getCurrentResolvedTheme()) {
-			this.applyAppearanceProfileForCurrentResolvedTheme();
+			const targetPath = this.joinFsPath(themesRoot, `${fileStem}.json`);
+			await writeTextFile(targetPath, `${JSON.stringify(doc, null, 2)}\n`);
+			profile.accent = "";
+			profile.background = "";
+			profile.foreground = "";
+			this.colorDrafts[theme] = { accent: "", background: "", foreground: "" };
+			this.saveAppearanceProfiles();
+			if (theme === this.getCurrentResolvedTheme()) {
+				this.applyAppearanceProfileForCurrentResolvedTheme();
+			}
+			await this.refreshThemeCatalog();
+			this.themeCatalogMessage = `Updated theme ${fileStem}.json in ~/.pi/agent/themes`;
+		} catch (err) {
+			this.themeCatalogError = err instanceof Error ? err.message : String(err);
+		} finally {
+			this.themeUpdating = false;
+			this.render();
 		}
-		await this.refreshThemeCatalog();
-		this.themeCatalogMessage = `Updated theme ${fileStem}.json in ~/.pi/agent/themes`;
 	}
 
 	private normalizePiBinaryPath(value: string | null | undefined): string | null {
@@ -1714,9 +1723,10 @@ export class SettingsPanel {
 			<section class="appearance-profile-card">
 				<div class="appearance-profile-header">
 					<div class="appearance-profile-title">${title}</div>
-					${!isBundledThemeId(selected) && hasUpdate
+					${hasUpdate
 						? html`<button
 								class="appearance-profile-action-btn"
+								?disabled=${this.themeUpdating}
 								title=${"Save changes to the current theme"}
 								@click=${() => void this.updateThemeFromProfile(theme)}
 							>
