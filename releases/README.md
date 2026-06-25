@@ -7,6 +7,7 @@ This folder stores the release notes for each published release of the
 
 | File | Release | Notes |
 |------|---------|-------|
+| [`v1.8.2.md`](./v1.8.2.md) | Token Stats Fix | Fixes stale token/cost display when switching sessions via the content cache |
 | [`v1.8.1.md`](./v1.8.1.md) | Instant Session Switching | Session content cache for instant switch-back, no blank flash, background refresh |
 | [`v1.8.0.md`](./v1.8.0.md) | Provider Presets & Test Connection | 12 provider presets, inline test connection, model-picker + session-list caching, CLI update button |
 | [`v1.7.1.md`](./v1.7.1.md) | Per-Turn Stats & Auto-Release | TPS + cache hit-rate footer, CI auto-release on merge |
