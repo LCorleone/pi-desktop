@@ -1733,8 +1733,8 @@ export class ChatView {
 				const cachedMsgs = cached?.messages as UiMessage[] | undefined;
 				if (cachedMsgs && this.messages.length === cachedMsgs.length && this.messages.length > 0) {
 					if (
-						this.messages[0]?.id === cachedMsgs[0]?.id &&
-						this.messages[this.messages.length - 1]?.id === cachedMsgs[cachedMsgs.length - 1]?.id
+						this.messages[0]?.sessionEntryId === cachedMsgs[0]?.sessionEntryId &&
+						this.messages[this.messages.length - 1]?.sessionEntryId === cachedMsgs[cachedMsgs.length - 1]?.sessionEntryId
 					) {
 						this.messages = cachedMsgs;
 					}
