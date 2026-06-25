@@ -14,6 +14,10 @@ with a real PTY terminal, auto session naming, and tuned Windows + macOS builds.
   <img src="./assets/branding/pi-desktop-icon.svg" alt="Pi Desktop app icon" width="120" />
 </p>
 
+<p align="center">
+  <img src="./assets/pi-desktop-demo.png" alt="Pi Desktop app screenshot" width="880" />
+</p>
+
 ---
 
 ## What this fork adds
