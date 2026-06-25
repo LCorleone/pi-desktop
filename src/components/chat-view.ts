@@ -816,7 +816,6 @@ export class ChatView {
 		if (cached) {
 			this.state = cached.state as RpcSessionState | null;
 			this.messages = cached.messages as UiMessage[];
-			this.lastBackendSessionFile = sessionPath ?? null;
 			this.lastBackendRefreshError = null;
 			this.pendingDeliveryMode = "prompt";
 			this.resetSessionUiTransientState();
