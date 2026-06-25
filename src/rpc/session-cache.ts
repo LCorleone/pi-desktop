@@ -1,3 +1,45 @@
+/** Max number of sessions whose content is cached in memory. */
+const SESSION_CONTENT_CACHE_SIZE = 20;
+
+interface CachedSessionContent {
+	messages: unknown[];
+	state: unknown;
+	cachedAt: number;
+}
+
+const contentCache = new Map<string, CachedSessionContent>();
+
+/** Retrieve cached session content (messages + state), or null if not cached. */
+export function getCachedSessionContent(sessionPath: string): CachedSessionContent | null {
+	return contentCache.get(sessionPath) ?? null;
+}
+
+/** Store session content in cache. Evicts oldest entry if at capacity. */
+export function setCachedSessionContent(sessionPath: string, messages: unknown[], state: unknown): void {
+	contentCache.set(sessionPath, { messages, state, cachedAt: Date.now() });
+	if (contentCache.size > SESSION_CONTENT_CACHE_SIZE) {
+		let oldestKey: string | null = null;
+		let oldestTime = Infinity;
+		for (const [key, val] of contentCache) {
+			if (val.cachedAt < oldestTime) {
+				oldestTime = val.cachedAt;
+				oldestKey = key;
+			}
+		}
+		if (oldestKey) contentCache.delete(oldestKey);
+	}
+}
+
+/** Remove a session from the content cache (e.g., on delete). */
+export function invalidateSessionContent(sessionPath: string): void {
+	contentCache.delete(sessionPath);
+}
+
+/** Clear all cached session content (e.g., on app reset). */
+export function clearSessionContentCache(): void {
+	contentCache.clear();
+}
+
 interface CacheEntry<T> {
 	data: T;
 	loadedAt: number;

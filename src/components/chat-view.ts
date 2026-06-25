@@ -101,6 +101,7 @@ import {
 	computeSessionStatsFallback,
 	computeSessionStatsFromRaw,
 } from "./chat-view/session-stats-refresh.js";
+import { getCachedSessionContent, setCachedSessionContent } from "../rpc/session-cache.js";
 import { sendMessageFlow } from "./chat-view/send-message-flow.js";
 import { deriveLatestAssistantContextTokens as deriveLatestAssistantContextTokensFromMessages } from "./chat-view/session-stats-utils.js";
 import {
@@ -618,6 +619,8 @@ export class ChatView {
 	private fetchingGitRemotes = false;
 	private creatingGitRepo = false;
 	private projectPath: string | null = null;
+	private sessionPath: string | null = null;
+	private loadedFromCache = false;
 	private bindingStatusText: string | null = null;
 	private gitKnownBranchesByProject = new Map<string, string[]>();
 	private welcomeDashboard: WelcomeDashboardSummary = {
@@ -794,20 +797,45 @@ export class ChatView {
 		this.render();
 	}
 
-	prepareForSessionSwitch(projectPath: string | null, statusText?: string): void {
+	prepareForSessionSwitch(projectPath: string | null, statusText?: string, sessionPath?: string): void {
+		// Save current session content to cache before switching away
+		if (this.sessionPath) {
+			setCachedSessionContent(this.sessionPath, this.messages, this.state);
+		}
+
 		if (this.projectPath !== projectPath) {
 			this.setProjectPath(projectPath);
 		}
 		this.isConnected = rpcBridge.isConnected;
-		this.state = null;
-		this.messages = [];
-		this.lastBackendSessionFile = null;
-		this.lastBackendRefreshError = null;
-		this.pendingDeliveryMode = "prompt";
-		this.resetSessionUiTransientState();
-		this.providerAuthForcedLoggedOut.clear();
-		this.resetRunActivityState();
-		this.bindingStatusText = projectPath ? (statusText ?? "Loading session…") : null;
+
+		this.sessionPath = sessionPath ?? null;
+		this.loadedFromCache = false;
+
+		// Check if the target session is already cached
+		const cached = sessionPath ? getCachedSessionContent(sessionPath) : null;
+		if (cached) {
+			this.state = cached.state as RpcSessionState | null;
+			this.messages = cached.messages as UiMessage[];
+			this.lastBackendSessionFile = sessionPath ?? null;
+			this.lastBackendRefreshError = null;
+			this.pendingDeliveryMode = "prompt";
+			this.resetSessionUiTransientState();
+			this.providerAuthForcedLoggedOut.clear();
+			this.resetRunActivityState();
+			this.bindingStatusText = null;
+			this.loadedFromCache = true;
+		} else {
+			this.state = null;
+			this.messages = [];
+			this.lastBackendSessionFile = null;
+			this.lastBackendRefreshError = null;
+			this.pendingDeliveryMode = "prompt";
+			this.resetSessionUiTransientState();
+			this.providerAuthForcedLoggedOut.clear();
+			this.resetRunActivityState();
+			this.bindingStatusText = projectPath ? (statusText ?? "Loading session…") : null;
+		}
+
 		this.render();
 	}
 
@@ -1696,6 +1724,27 @@ export class ChatView {
 			this.lastBackendRefreshError = null;
 			this.onStateChange?.(state);
 			this.messages = this.mapBackendMessages(backendMessages);
+
+			// Sync session path from backend and update content cache
+			this.sessionPath = currentSessionFile;
+
+			if (this.loadedFromCache) {
+				const cached = this.sessionPath ? getCachedSessionContent(this.sessionPath) : null;
+				const cachedMsgs = cached?.messages as UiMessage[] | undefined;
+				if (cachedMsgs && this.messages.length === cachedMsgs.length && this.messages.length > 0) {
+					if (
+						this.messages[0]?.sessionEntryId === cachedMsgs[0]?.sessionEntryId &&
+						this.messages[this.messages.length - 1]?.sessionEntryId === cachedMsgs[cachedMsgs.length - 1]?.sessionEntryId
+					) {
+						this.messages = cachedMsgs;
+					}
+				}
+			}
+			this.loadedFromCache = false;
+			if (this.sessionPath) {
+				setCachedSessionContent(this.sessionPath, this.messages, this.state);
+			}
+
 			if (this.compactionInsertIndex !== null) {
 				this.compactionInsertIndex = Math.max(0, Math.min(this.compactionInsertIndex, this.messages.length));
 			}

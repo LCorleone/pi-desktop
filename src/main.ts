@@ -2536,6 +2536,7 @@ function syncActiveChatRuntimeBinding(
 		chatView.prepareForSessionSwitch(
 			projectPath,
 			options.statusText ?? (activeSessionTab.sessionPath ? "Loading session…" : "Starting new session…"),
+			activeSessionTab.sessionPath ?? undefined,
 		);
 	}
 }

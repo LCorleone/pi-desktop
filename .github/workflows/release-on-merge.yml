@@ -72,6 +72,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Bump version in config files
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" package.json
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" src-tauri/tauri.conf.json
+          sed -i "s/^version = \"[^\"]*\"/version = \"${VERSION}\"/" src-tauri/Cargo.toml
+          echo "Bumped package.json, tauri.conf.json, Cargo.toml → ${VERSION}"
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
