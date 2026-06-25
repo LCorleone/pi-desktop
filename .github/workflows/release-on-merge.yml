@@ -73,11 +73,18 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Bump version in config files
+        shell: bash
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
-          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" package.json
-          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" src-tauri/tauri.conf.json
-          sed -i "s/^version = \"[^\"]*\"/version = \"${VERSION}\"/" src-tauri/Cargo.toml
+          if [ "$(uname)" = "Darwin" ]; then
+            sed -i '' -e "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" package.json
+            sed -i '' -e "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" src-tauri/tauri.conf.json
+            sed -i '' -e "s/^version = \"[^\"]*\"/version = \"${VERSION}\"/" src-tauri/Cargo.toml
+          else
+            sed -i -e "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" package.json
+            sed -i -e "s/\"version\": \"[^\"]*\"/\"version\": \"${VERSION}\"/" src-tauri/tauri.conf.json
+            sed -i -e "s/^version = \"[^\"]*\"/version = \"${VERSION}\"/" src-tauri/Cargo.toml
+          fi
           echo "Bumped package.json, tauri.conf.json, Cargo.toml → ${VERSION}"
 
       - name: Setup Node
