@@ -7,6 +7,7 @@ This folder stores the release notes for each published release of the
 
 | File | Release | Notes |
 |------|---------|-------|
+| [`v1.8.0.md`](./v1.8.0.md) | Provider Presets & Test Connection | 12 provider presets, inline test connection, model-picker + session-list caching, CLI update button |
 | [`v1.7.1.md`](./v1.7.1.md) | Per-Turn Stats & Auto-Release | TPS + cache hit-rate footer, CI auto-release on merge |
 | [`v1.7.0.md`](./v1.7.0.md) | Sans-Refresh UI Polish | Sans chrome / mono code split, workflow status rail + nodes, agent divider + active-session bar, density polish |
 | [`v1.6.0.md`](./v1.6.0.md) | Modified Files & Diff Viewer | File cards with diff stats, diff viewer in file panel, session stability, mac fixes |
