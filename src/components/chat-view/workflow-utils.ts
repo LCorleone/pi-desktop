@@ -84,7 +84,7 @@ interface CollectAssistantWorkflowParams {
 	truncateText: (value: string, len: number) => string;
 }
 
-function pickToolArg(args: Record<string, unknown>, keys: string[]): string {
+export function pickToolArg(args: Record<string, unknown>, keys: string[]): string {
 	for (const key of keys) {
 		const value = args[key];
 		if (typeof value === "string" && value.trim().length > 0) return value.trim();

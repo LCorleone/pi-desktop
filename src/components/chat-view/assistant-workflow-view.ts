@@ -1,6 +1,6 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { AssistantWorkflow, ToolCategory, WorkflowToolCall, WorkflowToolCallGroup } from "./workflow-utils.js";
-import { getToolCategory, getToolLabel } from "./workflow-utils.js";
+import { getToolCategory, getToolLabel, pickToolArg } from "./workflow-utils.js";
 import { renderTurnStatsFooter, type TurnStats } from "./turn-stats-utils.js";
 
 /**
@@ -15,6 +15,25 @@ function trimAgentOutput(output: string, running: boolean): string {
 	const limit = running ? 4 : 15;
 	if (lines.length <= limit) return lines.join("\n");
 	return `...\n${lines.slice(-limit).join("\n")}`;
+}
+
+/**
+ * Emulate terminal carriage-return behavior for display. Tools like curl,
+ * wget, npm, and pip render an updating progress bar by emitting `\r` to
+ * move the cursor back to the start of the line and overwriting it. In a
+ * `<pre>` those `\r`s become a wall of duplicate lines and the latest
+ * state scrolls out of view. Per logical line we keep only the text after
+ * the last `\r`, which is how a terminal ends up displaying it.
+ */
+function collapseCarriageReturns(value: string): string {
+	return value
+		.replace(/\r\n/g, "\n")
+		.split("\n")
+		.map((line) => {
+			const last = line.lastIndexOf("\r");
+			return last === -1 ? line : line.slice(last + 1);
+		})
+		.join("\n");
 }
 
 function formatTokenCount(n: number): string {
@@ -493,18 +512,24 @@ export function renderAssistantWorkflowView({
 									const groupFailed = group.calls.some((toolCall) => toolCall.isError);
 									const groupExpanded = isToolGroupExpanded(workflow.id, group.id);
 									const rawOutput =
-										[...group.calls]
-											.reverse()
-											.map((call) => (call.streamingOutput ?? call.result ?? "").trim())
-											.find((value) => value.length > 0) ?? "";
+										collapseCarriageReturns(
+											[...group.calls]
+												.reverse()
+												.map((call) => (call.streamingOutput ?? call.result ?? "").trim())
+												.find((value) => value.length > 0) ?? "",
+										);
 									const output = group.category === "agent" ? trimAgentOutput(rawOutput, groupRunning) : rawOutput;
 									const statusLabel = groupRunning ? "running" : groupFailed ? "failed" : "success";
+									const terminalCommand = group.category === "terminal" && group.calls.length > 0
+										? pickToolArg(group.calls[0].args, ["command", "cmd", "shell", "script"])
+										: "";
+									const tooltipText = terminalCommand ? terminalCommand.slice(0, 500) : (output ? output.slice(0, 300) : undefined);
 									return html`
 										<div class="tool-workflow-item ${groupRunning ? "running" : groupFailed ? "failed" : "done"}">
 											<button
 												class="tool-workflow-line ${groupRunning ? "running" : groupFailed ? "failed" : "done"}"
 												@click=${() => toggleToolGroupExpanded(workflow.id, group.id)}
-												title=${output ? output.slice(0, 300) : undefined}
+												title=${tooltipText || nothing}
 											>
 												${groupRunning
 													? html`<span class="tool-workflow-inline-pi" aria-hidden="true">${piGlyphIcon()}</span>`
@@ -540,7 +565,9 @@ export function renderAssistantWorkflowView({
 																	// No task-notification XML — fall back to cleaned text
 																	return html`<pre class="tool-workflow-output">${groupRunning ? "working…" : (output || "No output reported.")}${groupRunning ? html`<span class="streaming-inline"></span>` : nothing}</pre>`;
 															})()
-															: html`<pre class="tool-workflow-output">${output || "No output reported."}${groupRunning ? html`<span class="streaming-inline"></span>` : nothing}</pre>`}
+															: html`
+																${terminalCommand ? html`<pre class="tool-workflow-command">${terminalCommand}</pre>` : nothing}
+																<pre class="tool-workflow-output">${output || "No output reported."}${groupRunning ? html`<span class="streaming-inline"></span>` : nothing}</pre>`}
 														<div class="tool-workflow-detail-meta"><span class="tool-workflow-detail-status ${groupRunning ? "running" : groupFailed ? "error" : "done"}"><span class="tool-status-dot"></span>${statusLabel}</span></div>
 													</div>
 												`
