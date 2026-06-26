@@ -1,4 +1,5 @@
 import { rpcBridge, type RpcImageInput, type RpcSessionState } from "../../rpc/bridge.js";
+import { getConstraintsPrefix } from "../../rpc/constraints.js";
 
 type NoticeKind = "info" | "success" | "error";
 
@@ -101,7 +102,7 @@ export async function sendMessageFlow<ImageItem>({
 	try {
 		const rpcImages = toRpcImages(images);
 		if (actualMode === "prompt") {
-			await rpcBridge.prompt(text, { images: rpcImages });
+			await rpcBridge.prompt(getConstraintsPrefix() + text, { images: rpcImages });
 		} else if (actualMode === "steer") {
 			await rpcBridge.steer(text, rpcImages);
 		} else {

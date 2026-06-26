@@ -53,4 +53,5 @@ export const BUILTIN_SLASH_COMMANDS: BuiltinSlashCommandDefinition[] = [
 	{ name: "resume", description: "Open session browser, /resume <query> pre-fills search" },
 	{ name: "reload", description: "Reload runtime (bridge restart + state/models/commands refresh)" },
 	{ name: "quit", description: "Quit Desktop app" },
+	{ name: "constraints", description: "Open constraints settings — agent guardrails (per-session / global)" },
 ];
