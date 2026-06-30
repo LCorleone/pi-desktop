@@ -1567,6 +1567,48 @@ async function withRpcRetry<T>(label: string, run: () => Promise<T>, attempts = 
 	throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
+/**
+ * Clean an LLM-generated session title: strip common preamble ("Sure:", "Title:",
+ * "Here's the topic:"), surrounding quotes/bold/heading markers, and reject
+ * outputs that are too long (likely preamble leakage). Mirrors Craft Agents'
+ * validateTitle() approach. Returns the cleaned title, or "" to signal the
+ * caller should use its word-based fallback.
+ */
+function cleanAutoTitle(raw: string | null | undefined): string {
+	if (!raw) return "";
+	let cleaned = raw.trim();
+
+	// Iteratively strip leading preamble before a colon ("Sure: Title: Foo", etc.)
+	let prev = "";
+	while (cleaned !== prev) {
+		prev = cleaned;
+		const colonIndex = cleaned.indexOf(":");
+		if (colonIndex > 0 && colonIndex < 40) {
+			const before = cleaned.slice(0, colonIndex).trim().toLowerCase();
+			const isPreamble = /^(title|topic|sure|okay|ok)$/.test(before)
+				|| /^(sure|okay|ok|here(?:'s| is))\b/.test(before)
+				|| /^the\s+(?:title|topic)\b/.test(before);
+			if (isPreamble) cleaned = cleaned.slice(colonIndex + 1).trim();
+		}
+	}
+
+	// Strip surrounding quotes ('...' or "...")
+	if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+		cleaned = cleaned.slice(1, -1).trim();
+	}
+	// Strip surrounding **bold**
+	if (cleaned.startsWith("**") && cleaned.endsWith("**")) {
+		cleaned = cleaned.slice(2, -2).trim();
+	}
+	// Strip leading markdown heading/bullet markers (#, -, *)
+	cleaned = cleaned.replace(/^[#\-*]+\s+/, "").trim();
+
+	// Reject empty, too long, or too many words (likely preamble leakage)
+	if (cleaned.length === 0 || cleaned.length >= 100) return "";
+	if (cleaned.split(/\s+/).length > 10) return "";
+	return cleaned;
+}
+
 async function autoNameSessionIfNew(): Promise<void> {
 	const workspace = getActiveWorkspace();
 	const activeSession = workspace ? getActiveSessionTab(workspace) : null;
@@ -1604,11 +1646,12 @@ async function autoNameSessionIfNew(): Promise<void> {
 		// parsing needed — works with any model in the model picker.
 		let title: string;
 		try {
-			title = await invoke<string>("pi_generate_title", {
+			const raw = await invoke<string>("pi_generate_title", {
 				provider: state.model!.provider,
 				modelId: state.model!.id,
 				userMessage: userMessage,
 			});
+			title = cleanAutoTitle(raw);
 		} catch (err) {
 			console.warn("[auto-name] pi_generate_title failed:", err);
 			title = "";

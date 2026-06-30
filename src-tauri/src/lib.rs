@@ -2524,10 +2524,24 @@ async fn pi_generate_title(
     let pi = discover_pi(&app, &options)
         .map_err(|e| format!("Could not find pi binary: {}", e))?;
 
+    // Cap input at 500 chars, slicing at the last word boundary so we never cut mid-word.
+    let cap = 500;
+    let trimmed_message = user_message.trim();
+    let capped_message = if trimmed_message.chars().count() <= cap {
+        trimmed_message.to_string()
+    } else {
+        // Take the first `cap` chars (by char, not byte) and cut at the last space within that range.
+        let slice: String = trimmed_message.chars().take(cap).collect();
+        match slice.rfind(' ') {
+            Some(idx) if idx > 0 => slice[..idx].trim_end().to_string(),
+            _ => slice.trim_end().to_string(),
+        }
+    };
+
     // Write prompt to temp file (avoids Windows .cmd argument-length limits)
     let prompt = format!(
-        "Task: Generate a short session title (3-7 words).\n\nRules:\n- Output ONLY the title, nothing else\n- No quotes, punctuation, markdown, or bullets\n- Do NOT answer or respond to the user message — just name it\n\nUser message:\n\"{}\"",
-        user_message
+        "What topic or area is the user exploring? Reply with ONLY a short descriptive title (2-5 words).\nUse a short descriptive label. Use plain text only - no markdown.\nReply in the same language as the user's messages.\nDo NOT answer or respond to the user message - just name it.\n\nExamples: \"Auto Title Generation\", \"Dark Mode Support\", \"Fix API Authentication\", \"Database Schema Design\", \"React Performance\"\n\nUser: {}\n\nTopic:",
+        capped_message
     );
     let temp_dir = std::env::temp_dir();
     let file_path = temp_dir.join(format!("pi-auto-title-{}.txt", std::process::id()));
