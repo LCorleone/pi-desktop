@@ -7322,7 +7322,9 @@ body.file-split-resizing #file-split-resize-handle::after {
 	display: grid;
 	place-items: center;
 	background: rgba(0, 0, 0, 0.48);
-	backdrop-filter: blur(4px);
+	/* No backdrop-filter: on macOS WebKit it creates a compositing layer that
+	   makes child modals (.overlay-card) render see-through (their opaque bg
+	   bleeds into the blurred backdrop). The dark dim alone is sufficient. */
 	padding: 18px;
 	border-radius: var(--app-window-radius);
 	overflow: hidden;
