@@ -4871,19 +4871,26 @@ Execute the required file creation/edits directly, then summarize exactly which 
 			});
 		}
 
-		const sortedInstalled = installedRowsData.sort((a, b) => {
-			const typeOrder = (opt: { sortKey: string; options: RowOptions }) => (opt.options.iconName === "skill" ? 0 : opt.options.iconName === "extension" ? 1 : 2);
-			const ta = typeOrder(a);
-			const tb = typeOrder(b);
-			if (ta !== tb) return ta - tb;
-			return a.sortKey.localeCompare(b.sortKey);
-		});
-		const installedRows = sortedInstalled.map((entry) => this.renderPackageRow(entry.options));
+		const sortAlpha = (a: { sortKey: string; options: RowOptions }, b: { sortKey: string; options: RowOptions }) =>
+			a.sortKey.localeCompare(b.sortKey);
+
+		const skillRows = installedRowsData
+			.filter((e) => e.options.iconName === "skill")
+			.sort(sortAlpha)
+			.map((e) => this.renderPackageRow(e.options));
+		const extensionRows = installedRowsData
+			.filter((e) => e.options.iconName === "extension")
+			.sort(sortAlpha)
+			.map((e) => this.renderPackageRow(e.options));
+		const themeRows = installedRowsData
+			.filter((e) => e.options.iconName === "theme")
+			.sort(sortAlpha)
+			.map((e) => this.renderPackageRow(e.options));
 
 		const discoverRows = discoverRowsData
 			.sort((a, b) => a.priority - b.priority || a.sortKey.localeCompare(b.sortKey))
 			.map((entry) => this.renderPackageRow(entry.options));
-		const installedCount = sortedInstalled.length;
+		const installedCount = installedRowsData.length;
 		const discoverCount = discoverRows.length;
 		const installedLoading = this.loadingResources || this.loadingConfig;
 		const discoverLoading = this.loadingCatalog && hasQuery;
@@ -4929,17 +4936,38 @@ Execute the required file creation/edits directly, then summarize exactly which 
 								<div class="packages-section-head">
 									<div>
 										<div class="packages-section-title">Installed</div>
-										<div class="packages-section-submeta">Skills and extensions available in this session.</div>
+										<div class="packages-section-submeta">Skills, extensions, and themes available in this session.</div>
 									</div>
 								</div>
 								${installedLoading
 									? html`<div class="packages-empty">Loading installed items…</div>`
-									: installedRows.length === 0
+									: skillRows.length === 0 && extensionRows.length === 0 && themeRows.length === 0
 										? html`<div class="packages-empty">No packages installed yet.</div>`
 										: html`
-											<div class="packages-list packages-list-grid">
-												${installedRows}
-											</div>
+											${skillRows.length > 0
+												? html`
+													<div class="packages-subgroup">
+														<div class="packages-subgroup-title">Skills</div>
+														<div class="packages-list packages-list-grid">${skillRows}</div>
+													</div>
+												`
+												: nothing}
+											${extensionRows.length > 0
+												? html`
+													<div class="packages-subgroup">
+														<div class="packages-subgroup-title">Extensions</div>
+														<div class="packages-list packages-list-grid">${extensionRows}</div>
+													</div>
+												`
+												: nothing}
+											${themeRows.length > 0
+												? html`
+													<div class="packages-subgroup">
+														<div class="packages-subgroup-title">Themes</div>
+														<div class="packages-list packages-list-grid">${themeRows}</div>
+													</div>
+												`
+												: nothing}
 										`}
 							</section>
 
