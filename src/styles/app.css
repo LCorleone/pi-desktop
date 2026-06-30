@@ -5418,8 +5418,11 @@ body.file-split-resizing #file-split-resize-handle::after {
 	font-weight: 600;
 	color: color-mix(in srgb, var(--text) 82%, var(--muted));
 	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	font-variant-numeric: tabular-nums;
-	width: 7ch;
+	min-width: 7ch;
+	max-width: 80ch;
 	text-align: center;
 }
 

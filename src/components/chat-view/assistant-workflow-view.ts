@@ -1,6 +1,6 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { AssistantWorkflow, ToolCategory, WorkflowToolCall, WorkflowToolCallGroup } from "./workflow-utils.js";
-import { getToolCategory, getToolLabel, pickToolArg } from "./workflow-utils.js";
+import { deriveWorkflowIntent, getToolCategory, getToolLabel, pickToolArg } from "./workflow-utils.js";
 import { renderTurnStatsFooter, type TurnStats } from "./turn-stats-utils.js";
 
 /**
@@ -394,6 +394,11 @@ export function renderAssistantWorkflowView({
 	if (running > 0) summaryParts.push(`${running} running`);
 	if (summaryParts.length === 0 && total > 0) summaryParts.push(`${total} complete`);
 	const summarySecondary = summaryParts.join(" · ");
+	const workflowIntent = deriveWorkflowIntent(workflow);
+	const summaryLabel = workflowIntent ?? summaryPrimary;            // intent, or fall back to duration
+	const summaryMeta = workflowIntent
+		? [durationLabel, summarySecondary].filter((s) => Boolean(s)).join(" · ")  // demote duration+counts
+		: summarySecondary;                                                        // unchanged when no intent
 	const hasFinalContent = Boolean(workflow.finalText || workflow.errorText);
 	const detailEntries: WorkflowDetailEntry[] = [];
 	let lastThinkingFull = "";
@@ -482,8 +487,8 @@ export function renderAssistantWorkflowView({
 					>
 						<span class="workflow-divider" aria-hidden="true"></span>
 						<span class="workflow-summary-center">
-							<span class="workflow-summary-label">${summaryPrimary}</span>
-							${summarySecondary ? html`<span class="workflow-summary-meta">${summarySecondary}</span>` : nothing}
+							<span class="workflow-summary-label">${summaryLabel}</span>
+							${summaryMeta ? html`<span class="workflow-summary-meta">${summaryMeta}</span>` : nothing}
 							<span class="workflow-summary-caret">${expanded ? "▾" : "▸"}</span>
 						</span>
 						<span class="workflow-divider" aria-hidden="true"></span>

@@ -157,6 +157,44 @@ export function summarizeToolCall(
 	return toolCall.name;
 }
 
+/**
+ * Derive a short, human-readable "intent" label for a collapsed workflow.
+ * Priority:
+ *   1. The first meaningful sentence of the agent's thinking text.
+ *   2. A tool-category summary (e.g. "Edit 3 files · Run 2 commands").
+ *   3. null — caller should fall back to the existing duration label.
+ */
+export function deriveWorkflowIntent(workflow: AssistantWorkflow): string | null {
+	const thinking = (workflow.thinkingText ?? "").trim();
+	if (thinking) {
+		const firstSentence = thinking
+			.split(/(?<=[.!?])\s+|\n/)[0]   // first sentence or first line
+			.trim();
+		const cap = 80;
+		if (!firstSentence) return null;
+		return firstSentence.length > cap ? `${firstSentence.slice(0, cap - 1)}…` : firstSentence;
+	}
+	// Heuristic: summarize tool calls by category.
+	const tally: Partial<Record<ToolCategory, number>> = {};
+	for (const group of workflow.toolGroups) {
+		tally[group.category] = (tally[group.category] ?? 0) + group.calls.length;
+	}
+	const parts: string[] = [];
+	const edits = (tally["edit"] ?? 0) + (tally["file-write"] ?? 0);
+	const reads = tally["file-read"] ?? 0;
+	const terminal = tally["terminal"] ?? 0;
+	const search = tally["search"] ?? 0;
+	const agent = tally["agent"] ?? 0;
+	const plural = (n: number) => (n === 1 ? "" : "s");
+	if (edits) parts.push(`Edit ${edits} file${plural(edits)}`);
+	if (reads) parts.push(`Read ${reads} file${plural(reads)}`);
+	if (terminal) parts.push(`Run ${terminal} command${plural(terminal)}`);
+	if (search) parts.push(`Search ${search} time${plural(search)}`);
+	if (agent) parts.push(`Spawn ${agent} agent${plural(agent)}`);
+	const phrase = parts.slice(0, 2).join(" · ");
+	return phrase || null;
+}
+
 export function getToolLabel(category: ToolCategory, name: string): string {
 	switch (category) {
 		case "terminal": return "bash";
