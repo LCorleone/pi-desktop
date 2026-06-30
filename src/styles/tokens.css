@@ -5,6 +5,33 @@
  * Semantic theme mapping lives in theme.css.
  */
 
+/* =============================================================================
+   ANIMATABLE CSS CUSTOM PROPERTIES
+
+   Register the semantic theme color variables as typed <color> so the browser
+   can interpolate them. This makes dark/light theme switches and hover theme
+   previews animate smoothly. Chromium/Tauri webview supports @property.
+   Register only the underlying semantic tokens; aliases in app.css (--bg,
+   --text, --accent, ...) resolve through var() and inherit the type.
+============================================================================= */
+
+@property --color-bg-app { syntax: "<color>"; inherits: true; initial-value: #0a0a0c; }
+@property --color-bg-elevated { syntax: "<color>"; inherits: true; initial-value: #16161a; }
+@property --color-bg-muted { syntax: "<color>"; inherits: true; initial-value: #1e1e24; }
+@property --color-bg-soft { syntax: "<color>"; inherits: true; initial-value: #252530; }
+@property --color-bg-sidebar { syntax: "<color>"; inherits: true; initial-value: #0c0c0e; }
+@property --color-bg-workspace-chrome { syntax: "<color>"; inherits: true; initial-value: #131318; }
+@property --color-bg-workspace-chrome-soft { syntax: "<color>"; inherits: true; initial-value: #1a1b24; }
+@property --color-border-default { syntax: "<color>"; inherits: true; initial-value: rgb(255 255 255 / 0.12); }
+@property --color-text-primary { syntax: "<color>"; inherits: true; initial-value: #f5f5f7; }
+@property --color-text-secondary { syntax: "<color>"; inherits: true; initial-value: #9a9aa3; }
+@property --color-text-tertiary { syntax: "<color>"; inherits: true; initial-value: #6f7078; }
+@property --color-accent-primary { syntax: "<color>"; inherits: true; initial-value: #0285ff; }
+@property --color-accent-soft { syntax: "<color>"; inherits: true; initial-value: rgb(2 133 255 / 0.15); }
+@property --color-state-danger { syntax: "<color>"; inherits: true; initial-value: #ef4444; }
+@property --color-state-success { syntax: "<color>"; inherits: true; initial-value: #22c55e; }
+@property --color-state-warning { syntax: "<color>"; inherits: true; initial-value: #f59e0b; }
+
 :root {
 	/* Spacing */
 	--space-unit: 0.25rem;
