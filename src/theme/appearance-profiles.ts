@@ -21,7 +21,7 @@ export interface DesktopAppearanceProfiles {
 export const DESKTOP_APPEARANCE_PROFILES_STORAGE_KEY = "pi-desktop.appearance.profiles.v1";
 export const DESKTOP_APPEARANCE_PROFILE_CHANGED_EVENT = "pi-desktop:appearance-profile-changed";
 
-const DEFAULT_UI_FONT = '"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace';
+const DEFAULT_UI_FONT = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 const DEFAULT_CODE_FONT = '"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace';
 
 // Previously shipped default fonts. Stored profiles equal to one of these are
@@ -29,6 +29,7 @@ const DEFAULT_CODE_FONT = '"JetBrains Mono", ui-monospace, Menlo, Consolas, mono
 // users (genuine custom values are preserved).
 const LEGACY_DEFAULT_UI_FONTS = new Set([
 	'-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+	'"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace',
 ]);
 const LEGACY_DEFAULT_CODE_FONTS = new Set([
 	'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace',
