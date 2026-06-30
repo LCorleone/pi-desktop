@@ -168,7 +168,10 @@ export function deriveWorkflowIntent(workflow: AssistantWorkflow): string | null
 	const thinking = (workflow.thinkingText ?? "").trim();
 	if (thinking) {
 		const firstSentence = thinking
-			.split(/(?<=[.!?])\s+|\n/)[0]   // first sentence or first line
+			// Split on sentence-ending punctuation + whitespace, or a newline.
+			// Avoid lookbehind ((?<=...)) — unsupported on macOS WebKit (throws
+			// "Invalid regular expression: invalid group specifier name").
+			.split(/[.!?]\s+|\n/)[0]
 			.trim();
 		const cap = 80;
 		if (!firstSentence) return null;
