@@ -4742,7 +4742,7 @@ Execute the required file creation/edits directly, then summarize exactly which 
 				description: item.resource?.description || item.definition.description,
 				note,
 				iconName: "skill",
-				actions: html`<button class="packages-row-install installed" title="Installed" @click=${() => void this.openPackagesItemModal({ kind: "recommended-skill", item })}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6"></path></svg></button>`,
+				actions: html`<button class="packages-row-install installed" title="Installed" @click=${() => void this.openPackagesItemModal({ kind: "recommended-skill", item })}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6"></path></svg></button>`,
 				onTitleClick: () => void this.openPackagesItemModal({ kind: "recommended-skill", item }),
 				titleAttr: item.definition.skillName,
 			});
@@ -4754,7 +4754,7 @@ Execute the required file creation/edits directly, then summarize exactly which 
 				description: item.description || "Skill",
 				note: item.path || (item.packageDisplayName ? `Package: ${item.packageDisplayName}` : "Runtime command"),
 				iconName: "skill",
-				actions: html`<button class="packages-row-install installed" title="Installed" @click=${() => void this.openPackagesItemModal({ kind: "skill", item })}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6"></path></svg></button>`,
+				actions: html`<button class="packages-row-install installed" title="Installed" @click=${() => void this.openPackagesItemModal({ kind: "skill", item })}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6"></path></svg></button>`,
 				onTitleClick: () => void this.openPackagesItemModal({ kind: "skill", item }),
 				titleAttr: item.path || item.commandText,
 			});
@@ -4766,7 +4766,7 @@ Execute the required file creation/edits directly, then summarize exactly which 
 				description: item.description,
 				note: item.path,
 				iconName: "theme",
-				actions: html`<button class="packages-row-install installed" title="Installed" @click=${() => void this.openPackagesItemModal({ kind: "theme", item })}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6"></path></svg></button>`,
+				actions: html`<button class="packages-row-install installed" title="Installed" @click=${() => void this.openPackagesItemModal({ kind: "theme", item })}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6"></path></svg></button>`,
 				onTitleClick: () => void this.openPackagesItemModal({ kind: "theme", item }),
 				titleAttr: item.path,
 			});
@@ -4778,7 +4778,7 @@ Execute the required file creation/edits directly, then summarize exactly which 
 				description: item.description || item.source,
 				note: item.note,
 				iconName: extensionIconFor(item),
-				actions: html`<button class="packages-row-install installed" title="Installed" @click=${() => void this.openPackagesItemModal({ kind: "extension", item })}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6"></path></svg></button>`,
+				actions: html`<button class="packages-row-install installed" title="Installed" @click=${() => void this.openPackagesItemModal({ kind: "extension", item })}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6"></path></svg></button>`,
 				onTitleClick: () => void this.openPackagesItemModal({ kind: "extension", item }),
 				titleAttr: item.source,
 			});
