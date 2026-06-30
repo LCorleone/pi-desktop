@@ -6053,6 +6053,8 @@ body.file-split-resizing #file-split-resize-handle::after {
 .chat-input {
 	width: 100%;
 	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
 	min-height: 54px;
 	max-height: 160px;
 	resize: none;
