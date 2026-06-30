@@ -7,7 +7,6 @@ build/
 
 # Rust
 target/
-src-tauri/Cargo.lock
 
 # Tauri generated
 src-tauri/gen/
