@@ -1199,6 +1199,17 @@ export class PackagesView {
 		const root = this.resourceRootPath("skill", scope);
 		if (!root) return [];
 		const out: DiscoveredResourceItem[] = [];
+		const readSkillDescription = async (fullPath: string): Promise<string> => {
+			try {
+				const { readTextFile } = await import("@tauri-apps/plugin-fs");
+				const content = await readTextFile(fullPath);
+				const parsed = parseFrontmatter(content);
+				const desc = (parsed.attributes.description ?? "").trim();
+				return desc || "Local skill";
+			} catch {
+				return "Local skill";
+			}
+		};
 		const queue: Array<{ path: string; depth: number }> = [{ path: root, depth: 0 }];
 		while (queue.length > 0) {
 			const next = queue.shift()!;
@@ -1215,11 +1226,12 @@ export class PackagesView {
 				if (lower === "skill.md") {
 					const skillName = pathBaseName(next.path).trim();
 					if (!skillName) continue;
+					const description = await readSkillDescription(fullPath);
 					out.push({
 						id: `skill:${skillName}:${fullPath}`.toLowerCase(),
 						kind: "skill",
 						name: skillName,
-						description: "Local skill",
+						description,
 						commandText: `/skill:${skillName}`,
 						path: fullPath,
 						origin: scope === "global" ? "user" : "project",
@@ -1235,11 +1247,12 @@ export class PackagesView {
 				if (!lower.endsWith(".md")) continue;
 				const skillName = fileStem(entry.name).trim();
 				if (!skillName) continue;
+				const description = await readSkillDescription(fullPath);
 				out.push({
 					id: `skill:${skillName}:${fullPath}`.toLowerCase(),
 					kind: "skill",
 					name: skillName,
-					description: "Local skill",
+					description,
 					commandText: `/skill:${skillName}`,
 					path: fullPath,
 					origin: scope === "global" ? "user" : "project",
