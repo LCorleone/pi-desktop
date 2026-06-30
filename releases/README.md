@@ -7,6 +7,7 @@ This folder stores the release notes for each published release of the
 
 | File | Release | Notes |
 |------|---------|-------|
+| [`v1.8.3.md`](./v1.8.3.md) | macOS Fixes & Workflow Polish | WebKit regex fix, intent summaries, font defaults, animatable tokens, packages tabs, known macOS bugs documented |
 | [`v1.8.2.md`](./v1.8.2.md) | Token Stats Fix | Fixes stale token/cost display when switching sessions via the content cache |
 | [`v1.8.1.md`](./v1.8.1.md) | Instant Session Switching | Session content cache for instant switch-back, no blank flash, background refresh |
 | [`v1.8.0.md`](./v1.8.0.md) | Provider Presets & Test Connection | 12 provider presets, inline test connection, model-picker + session-list caching, CLI update button |
