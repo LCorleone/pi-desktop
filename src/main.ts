@@ -31,6 +31,7 @@ import { isExtensionConfigIntent, normalizeExtensionCommandName } from "./extens
 import { ensureDesktopSdkCompatExtensionInstalled } from "./extensions/sdk-compat-extension.js";
 import { ensureSmartVoiceNotifyDesktopHostMode } from "./extensions/smart-voice-notify-config.js";
 import "./styles/app.css";
+import { applyPlatformClass } from "./platform.js";
 
 interface WorkspaceSessionTab {
 	id: string;
@@ -5002,6 +5003,7 @@ function setupThemeSyncListeners(): void {
 	window.addEventListener(DESKTOP_APPEARANCE_PROFILE_CHANGED_EVENT, refreshThemeProjection);
 }
 
+applyPlatformClass();
 applyInitialTheme();
 applyWindowChrome();
 void applyNativeWindowVisualFixes();

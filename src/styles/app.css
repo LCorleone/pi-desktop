@@ -9723,3 +9723,24 @@ button:active:not(:disabled),
 		scroll-behavior: auto !important;
 	}
 }
+
+/* -------------------------------------------------------------------------- */
+/* macOS platform overrides
+/* On macOS the Tauri window is transparent and WKWebView promotes
+/* backdrop-filter parents to a compositing layer that makes opaque
+/* descendants render see-through. Scope fixes to macOS only so Windows
+/* keeps its frosted-glass appearance. */
+/* -------------------------------------------------------------------------- */
+
+html.platform-macos .composer-panel {
+	backdrop-filter: none;
+	background: var(--bg-elev);
+}
+
+html.platform-macos .model-picker-popover {
+	background: var(--bg-elev);
+}
+
+html.platform-macos .packages-skill-content {
+	background: var(--bg-elev);
+}
