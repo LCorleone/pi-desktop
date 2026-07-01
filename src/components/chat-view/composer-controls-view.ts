@@ -134,7 +134,6 @@ export function renderComposerControlsView({
 							onToggleModelPicker(resolvedActiveProvider);
 						}}
 					>
-						<span class="mp-build-verify-dot" title="build-verify" aria-hidden="true"></span>
 						<span class="model-picker-trigger-label">${currentProviderDisplay ? `${currentModelDisplay} · ${currentProviderDisplay}` : currentModelDisplay}</span>
 						<span class="composer-select-caret">▾</span>
 					</button>

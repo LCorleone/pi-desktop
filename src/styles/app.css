@@ -9724,15 +9724,3 @@ button:active:not(:disabled),
 	}
 }
 
-/* Build verification dot (kept per user request) */
-.mp-build-verify-dot {
-	display: inline-block;
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	background: #ff0000;
-	box-shadow: 0 0 4px #ff0000;
-	flex-shrink: 0;
-	margin-right: 4px;
-	align-self: center;
-}
