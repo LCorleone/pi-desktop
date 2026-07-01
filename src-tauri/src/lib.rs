@@ -2712,7 +2712,10 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.set_background_color(Some(tauri::utils::config::Color(0, 0, 0, 0)));
+                    // Opaque substrate (#0a0a0c) prevents WKWebView from bleeding the
+                    // transparent window through compositing layers, which made the
+                    // model picker popover and packages skill text render washed out.
+                    let _ = window.set_background_color(Some(tauri::utils::config::Color(10, 10, 12, 255)));
                     let _ = window.set_shadow(true);
                 }
             }
