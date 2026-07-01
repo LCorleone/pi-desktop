@@ -1,4 +1,5 @@
 import { getAppearanceProfileForResolvedTheme, loadDesktopAppearanceProfiles } from "./appearance-profiles.js";
+import { srgbMix } from "./color-mix-helpers.js";
 import type { DesktopThemeResolved } from "./theme-manager.js";
 
 interface PiThemeFile {
@@ -177,32 +178,35 @@ function buildPiThemeOverlay(
 
 	if (accent) {
 		result["--color-accent-primary"] = accent;
-		result["--color-accent-soft"] = `color-mix(in srgb, ${accent} 20%, transparent)`;
+		result["--color-accent-soft"] = srgbMix(accent, 20, "transparent") ?? `color-mix(in srgb, ${accent} 20%, transparent)`;
 	}
 
 	// Important: foreground should mainly control text, not surface tint.
 	// Keep surface derivation tied to background to avoid colored "veil" overlays.
+	// Precompute mixes to plain rgb() so tokens aren't color-mix() expressions
+	// (nested color-mix is unsupported on macOS WKWebView 605.1.15 and drops the
+	// whole declaration, making surfaces render transparent).
 	if (background) {
 		result["--color-bg-app"] = background;
-		result["--color-bg-elevated"] = `color-mix(in srgb, ${background} 94%, ${neutralLift} 6%)`;
-		result["--color-bg-muted"] = `color-mix(in srgb, ${background} 89%, ${neutralLift} 11%)`;
-		result["--color-bg-soft"] = `color-mix(in srgb, ${background} 84%, ${neutralLift} 16%)`;
-		result["--color-bg-sidebar"] = `color-mix(in srgb, ${background} ${sidebarBase}, black ${sidebarShade})`;
-		result["--color-bg-workspace-chrome"] = `color-mix(in srgb, ${background} 92%, ${neutralLift} 8%)`;
-		result["--color-bg-workspace-chrome-soft"] = `color-mix(in srgb, ${background} 86%, ${neutralLift} 14%)`;
+		result["--color-bg-elevated"] = srgbMix(background, 94, neutralLift) ?? `color-mix(in srgb, ${background} 94%, ${neutralLift} 6%)`;
+		result["--color-bg-muted"] = srgbMix(background, 89, neutralLift) ?? `color-mix(in srgb, ${background} 89%, ${neutralLift} 11%)`;
+		result["--color-bg-soft"] = srgbMix(background, 84, neutralLift) ?? `color-mix(in srgb, ${background} 84%, ${neutralLift} 16%)`;
+		result["--color-bg-sidebar"] = srgbMix(background, Number.parseFloat(sidebarBase), "black") ?? `color-mix(in srgb, ${background} ${sidebarBase}, black ${sidebarShade})`;
+		result["--color-bg-workspace-chrome"] = srgbMix(background, 92, neutralLift) ?? `color-mix(in srgb, ${background} 92%, ${neutralLift} 8%)`;
+		result["--color-bg-workspace-chrome-soft"] = srgbMix(background, 86, neutralLift) ?? `color-mix(in srgb, ${background} 86%, ${neutralLift} 14%)`;
 	}
 
 	if (foreground) {
 		result["--color-text-primary"] = foreground;
 		if (background) {
-			result["--color-text-secondary"] = `color-mix(in srgb, ${foreground} 68%, ${background} 32%)`;
-			result["--color-text-tertiary"] = `color-mix(in srgb, ${foreground} 52%, ${background} 48%)`;
+			result["--color-text-secondary"] = srgbMix(foreground, 68, background) ?? `color-mix(in srgb, ${foreground} 68%, ${background} 32%)`;
+			result["--color-text-tertiary"] = srgbMix(foreground, 52, background) ?? `color-mix(in srgb, ${foreground} 52%, ${background} 48%)`;
 		} else {
-			result["--color-text-secondary"] = `color-mix(in srgb, ${foreground} 68%, transparent)`;
-			result["--color-text-tertiary"] = `color-mix(in srgb, ${foreground} 52%, transparent)`;
+			result["--color-text-secondary"] = srgbMix(foreground, 68, "transparent") ?? `color-mix(in srgb, ${foreground} 68%, transparent)`;
+			result["--color-text-tertiary"] = srgbMix(foreground, 52, "transparent") ?? `color-mix(in srgb, ${foreground} 52%, transparent)`;
 		}
 		// Keep border subtle and neutral-ish relative to foreground.
-		result["--color-border-default"] = `color-mix(in srgb, ${foreground} 12%, transparent)`;
+		result["--color-border-default"] = srgbMix(foreground, 12, "transparent") ?? `color-mix(in srgb, ${foreground} 12%, transparent)`;
 	}
 
 	return result;

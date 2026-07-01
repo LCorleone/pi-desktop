@@ -1,3 +1,4 @@
+import { srgbMix } from "./color-mix-helpers.js";
 import type { DesktopThemeResolved } from "./theme-manager.js";
 
 export type ThemeVariant = "light" | "dark";
@@ -141,7 +142,7 @@ export function applyDesktopAppearanceProfileToRoot(
 
 	if (profile.accent) {
 		root.style.setProperty("--color-accent-primary", profile.accent);
-		root.style.setProperty("--color-accent-soft", `color-mix(in srgb, ${profile.accent} 20%, transparent)`);
+		root.style.setProperty("--color-accent-soft", srgbMix(profile.accent, 20, "transparent") ?? `color-mix(in srgb, ${profile.accent} 20%, transparent)`);
 	}
 
 	if (profile.background) {
@@ -149,20 +150,20 @@ export function applyDesktopAppearanceProfileToRoot(
 		const sidebarBase = resolved === "dark" ? "86%" : "92%";
 		const sidebarShade = resolved === "dark" ? "14%" : "8%";
 		root.style.setProperty("--color-bg-app", profile.background);
-		root.style.setProperty("--color-bg-elevated", `color-mix(in srgb, ${profile.background} 94%, ${neutralLift} 6%)`);
-		root.style.setProperty("--color-bg-muted", `color-mix(in srgb, ${profile.background} 89%, ${neutralLift} 11%)`);
-		root.style.setProperty("--color-bg-soft", `color-mix(in srgb, ${profile.background} 84%, ${neutralLift} 16%)`);
-		root.style.setProperty("--color-bg-sidebar", `color-mix(in srgb, ${profile.background} ${sidebarBase}, black ${sidebarShade})`);
-		root.style.setProperty("--color-bg-workspace-chrome", `color-mix(in srgb, ${profile.background} 92%, ${neutralLift} 8%)`);
-		root.style.setProperty("--color-bg-workspace-chrome-soft", `color-mix(in srgb, ${profile.background} 86%, ${neutralLift} 14%)`);
+		root.style.setProperty("--color-bg-elevated", srgbMix(profile.background, 94, neutralLift) ?? `color-mix(in srgb, ${profile.background} 94%, ${neutralLift} 6%)`);
+		root.style.setProperty("--color-bg-muted", srgbMix(profile.background, 89, neutralLift) ?? `color-mix(in srgb, ${profile.background} 89%, ${neutralLift} 11%)`);
+		root.style.setProperty("--color-bg-soft", srgbMix(profile.background, 84, neutralLift) ?? `color-mix(in srgb, ${profile.background} 84%, ${neutralLift} 16%)`);
+		root.style.setProperty("--color-bg-sidebar", srgbMix(profile.background, Number.parseFloat(sidebarBase), "black") ?? `color-mix(in srgb, ${profile.background} ${sidebarBase}, black ${sidebarShade})`);
+		root.style.setProperty("--color-bg-workspace-chrome", srgbMix(profile.background, 92, neutralLift) ?? `color-mix(in srgb, ${profile.background} 92%, ${neutralLift} 8%)`);
+		root.style.setProperty("--color-bg-workspace-chrome-soft", srgbMix(profile.background, 86, neutralLift) ?? `color-mix(in srgb, ${profile.background} 86%, ${neutralLift} 14%)`);
 	}
 
 	if (profile.foreground) {
 		const bgForMix = profile.background || "transparent";
 		root.style.setProperty("--color-text-primary", profile.foreground);
-		root.style.setProperty("--color-text-secondary", `color-mix(in srgb, ${profile.foreground} 68%, ${bgForMix} 32%)`);
-		root.style.setProperty("--color-text-tertiary", `color-mix(in srgb, ${profile.foreground} 52%, ${bgForMix} 48%)`);
-		root.style.setProperty("--color-border-default", `color-mix(in srgb, ${profile.foreground} 12%, transparent)`);
+		root.style.setProperty("--color-text-secondary", srgbMix(profile.foreground, 68, bgForMix) ?? `color-mix(in srgb, ${profile.foreground} 68%, ${bgForMix} 32%)`);
+		root.style.setProperty("--color-text-tertiary", srgbMix(profile.foreground, 52, bgForMix) ?? `color-mix(in srgb, ${profile.foreground} 52%, ${bgForMix} 48%)`);
+		root.style.setProperty("--color-border-default", srgbMix(profile.foreground, 12, "transparent") ?? `color-mix(in srgb, ${profile.foreground} 12%, transparent)`);
 	}
 
 	root.style.setProperty("--font-family-sans", profile.uiFont);
