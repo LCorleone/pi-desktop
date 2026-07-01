@@ -2333,8 +2333,8 @@ body.file-split-resizing #file-split-resize-handle::after {
 	width: 36px;
 	height: 36px;
 	border-radius: 999px;
-	border: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
-	background: color-mix(in srgb, var(--bg-soft) 54%, var(--bg));
+	border: 1px solid var(--border);
+	background: var(--bg-soft);
 	color: var(--text);
 	display: grid;
 	place-items: center;
@@ -2345,7 +2345,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 }
 
 .packages-row-install:hover {
-	background: color-mix(in srgb, var(--bg-soft) 84%, var(--bg));
+	background: var(--bg-muted);
 }
 
 .packages-row-install.add {
@@ -2354,23 +2354,21 @@ body.file-split-resizing #file-split-resize-handle::after {
 
 .packages-row-install.installed {
 	color: var(--success);
-	border-color: color-mix(in srgb, var(--success) 34%, var(--border));
-	background: color-mix(in srgb, var(--success) 10%, var(--bg));
+	border-color: var(--success);
 	font-size: 16px;
 }
 
 .packages-row-install.installed:hover {
-	background: color-mix(in srgb, var(--success) 14%, var(--bg));
+	background: var(--bg-muted);
 }
 
 .packages-row-install.remove {
 	color: var(--danger);
-	border-color: color-mix(in srgb, var(--danger) 34%, var(--border));
-	background: color-mix(in srgb, var(--danger) 9%, var(--bg));
+	border-color: var(--danger);
 }
 
 .packages-row-install.remove:hover {
-	background: color-mix(in srgb, var(--danger) 14%, var(--bg));
+	background: var(--bg-muted);
 }
 
 .packages-row-install:disabled {
