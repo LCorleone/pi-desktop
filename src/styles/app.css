@@ -9724,46 +9724,7 @@ button:active:not(:disabled),
 	}
 }
 
-/* -------------------------------------------------------------------------- */
-/* macOS platform overrides
-/* On macOS the transparent Tauri window substrate causes WKWebView to bleed
-/* transparency through compositing layers (popover + skill text washed out).
-/* Make the html/body substrate opaque on macOS only; Windows stays transparent
-/* and keeps its frosted-glass chrome. */
-/* -------------------------------------------------------------------------- */
-
-html.platform-macos,
-html.platform-macos body {
-	background: var(--bg);
-}
-
-/* -------------------------------------------------------------------------- */
-/* Model picker portal (body-level, macOS-safe)
-/* The popover is portaled to <body> so it escapes the composer's
-/* backdrop-filter compositing layer (which made it see-through on macOS).
-/* Positioned via CSS vars set from JS (getBoundingClientRect of trigger). */
-/* -------------------------------------------------------------------------- */
-
-.model-picker-portal {
-	position: fixed;
-	left: 0;
-	top: 0;
-	z-index: 2400;
-	pointer-events: none;
-}
-
-.model-picker-portal .model-picker-popover {
-	position: fixed;
-	left: var(--mp-left, 0);
-	/* bottom edge of popover = (trigger top - 8px) measured from viewport top.
-	   Since popover is fixed with a set height (244px), set top so its bottom
-	   lands at --mp-bottom-from-top. top = bottom-from-top - height. */
-	top: calc(var(--mp-bottom-from-top, 100vh) - 244px);
-	max-width: var(--mp-max-width, min(92vw, 470px));
-	pointer-events: auto;
-}
-
-/* TEMP BUILD VERIFICATION — remove after confirming latest build runs */
+/* Build verification dot (kept per user request) */
 .mp-build-verify-dot {
 	display: inline-block;
 	width: 8px;

@@ -32,7 +32,6 @@ import {
 import {
 	buildModelPickerProviderGroups,
 	resolveActiveModelPickerProvider,
-	type ModelPickerProviderGroup,
 } from "../models/model-picker-provider-groups.js";
 import {
 	resolveModelCandidateFromArg,
@@ -40,7 +39,7 @@ import {
 	resolveProviderHintFromModelArg,
 } from "../models/model-selection.js";
 import { isExtensionConfigIntent, normalizeExtensionCommandName } from "../extensions/extension-command-intent.js";
-import { renderComposerControlsView, renderModelPickerPopover } from "./chat-view/composer-controls-view.js";
+import { renderComposerControlsView } from "./chat-view/composer-controls-view.js";
 import {
 	renderComposerSkillDraftPillView,
 	renderPendingFileReferencesView,
@@ -511,7 +510,6 @@ export class ChatView {
 	private unsupportedThinkingLevelsByModel = new Map<string, Set<ThinkingLevel>>();
 	private modelPickerOpen = false;
 	private modelPickerActiveProvider = "";
-	private modelPickerPortalEl: HTMLDivElement | null = null;
 	private modelPickerGlobalListenersBound = false;
 	private runningProviderAuthAction: { provider: string; action: "login" | "logout" } | null = null;
 	private sendingPrompt = false;
@@ -733,7 +731,6 @@ export class ChatView {
 
 	private resetSessionUiTransientState(): void {
 		this.modelPickerOpen = false;
-		this.removeModelPickerPortal();
 		this.selectedSkillDraft = null;
 		this.pendingFileReferences = [];
 		this.slashPaletteOpen = false;
@@ -1418,70 +1415,10 @@ export class ChatView {
 		this.render();
 	}
 
-	private ensureModelPickerPortal(): HTMLDivElement {
-		if (!this.modelPickerPortalEl) {
-			const el = document.createElement("div");
-			el.className = "model-picker-portal";
-			el.id = "model-picker-portal";
-			document.body.appendChild(el);
-			this.modelPickerPortalEl = el;
-		}
-		return this.modelPickerPortalEl;
-	}
-
-	private removeModelPickerPortal(): void {
-		if (this.modelPickerPortalEl) {
-			this.modelPickerPortalEl.remove();
-			this.modelPickerPortalEl = null;
-		}
-	}
-
-	private renderModelPickerPortal(
-		providerGroups: ModelPickerProviderGroup[],
-		activeProviderGroup: ModelPickerProviderGroup | null,
-		resolvedActiveProvider: string,
-		currentProvider: string,
-		currentModelId: string,
-		currentModelValue: string,
-	): void {
-		const portal = this.ensureModelPickerPortal();
-		const trigger = this.container.querySelector(".model-picker-trigger") as HTMLElement | null;
-		if (trigger) {
-			const rect = trigger.getBoundingClientRect();
-			portal.style.setProperty("--mp-left", `${rect.left}px`);
-			portal.style.setProperty("--mp-bottom-from-top", `${rect.top - 8}px`);
-			portal.style.setProperty("--mp-max-width", `${rect.width + 300}px`);
-		}
-		render(
-			html`
-				${renderModelPickerPopover({
-					modelPickerOpen: this.modelPickerOpen,
-					loadingModels: this.loadingModels,
-					loadingModelCatalog: this.loadingModelCatalog,
-					providerGroups,
-					activeProviderGroup,
-					resolvedActiveProvider,
-					runningProviderAuthActionProvider: this.runningProviderAuthAction?.provider ?? null,
-					currentProvider,
-					currentModelId,
-					currentModelValue,
-					interactionLocked: this.isComposerInteractionLocked(),
-					settingModel: this.settingModel,
-					onCloseModelPicker: (options) => this.closeModelPicker(options),
-					onSetModelPickerActiveProvider: (provider) => this.setModelPickerActiveProvider(provider),
-					onProviderAuthAction: (provider, action) => this.handleProviderAuthAction(provider, action),
-					onSelectModel: (provider, modelId) => this.setModel(provider, modelId),
-				})}
-			`,
-			portal,
-		);
-	}
-
 	private closeModelPicker(options: { focusComposer?: boolean } = {}): void {
 		if (!this.modelPickerOpen) return;
 		this.modelPickerOpen = false;
 		this.render();
-		this.removeModelPickerPortal();
 		if (options.focusComposer) {
 			requestAnimationFrame(() => this.focusInput());
 		}
@@ -1680,7 +1617,7 @@ export class ChatView {
 	private onGlobalPointerDownForModelPicker = (event: Event): void => {
 		if (!this.modelPickerOpen) return;
 		const target = event.target;
-		if (target instanceof Element && (target.closest(".model-picker-root") || target.closest(".model-picker-portal"))) return;
+		if (target instanceof Element && target.closest(".model-picker-root")) return;
 		this.closeModelPicker();
 	};
 
@@ -1721,7 +1658,6 @@ export class ChatView {
 	}
 
 	disconnect(): void {
-		this.removeModelPickerPortal();
 		this.unsubscribeEvents?.();
 		this.unsubscribeEvents = null;
 		this.cancelStreamingUiReconcile();
@@ -1977,7 +1913,6 @@ export class ChatView {
 	private async setModel(provider: string, modelId: string): Promise<boolean> {
 		if (this.settingModel) return false;
 		this.modelPickerOpen = false;
-		this.removeModelPickerPortal();
 		this.settingModel = true;
 		this.render();
 		try {
@@ -4638,10 +4573,6 @@ export class ChatView {
 			currentProvider,
 		);
 		const activeProviderGroup = providerGroups.find((group) => group.providerKey === resolvedActiveProvider) ?? null;
-
-		if (this.modelPickerOpen) {
-			this.renderModelPickerPortal(providerGroups, activeProviderGroup, resolvedActiveProvider, currentProvider, currentModelId, currentModelValue);
-		}
 
 		return renderComposerControlsView({
 			canSend,
