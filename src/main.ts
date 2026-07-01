@@ -5004,6 +5004,7 @@ function setupThemeSyncListeners(): void {
 }
 
 applyPlatformClass();
+console.log("%c Pi Desktop BUILD-MARKER: b052416-portal ", "background:#ff0000;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;");
 applyInitialTheme();
 applyWindowChrome();
 void applyNativeWindowVisualFixes();

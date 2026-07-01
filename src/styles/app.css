@@ -9762,3 +9762,16 @@ html.platform-macos body {
 	max-width: var(--mp-max-width, min(92vw, 470px));
 	pointer-events: auto;
 }
+
+/* TEMP BUILD VERIFICATION — remove after confirming latest build runs */
+.mp-build-verify-dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #ff0000;
+	box-shadow: 0 0 4px #ff0000;
+	flex-shrink: 0;
+	margin-right: 4px;
+	align-self: center;
+}
