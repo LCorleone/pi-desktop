@@ -9736,3 +9736,29 @@ html.platform-macos,
 html.platform-macos body {
 	background: var(--bg);
 }
+
+/* -------------------------------------------------------------------------- */
+/* Model picker portal (body-level, macOS-safe)
+/* The popover is portaled to <body> so it escapes the composer's
+/* backdrop-filter compositing layer (which made it see-through on macOS).
+/* Positioned via CSS vars set from JS (getBoundingClientRect of trigger). */
+/* -------------------------------------------------------------------------- */
+
+.model-picker-portal {
+	position: fixed;
+	left: 0;
+	top: 0;
+	z-index: 2400;
+	pointer-events: none;
+}
+
+.model-picker-portal .model-picker-popover {
+	position: fixed;
+	left: var(--mp-left, 0);
+	/* bottom edge of popover = (trigger top - 8px) measured from viewport top.
+	   Since popover is fixed with a set height (244px), set top so its bottom
+	   lands at --mp-bottom-from-top. top = bottom-from-top - height. */
+	top: calc(var(--mp-bottom-from-top, 100vh) - 244px);
+	max-width: var(--mp-max-width, min(92vw, 470px));
+	pointer-events: auto;
+}

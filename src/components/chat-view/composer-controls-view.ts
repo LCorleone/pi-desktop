@@ -47,6 +47,134 @@ interface RenderComposerControlsViewParams {
 	onSend: () => void | Promise<unknown>;
 }
 
+export interface RenderModelPickerPopoverParams {
+	modelPickerOpen: boolean;
+	loadingModels: boolean;
+	loadingModelCatalog: boolean;
+	providerGroups: ModelPickerProviderGroup[];
+	activeProviderGroup: ModelPickerProviderGroup | null;
+	resolvedActiveProvider: string;
+	runningProviderAuthActionProvider: string | null;
+	currentProvider: string;
+	currentModelId: string;
+	currentModelValue: string;
+	interactionLocked: boolean;
+	settingModel: boolean;
+	onCloseModelPicker: (options?: CloseModelPickerOptions) => void;
+	onSetModelPickerActiveProvider: (provider: string) => void;
+	onProviderAuthAction: (provider: string, action: "login" | "logout") => void | Promise<unknown>;
+	onSelectModel: (provider: string, modelId: string) => void | Promise<unknown>;
+}
+
+export function renderModelPickerPopover({
+	modelPickerOpen,
+	loadingModels,
+	loadingModelCatalog,
+	providerGroups,
+	activeProviderGroup,
+	resolvedActiveProvider,
+	runningProviderAuthActionProvider,
+	currentProvider,
+	currentModelId,
+	currentModelValue,
+	interactionLocked,
+	settingModel,
+	onCloseModelPicker,
+	onSetModelPickerActiveProvider,
+	onProviderAuthAction,
+	onSelectModel,
+}: RenderModelPickerPopoverParams): TemplateResult | typeof nothing {
+	if (!modelPickerOpen) return nothing;
+	return html`
+		<div class="model-picker-popover" role="listbox" aria-label="Available models">
+			${providerGroups.length === 0
+				? html`<div class="model-picker-empty">${loadingModels || loadingModelCatalog ? "Loading models…" : "No models available"}</div>`
+				: html`
+					<div class="model-picker-providers">
+						${providerGroups.map((group) => {
+							const authKey = normalizeProviderKey(group.providerKey);
+							const actionState = resolveModelPickerProviderAuthActionState({
+								group,
+								authKey,
+								runningProviderAuthActionKey: runningProviderAuthActionProvider,
+								interactionLocked,
+								settingModel,
+							});
+							return html`
+								<div class="model-picker-provider-row ${group.providerKey === resolvedActiveProvider ? "active" : ""} ${group.authConfigured ? "" : "unauth"}">
+									<button
+										type="button"
+										class="model-picker-provider ${group.providerKey === resolvedActiveProvider ? "active" : ""} ${group.authConfigured ? "" : "unauth"}"
+										title=${group.authConfigured ? `${group.providerLabel} connected` : `${group.providerLabel} needs setup`}
+										@mouseenter=${() => onSetModelPickerActiveProvider(group.providerKey)}
+										@focus=${() => onSetModelPickerActiveProvider(group.providerKey)}
+										@click=${() => onSetModelPickerActiveProvider(group.providerKey)}
+									>
+										<span class="model-picker-provider-label">${group.providerLabel}</span>
+									</button>
+									<button
+										type="button"
+										class="model-picker-provider-auth ${group.authConfigured ? "connected" : ""} ${actionState.isBusy ? "busy" : ""}"
+										title=${actionState.title}
+										?disabled=${actionState.disabled}
+										@click=${(event: MouseEvent) => {
+											event.preventDefault();
+											event.stopPropagation();
+											if (actionState.disabled) return;
+											void onProviderAuthAction(group.providerKey, actionState.action);
+										}}
+									>
+										${actionState.isBusy ? "…" : actionState.label}
+									</button>
+								</div>
+							`;
+						})}
+					</div>
+					<div class="model-picker-models">
+						${activeProviderGroup
+							? html`
+								${activeProviderGroup.models.length === 0
+									? html`
+										<div class="model-picker-auth-hint">
+											${resolveModelPickerAuthHint(activeProviderGroup, false)}
+										</div>
+									`
+									: html`
+										${!activeProviderGroup.authConfigured
+											? html`<div class="model-picker-auth-hint">${resolveModelPickerAuthHint(activeProviderGroup, true)}</div>`
+											: nothing}
+										${activeProviderGroup.models.map((model) => {
+											const nextValue = `${model.provider}::${model.id}`;
+											const isActive = model.provider === currentProvider && model.id === currentModelId;
+											const isDisabled = !model.selectable || !activeProviderGroup.authConfigured;
+											return html`
+												<button
+													type="button"
+													class="model-picker-model ${isActive ? "active" : ""} ${isDisabled ? "disabled" : ""}"
+													title=${isDisabled
+														? `${formatProviderDisplayName(model.provider)} / ${model.id} (setup required)`
+														: `${formatProviderDisplayName(model.provider)} / ${model.id}`}
+													?disabled=${interactionLocked || settingModel || isDisabled}
+													@click=${() => {
+														if (isDisabled) return;
+														onCloseModelPicker();
+														if (nextValue === currentModelValue) return;
+														void onSelectModel(model.provider, model.id);
+													}}
+												>
+													<span>${formatModelDisplayName(model.id)}</span>
+												</button>
+											`;
+										})}
+										`}
+								`
+								: html`<div class="model-picker-empty">No models</div>`}
+					</div>
+					`}
+		</div>
+	`;
+}
+
 export function renderComposerControlsView({
 	canSend,
 	isStreaming,
@@ -119,8 +247,8 @@ export function renderComposerControlsView({
 					}}
 					@focusout=${(event: FocusEvent) => {
 						const next = event.relatedTarget as Node | null;
-						const root = event.currentTarget as HTMLElement;
-						if (next && root.contains(next)) return;
+						if (next && (event.currentTarget as HTMLElement).contains(next)) return;
+						if (next && (next instanceof Element) && next.closest(".model-picker-popover")) return;
 						onCloseModelPicker();
 					}}
 				>
@@ -137,97 +265,6 @@ export function renderComposerControlsView({
 						<span class="model-picker-trigger-label">${currentProviderDisplay ? `${currentModelDisplay} · ${currentProviderDisplay}` : currentModelDisplay}</span>
 						<span class="composer-select-caret">▾</span>
 					</button>
-
-					${modelPickerOpen
-						? html`
-							<div class="model-picker-popover" role="listbox" aria-label="Available models">
-								${providerGroups.length === 0
-									? html`<div class="model-picker-empty">${loadingModels || loadingModelCatalog ? "Loading models…" : "No models available"}</div>`
-									: html`
-										<div class="model-picker-providers">
-											${providerGroups.map((group) => {
-												const authKey = normalizeProviderKey(group.providerKey);
-												const actionState = resolveModelPickerProviderAuthActionState({
-													group,
-													authKey,
-													runningProviderAuthActionKey: runningProviderAuthActionProvider,
-													interactionLocked,
-													settingModel,
-												});
-												return html`
-													<div class="model-picker-provider-row ${group.providerKey === resolvedActiveProvider ? "active" : ""} ${group.authConfigured ? "" : "unauth"}">
-														<button
-															type="button"
-															class="model-picker-provider ${group.providerKey === resolvedActiveProvider ? "active" : ""} ${group.authConfigured ? "" : "unauth"}"
-															title=${group.authConfigured ? `${group.providerLabel} connected` : `${group.providerLabel} needs setup`}
-															@mouseenter=${() => onSetModelPickerActiveProvider(group.providerKey)}
-															@focus=${() => onSetModelPickerActiveProvider(group.providerKey)}
-															@click=${() => onSetModelPickerActiveProvider(group.providerKey)}
-														>
-															<span class="model-picker-provider-label">${group.providerLabel}</span>
-														</button>
-														<button
-															type="button"
-															class="model-picker-provider-auth ${group.authConfigured ? "connected" : ""} ${actionState.isBusy ? "busy" : ""}"
-															title=${actionState.title}
-															?disabled=${actionState.disabled}
-															@click=${(event: MouseEvent) => {
-																event.preventDefault();
-																event.stopPropagation();
-																if (actionState.disabled) return;
-																void onProviderAuthAction(group.providerKey, actionState.action);
-															}}
-														>
-															${actionState.isBusy ? "…" : actionState.label}
-														</button>
-													</div>
-												`;
-											})}
-										</div>
-										<div class="model-picker-models">
-											${activeProviderGroup
-												? html`
-													${activeProviderGroup.models.length === 0
-														? html`
-															<div class="model-picker-auth-hint">
-																${resolveModelPickerAuthHint(activeProviderGroup, false)}
-															</div>
-														`
-														: html`
-															${!activeProviderGroup.authConfigured
-																? html`<div class="model-picker-auth-hint">${resolveModelPickerAuthHint(activeProviderGroup, true)}</div>`
-																: nothing}
-															${activeProviderGroup.models.map((model) => {
-																const nextValue = `${model.provider}::${model.id}`;
-																const isActive = model.provider === currentProvider && model.id === currentModelId;
-																const isDisabled = !model.selectable || !activeProviderGroup.authConfigured;
-																return html`
-																	<button
-																		type="button"
-																		class="model-picker-model ${isActive ? "active" : ""} ${isDisabled ? "disabled" : ""}"
-																		title=${isDisabled
-																			? `${formatProviderDisplayName(model.provider)} / ${model.id} (setup required)`
-																			: `${formatProviderDisplayName(model.provider)} / ${model.id}`}
-																		?disabled=${interactionLocked || settingModel || isDisabled}
-																		@click=${() => {
-																			if (isDisabled) return;
-																			onCloseModelPicker();
-																			if (nextValue === currentModelValue) return;
-																			void onSelectModel(model.provider, model.id);
-																		}}
-																	>
-																		<span>${formatModelDisplayName(model.id)}</span>
-																	</button>
-																`;
-															})}
-														`}
-												`
-												: html`<div class="model-picker-empty">No models</div>`}
-										</div>
-									`}
-							</div>
-						`
-						: nothing}
 				</div>
 
 				<div class="thinking-select-wrap" title="Reasoning effort · Shift+Tab to cycle">
