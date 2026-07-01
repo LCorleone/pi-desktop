@@ -25,6 +25,7 @@ import { applyDesktopTheme, getResolvedDesktopTheme, readStoredDesktopTheme, typ
 import { buildPiThemeDocument } from "../theme/pi-theme-document.js";
 import { PROVIDER_PRESETS, getProviderPresetByKey, type ProviderPreset } from "../models/provider-presets.js";
 import { isBundledThemeId } from "../theme/bundled-themes.js";
+import { srgbAlpha, srgbMix } from "../theme/color-mix-helpers.js";
 
 interface ThemeOption {
 	id: string;
@@ -363,25 +364,29 @@ export class SettingsPanel {
 
 		if (draft.accent) {
 			root.style.setProperty("--color-accent-primary", draft.accent);
-			root.style.setProperty("--color-accent-soft", `color-mix(in srgb, ${draft.accent} 20%, transparent)`);
+			root.style.setProperty("--color-accent-soft", srgbMix(draft.accent, 20, "transparent") ?? `color-mix(in srgb, ${draft.accent} 20%, transparent)`);
 		}
 
 		if (draft.background) {
 			root.style.setProperty("--color-bg-app", draft.background);
-			root.style.setProperty("--color-bg-elevated", `color-mix(in srgb, ${draft.background} 94%, ${neutralLift} 6%)`);
-			root.style.setProperty("--color-bg-muted", `color-mix(in srgb, ${draft.background} 89%, ${neutralLift} 11%)`);
-			root.style.setProperty("--color-bg-soft", `color-mix(in srgb, ${draft.background} 84%, ${neutralLift} 16%)`);
-			root.style.setProperty("--color-bg-sidebar", `color-mix(in srgb, ${draft.background} 91%, ${neutralLift} 9%)`);
-			root.style.setProperty("--color-bg-workspace-chrome", `color-mix(in srgb, ${draft.background} 92%, ${neutralLift} 8%)`);
-			root.style.setProperty("--color-bg-workspace-chrome-soft", `color-mix(in srgb, ${draft.background} 86%, ${neutralLift} 14%)`);
+			root.style.setProperty("--color-bg-elevated", srgbMix(draft.background, 94, neutralLift) ?? `color-mix(in srgb, ${draft.background} 94%, ${neutralLift} 6%)`);
+			root.style.setProperty("--color-bg-muted", srgbMix(draft.background, 89, neutralLift) ?? `color-mix(in srgb, ${draft.background} 89%, ${neutralLift} 11%)`);
+			root.style.setProperty("--color-bg-soft", srgbMix(draft.background, 84, neutralLift) ?? `color-mix(in srgb, ${draft.background} 84%, ${neutralLift} 16%)`);
+			root.style.setProperty("--color-bg-sidebar", srgbMix(draft.background, 91, neutralLift) ?? `color-mix(in srgb, ${draft.background} 91%, ${neutralLift} 9%)`);
+			root.style.setProperty("--color-bg-workspace-chrome", srgbMix(draft.background, 92, neutralLift) ?? `color-mix(in srgb, ${draft.background} 92%, ${neutralLift} 8%)`);
+			root.style.setProperty("--color-bg-workspace-chrome-soft", srgbMix(draft.background, 86, neutralLift) ?? `color-mix(in srgb, ${draft.background} 86%, ${neutralLift} 14%)`);
 		}
 
 		if (draft.foreground) {
 			root.style.setProperty("--color-text-primary", draft.foreground);
-			root.style.setProperty("--color-text-secondary", `color-mix(in srgb, ${draft.foreground} 68%, ${effectiveBackground} 32%)`);
-			root.style.setProperty("--color-text-tertiary", `color-mix(in srgb, ${draft.foreground} 52%, ${effectiveBackground} 48%)`);
-			root.style.setProperty("--color-border-default", `color-mix(in srgb, ${draft.foreground} 12%, transparent)`);
-			root.style.setProperty("--border", `color-mix(in srgb, var(--color-border-default) ${40 + Math.round((this.getProfile(theme).contrast / 100) * 60)}%, transparent)`);
+			root.style.setProperty("--color-text-secondary", srgbMix(draft.foreground, 68, effectiveBackground) ?? `color-mix(in srgb, ${draft.foreground} 68%, ${effectiveBackground} 32%)`);
+			root.style.setProperty("--color-text-tertiary", srgbMix(draft.foreground, 52, effectiveBackground) ?? `color-mix(in srgb, ${draft.foreground} 52%, ${effectiveBackground} 48%)`);
+			root.style.setProperty("--color-border-default", srgbMix(draft.foreground, 12, "transparent") ?? `color-mix(in srgb, ${draft.foreground} 12%, transparent)`);
+			const borderMix = 40 + Math.round((this.getProfile(theme).contrast / 100) * 60);
+			// --border nests --color-border-default inside another color-mix; precompute
+			// to plain rgba() (compounded alpha = 0.12 * borderMix/100) to avoid the
+			// nested color-mix that macOS WKWebView 605.1.15 drops.
+			root.style.setProperty("--border", srgbAlpha(draft.foreground, 0.12 * (borderMix / 100)) ?? `color-mix(in srgb, var(--color-border-default) ${borderMix}%, transparent)`);
 		}
 	}
 

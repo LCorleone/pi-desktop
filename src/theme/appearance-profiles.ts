@@ -1,4 +1,4 @@
-import { srgbMix } from "./color-mix-helpers.js";
+import { srgbAlpha, srgbMix } from "./color-mix-helpers.js";
 import type { DesktopThemeResolved } from "./theme-manager.js";
 
 export type ThemeVariant = "light" | "dark";
@@ -178,7 +178,9 @@ export function applyDesktopAppearanceProfileToRoot(
 	root.style.setProperty("--desktop-contrast", String(profile.contrast));
 
 	const borderMix = 40 + Math.round((profile.contrast / 100) * 60);
-	root.style.setProperty("--border", `color-mix(in srgb, var(--color-border-default) ${borderMix}%, transparent)`);
+	// --border nests --color-border-default (foreground @ 12% alpha) inside another
+	// color-mix. Precompute to plain rgba(): compounded alpha = 0.12 * borderMix/100.
+	root.style.setProperty("--border", (profile.foreground ? srgbAlpha(profile.foreground, 0.12 * (borderMix / 100)) : null) ?? `color-mix(in srgb, var(--color-border-default) ${borderMix}%, transparent)`);
 	root.dataset.desktopContrast = String(profile.contrast);
 }
 
