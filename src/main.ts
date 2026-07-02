@@ -24,6 +24,7 @@ import {
 	loadDesktopAppearanceProfiles,
 } from "./theme/appearance-profiles.js";
 import { syncDesktopThemeWithPiTheme } from "./theme/pi-theme-bridge.js";
+import { installColorMixPolyfill } from "./theme/color-mix-polyfill.js";
 import { DESKTOP_THEME_CHANGED_EVENT, getResolvedDesktopTheme, initializeDesktopTheme, toggleDesktopTheme } from "./theme/theme-manager.js";
 import { ensureBundledThemesInstalled } from "./theme/bundled-themes.js";
 import { ensureDesktopNotifyBridgeExtensionInstalled } from "./extensions/desktop-notify-bridge-extension.js";
@@ -5003,6 +5004,7 @@ function setupThemeSyncListeners(): void {
 }
 
 applyInitialTheme();
+requestAnimationFrame(() => installColorMixPolyfill());
 applyWindowChrome();
 void applyNativeWindowVisualFixes();
 setupThemeSyncListeners();
