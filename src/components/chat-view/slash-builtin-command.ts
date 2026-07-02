@@ -234,6 +234,14 @@ export async function executeBuiltinSlashCommand({
 			}
 			return;
 		}
+		case "constraints": {
+			if (onOpenSettings) {
+				onOpenSettings("constraints");
+			} else {
+				pushNotice("Settings panel is unavailable", "error");
+			}
+			return;
+		}
 		case "export": {
 			let outputPath = unwrapQuotedArg(args);
 			if (!outputPath) {

@@ -31,6 +31,7 @@ import { ensureDesktopNotifyBridgeExtensionInstalled } from "./extensions/deskto
 import { isExtensionConfigIntent, normalizeExtensionCommandName } from "./extensions/extension-command-intent.js";
 import { ensureDesktopSdkCompatExtensionInstalled } from "./extensions/sdk-compat-extension.js";
 import { ensureSmartVoiceNotifyDesktopHostMode } from "./extensions/smart-voice-notify-config.js";
+import { setActiveSessionConstraints } from "./rpc/constraints.js";
 import "./styles/app.css";
 
 interface WorkspaceSessionTab {
@@ -72,6 +73,7 @@ interface WorkspaceState {
 	activeSessionTabId: string | null;
 	fileTabs: WorkspaceFileTab[];
 	activeFileTabId: string | null;
+	sessionConstraints: string[];
 }
 
 interface SessionRuntime {
@@ -101,6 +103,24 @@ const SIDEBAR_WIDTH_MAX = 540;
 const TERMINAL_DOCK_HEIGHT_KEY = "pi-desktop.terminal-dock-height.v1";
 const TERMINAL_DOCK_MIN_HEIGHT = 180;
 const TERMINAL_DOCK_MAX_HEIGHT = 640;
+const GLOBAL_CONSTRAINTS_STORAGE_KEY = "pi-desktop.global-constraints.v1";
+
+function loadGlobalConstraints(): string[] {
+	try {
+		const raw = localStorage.getItem(GLOBAL_CONSTRAINTS_STORAGE_KEY);
+		if (raw) {
+			const parsed = JSON.parse(raw);
+			if (Array.isArray(parsed)) return parsed.filter((c: unknown) => typeof c === "string" && c.trim().length > 0).map((c: string) => c.trim());
+		}
+	} catch { /* ignore */ }
+	return [];
+}
+
+function saveGlobalConstraints(constraints: string[]): void {
+	try {
+		localStorage.setItem(GLOBAL_CONSTRAINTS_STORAGE_KEY, JSON.stringify(constraints));
+	} catch { /* ignore */ }
+}
 const TERMINAL_DOCK_DEFAULT_HEIGHT = 280;
 const FILE_SPLIT_WIDTH_KEY = "pi-desktop.file-split-width.v1";
 const FILE_SPLIT_MIN_WIDTH = 300;
@@ -2159,7 +2179,6 @@ function ensureWorkspaceEmoji(workspace: WorkspaceState): boolean {
 	workspace.emoji = pickWorkspaceDefaultEmoji(`${workspace.id}:${workspace.title}`);
 	return true;
 }
-
 function defaultWorkspace(): WorkspaceState {
 	const seedSessionTab = createSessionTab(NEW_SESSION_TAB_TITLE, null);
 	return {
@@ -2179,6 +2198,7 @@ function defaultWorkspace(): WorkspaceState {
 		activeSessionTabId: seedSessionTab.id,
 		fileTabs: [],
 		activeFileTabId: null,
+		sessionConstraints: [],
 	};
 }
 
@@ -2203,6 +2223,7 @@ function createWorkspace(title?: string, emoji?: string | null): WorkspaceState 
 		activeSessionTabId: seedSessionTab.id,
 		fileTabs: [],
 		activeFileTabId: null,
+		sessionConstraints: [],
 	};
 }
 
@@ -2351,6 +2372,7 @@ function loadWorkspaces(): void {
 							typeof w.activeFileTabId === "string" && fileTabs.some((tab) => tab.id === w.activeFileTabId)
 								? w.activeFileTabId
 								: fileTabs[0]?.id ?? null,
+						sessionConstraints: Array.isArray(w.sessionConstraints) ? w.sessionConstraints.filter((c: unknown) => typeof c === "string" && c.trim().length > 0).map((c: string) => c.trim()) : [],
 					};
 
 					ensureWorkspaceContentState(workspace);
@@ -2566,6 +2588,7 @@ function syncActiveChatRuntimeBinding(
 		}
 		return;
 	}
+	setActiveSessionConstraints(workspace.sessionConstraints);
 	ensureWorkspaceContentState(workspace);
 	const activeSessionTab = getActiveSessionTab(workspace);
 	const projectPath = getSessionTabProjectPath(activeSessionTab) ?? getWorkspaceActiveProjectPath(workspace);
@@ -3540,6 +3563,15 @@ function mountSettingsPanel(): SettingsPanel {
 			chatView?.notify("Saved CLI binary path override. Use /reload to reconnect active runtimes.", "info");
 		}
 	});
+	panel.setOnConstraintsChange((globalConstraints, sessionConstraints) => {
+		saveGlobalConstraints(globalConstraints);
+		setActiveSessionConstraints(sessionConstraints);
+		const workspace = getActiveWorkspace();
+		if (workspace) {
+			workspace.sessionConstraints = sessionConstraints;
+			persistWorkspaces();
+		}
+	});
 	panel.setOnClose(() => {
 		const workspace = getActiveWorkspace();
 		if (!workspace || workspace.pane !== "settings") return;
@@ -3548,6 +3580,8 @@ function mountSettingsPanel(): SettingsPanel {
 		syncWorkspaceTabsBar();
 		void applyWorkspacePane(workspace);
 	});
+	const workspace = getActiveWorkspace();
+	panel.setConstraints(loadGlobalConstraints(), workspace?.sessionConstraints ?? []);
 	panel.setOnRequestAddProject(() => {
 		void sidebar?.openFolder();
 	});
@@ -3830,6 +3864,8 @@ function normalizeSettingsSectionId(sectionId: string | null | undefined): Setti
 			return "account";
 		case "updates":
 			return "updates";
+		case "constraints":
+			return "constraints";
 		default:
 			return null;
 	}
@@ -3846,6 +3882,7 @@ function requestOpenSettingsPanel(sectionId?: string): void {
 	try {
 		const panel = mountSettingsPanel();
 		panel.setRuntimeProjectPath(resolveSettingsRuntimeProjectPath(workspace));
+		panel.setConstraints(loadGlobalConstraints(), workspace.sessionConstraints);
 		if (targetSection) panel.setActiveSection(targetSection);
 	} catch (mountErr) {
 		console.error("Failed to prepare settings panel before open:", mountErr);
@@ -3855,9 +3892,9 @@ function requestOpenSettingsPanel(sectionId?: string): void {
 			console.error("Failed to open settings pane:", err);
 			try {
 				settingsPanel = null;
-				setPaneVisibility("settings");
 				const panel = mountSettingsPanel();
 				panel.setRuntimeProjectPath(resolveSettingsRuntimeProjectPath(workspace));
+				panel.setConstraints(loadGlobalConstraints(), workspace.sessionConstraints);
 				if (targetSection) panel.setActiveSection(targetSection);
 				void panel.open();
 			} catch (innerErr) {

@@ -62,7 +62,7 @@ interface ScopedModelOption {
 	name: string;
 }
 
-export type SettingsSectionId = "general" | "appearance" | "account" | "providers" | "updates";
+export type SettingsSectionId = "general" | "appearance" | "account" | "providers" | "updates" | "constraints";
 
 export interface SettingsSectionNavItem {
 	id: SettingsSectionId;
@@ -152,6 +152,12 @@ export class SettingsPanel {
 	private newProviderApiKey = "";
 	private providerTestResults: Record<string, { testing: boolean; ok?: boolean; message?: string }> = {};
 	private activeSection: SettingsSectionId = "general";
+	// Constraints
+	private globalConstraints: string[] = [];
+	private sessionConstraints: string[] = [];
+	private constraintInput = "";
+	private constraintScope: "global" | "session" = "session";
+	private onConstraintsChange: ((global: string[], session: string[]) => void) | null = null;
 
 	constructor(container: HTMLElement) {
 		this.container = container;
@@ -192,6 +198,41 @@ export class SettingsPanel {
 	setOnNavigationStateChange(callback: ((state: SettingsNavigationState) => void) | null): void {
 		this.onNavigationStateChange = callback;
 		if (callback) callback(this.getNavigationState());
+	}
+
+	setConstraints(globalConstraints: string[], sessionConstraints: string[]): void {
+		this.globalConstraints = [...globalConstraints];
+		this.sessionConstraints = [...sessionConstraints];
+		if (this.isOpen && this.activeSection === "constraints") this.render();
+	}
+
+	setOnConstraintsChange(callback: ((global: string[], session: string[]) => void) | null): void {
+		this.onConstraintsChange = callback;
+	}
+
+	private addConstraint(): void {
+		const text = this.constraintInput.trim();
+		if (!text) return;
+		if (this.constraintScope === "global") {
+			if (this.globalConstraints.includes(text)) return;
+			this.globalConstraints = [...this.globalConstraints, text];
+		} else {
+			if (this.sessionConstraints.includes(text)) return;
+			this.sessionConstraints = [...this.sessionConstraints, text];
+		}
+		this.constraintInput = "";
+		this.onConstraintsChange?.(this.globalConstraints, this.sessionConstraints);
+		this.render();
+	}
+
+	private removeConstraint(index: number): void {
+		if (this.constraintScope === "global") {
+			this.globalConstraints = this.globalConstraints.filter((_, i) => i !== index);
+		} else {
+			this.sessionConstraints = this.sessionConstraints.filter((_, i) => i !== index);
+		}
+		this.onConstraintsChange?.(this.globalConstraints, this.sessionConstraints);
+		this.render();
 	}
 
 	getActiveSection(): SettingsSectionId {
@@ -1904,6 +1945,11 @@ export class SettingsPanel {
 				label: "Updates",
 				description: "Desktop releases, CLI version, and runtime diagnostics.",
 			},
+			{
+				id: "constraints",
+				label: "Constraints",
+				description: "Agent guardrails — rules the agent must follow (per-session or global).",
+			},
 		];
 	}
 
@@ -2432,6 +2478,53 @@ export class SettingsPanel {
 		`;
 	}
 
+
+	private renderConstraintsSection(): TemplateResult {
+		const constraints = this.constraintScope === "global" ? this.globalConstraints : this.sessionConstraints;
+		return html`
+			<div class="settings-view-grid">
+				<section class="settings-group settings-group-full">
+					<div class="settings-section">
+						<div class="settings-section-title">Constraints</div>
+						<div class="settings-desc">Agent guardrails — rules the agent MUST follow. Use for things like "never edit config files" or "only work in src/".</div>
+						<div class="settings-row" style="margin-top:12px;">
+							<div>
+								<div class="settings-label">Scope</div>
+								<div class="settings-desc">Session constraints apply to the current project only. Global constraints apply everywhere.</div>
+							</div>
+							<select class="settings-select" .value=${this.constraintScope} @change=${(e: Event) => { this.constraintScope = (e.target as HTMLSelectElement).value as "global" | "session"; this.render(); }}>
+								<option value="session">Session</option>
+								<option value="global">Global</option>
+							</select>
+						</div>
+						<div class="settings-row" style="margin-top:10px;">
+							<input
+								class="settings-input"
+								type="text"
+								placeholder="Add a constraint (e.g. never edit .env files)"
+								.value=${this.constraintInput}
+								@input=${(e: Event) => { this.constraintInput = (e.target as HTMLInputElement).value; }}
+								@keydown=${(e: KeyboardEvent) => { if (e.key === "Enter") this.addConstraint(); }}
+							/>
+							<button class="settings-btn-primary" @click=${() => this.addConstraint()}>Add</button>
+						</div>
+						${constraints.length === 0
+							? html`<div class="settings-desc" style="margin-top:12px;">No ${this.constraintScope} constraints yet.</div>`
+							: html`
+								<div class="constraints-list" style="margin-top:12px;">
+									${constraints.map((c, i) => html`
+										<div class="settings-row constraints-item" style="margin-bottom:6px;">
+											<span class="constraints-text" style="flex:1;">${c}</span>
+											<button class="settings-btn-secondary" @click=${() => this.removeConstraint(i)} style="padding:2px 8px;">✕</button>
+										</div>
+									`)}
+								</div>
+							`}
+					</div>
+				</section>
+			</div>
+		`;
+	}
 	private renderActiveSection(
 		section: SettingsSectionId,
 		runtimeControlsEnabled: boolean,
@@ -2448,6 +2541,8 @@ export class SettingsPanel {
 				return this.renderAccountSection(runtimeControlsEnabled, hasProjectContext, authProviders);
 			case "updates":
 				return this.renderUpdatesSection(runtimeControlsEnabled, compatibilityChecks);
+			case "constraints":
+				return this.renderConstraintsSection();
 			case "general":
 			default:
 				return this.renderGeneralSection(runtimeControlsEnabled, hasProjectContext);
