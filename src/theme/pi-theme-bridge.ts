@@ -1,5 +1,5 @@
 import { getAppearanceProfileForResolvedTheme, loadDesktopAppearanceProfiles } from "./appearance-profiles.js";
-import { srgbMix } from "./color-mix-helpers.js";
+import { deriveSemanticTokens } from "./semantic-tokens.js";
 import type { DesktopThemeResolved } from "./theme-manager.js";
 
 interface PiThemeFile {
@@ -172,42 +172,15 @@ function buildPiThemeOverlay(
 	const accent = firstResolvedToken(theme, PI_THEME_ACCENT_TOKENS);
 	const background = firstResolvedToken(theme, PI_THEME_BACKGROUND_TOKENS);
 	const foreground = firstResolvedToken(theme, PI_THEME_FOREGROUND_TOKENS);
-	const neutralLift = mode === "dark" ? "white" : "black";
-	const sidebarBase = mode === "dark" ? "86%" : "92%";
-	const sidebarShade = mode === "dark" ? "14%" : "8%";
 
-	if (accent) {
-		result["--color-accent-primary"] = accent;
-		result["--color-accent-soft"] = srgbMix(accent, 20, "transparent") ?? `color-mix(in srgb, ${accent} 20%, transparent)`;
-	}
-
-	// Important: foreground should mainly control text, not surface tint.
-	// Keep surface derivation tied to background to avoid colored "veil" overlays.
-	// Precompute mixes to plain rgb() so tokens aren't color-mix() expressions
-	// (nested color-mix is unsupported on macOS WKWebView 605.1.15 and drops the
-	// whole declaration, making surfaces render transparent).
-	if (background) {
-		result["--color-bg-app"] = background;
-		result["--color-bg-elevated"] = srgbMix(background, 94, neutralLift) ?? `color-mix(in srgb, ${background} 94%, ${neutralLift} 6%)`;
-		result["--color-bg-muted"] = srgbMix(background, 89, neutralLift) ?? `color-mix(in srgb, ${background} 89%, ${neutralLift} 11%)`;
-		result["--color-bg-soft"] = srgbMix(background, 84, neutralLift) ?? `color-mix(in srgb, ${background} 84%, ${neutralLift} 16%)`;
-		result["--color-bg-sidebar"] = srgbMix(background, Number.parseFloat(sidebarBase), "black") ?? `color-mix(in srgb, ${background} ${sidebarBase}, black ${sidebarShade})`;
-		result["--color-bg-workspace-chrome"] = srgbMix(background, 92, neutralLift) ?? `color-mix(in srgb, ${background} 92%, ${neutralLift} 8%)`;
-		result["--color-bg-workspace-chrome-soft"] = srgbMix(background, 86, neutralLift) ?? `color-mix(in srgb, ${background} 86%, ${neutralLift} 14%)`;
-	}
-
-	if (foreground) {
-		result["--color-text-primary"] = foreground;
-		if (background) {
-			result["--color-text-secondary"] = srgbMix(foreground, 68, background) ?? `color-mix(in srgb, ${foreground} 68%, ${background} 32%)`;
-			result["--color-text-tertiary"] = srgbMix(foreground, 52, background) ?? `color-mix(in srgb, ${foreground} 52%, ${background} 48%)`;
-		} else {
-			result["--color-text-secondary"] = srgbMix(foreground, 68, "transparent") ?? `color-mix(in srgb, ${foreground} 68%, transparent)`;
-			result["--color-text-tertiary"] = srgbMix(foreground, 52, "transparent") ?? `color-mix(in srgb, ${foreground} 52%, transparent)`;
-		}
-		// Keep border subtle and neutral-ish relative to foreground.
-		result["--color-border-default"] = srgbMix(foreground, 12, "transparent") ?? `color-mix(in srgb, ${foreground} 12%, transparent)`;
-	}
+	const tokens = deriveSemanticTokens({
+		resolved: mode,
+		accent: accent || undefined,
+		background: background || undefined,
+		foreground: foreground || undefined,
+		textMixBase: background ?? "transparent",
+	});
+	Object.assign(result, tokens as Partial<Record<(typeof PI_THEME_OVERLAY_VARS)[number], string>>);
 
 	return result;
 }

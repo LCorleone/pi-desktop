@@ -1,4 +1,4 @@
-import { srgbAlpha, srgbMix } from "./color-mix-helpers.js";
+import { deriveSemanticTokens } from "./semantic-tokens.js";
 import type { DesktopThemeResolved } from "./theme-manager.js";
 
 export type ThemeVariant = "light" | "dark";
@@ -140,30 +140,18 @@ export function applyDesktopAppearanceProfileToRoot(
 	const profile = getAppearanceProfileForResolvedTheme(profiles, resolved);
 	const root = document.documentElement;
 
-	if (profile.accent) {
-		root.style.setProperty("--color-accent-primary", profile.accent);
-		root.style.setProperty("--color-accent-soft", srgbMix(profile.accent, 20, "transparent") ?? `color-mix(in srgb, ${profile.accent} 20%, transparent)`);
-	}
-
-	if (profile.background) {
-		const neutralLift = resolved === "dark" ? "white" : "black";
-		const sidebarBase = resolved === "dark" ? "86%" : "92%";
-		const sidebarShade = resolved === "dark" ? "14%" : "8%";
-		root.style.setProperty("--color-bg-app", profile.background);
-		root.style.setProperty("--color-bg-elevated", srgbMix(profile.background, 94, neutralLift) ?? `color-mix(in srgb, ${profile.background} 94%, ${neutralLift} 6%)`);
-		root.style.setProperty("--color-bg-muted", srgbMix(profile.background, 89, neutralLift) ?? `color-mix(in srgb, ${profile.background} 89%, ${neutralLift} 11%)`);
-		root.style.setProperty("--color-bg-soft", srgbMix(profile.background, 84, neutralLift) ?? `color-mix(in srgb, ${profile.background} 84%, ${neutralLift} 16%)`);
-		root.style.setProperty("--color-bg-sidebar", srgbMix(profile.background, Number.parseFloat(sidebarBase), "black") ?? `color-mix(in srgb, ${profile.background} ${sidebarBase}, black ${sidebarShade})`);
-		root.style.setProperty("--color-bg-workspace-chrome", srgbMix(profile.background, 92, neutralLift) ?? `color-mix(in srgb, ${profile.background} 92%, ${neutralLift} 8%)`);
-		root.style.setProperty("--color-bg-workspace-chrome-soft", srgbMix(profile.background, 86, neutralLift) ?? `color-mix(in srgb, ${profile.background} 86%, ${neutralLift} 14%)`);
-	}
-
-	if (profile.foreground) {
-		const bgForMix = profile.background || "transparent";
-		root.style.setProperty("--color-text-primary", profile.foreground);
-		root.style.setProperty("--color-text-secondary", srgbMix(profile.foreground, 68, bgForMix) ?? `color-mix(in srgb, ${profile.foreground} 68%, ${bgForMix} 32%)`);
-		root.style.setProperty("--color-text-tertiary", srgbMix(profile.foreground, 52, bgForMix) ?? `color-mix(in srgb, ${profile.foreground} 52%, ${bgForMix} 48%)`);
-		root.style.setProperty("--color-border-default", srgbMix(profile.foreground, 12, "transparent") ?? `color-mix(in srgb, ${profile.foreground} 12%, transparent)`);
+	const tokens = deriveSemanticTokens({
+		resolved,
+		accent: profile.accent || undefined,
+		background: profile.background || undefined,
+		foreground: profile.foreground || undefined,
+		contrast: profile.contrast,
+		// Stored profiles carry no foreground, but --border must still scale with
+		// the contrast slider (mixing the theme-default --color-border-default).
+		deriveBorderWithoutForeground: true,
+	});
+	for (const [prop, value] of Object.entries(tokens)) {
+		root.style.setProperty(prop, value);
 	}
 
 	root.style.setProperty("--font-family-sans", profile.uiFont);
@@ -177,10 +165,6 @@ export function applyDesktopAppearanceProfileToRoot(
 	root.style.setProperty("--desktop-chrome-tint-strength", profile.translucentSidebar ? "5%" : "0%");
 	root.style.setProperty("--desktop-contrast", String(profile.contrast));
 
-	const borderMix = 40 + Math.round((profile.contrast / 100) * 60);
-	// --border nests --color-border-default (foreground @ 12% alpha) inside another
-	// color-mix. Precompute to plain rgba(): compounded alpha = 0.12 * borderMix/100.
-	root.style.setProperty("--border", (profile.foreground ? srgbAlpha(profile.foreground, 0.12 * (borderMix / 100)) : null) ?? `color-mix(in srgb, var(--color-border-default) ${borderMix}%, transparent)`);
 	root.dataset.desktopContrast = String(profile.contrast);
 }
 

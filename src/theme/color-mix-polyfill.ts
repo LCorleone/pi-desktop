@@ -10,67 +10,27 @@
  * MUST yield blue; if it yields anything else, color-mix is broken and we run.
  *
  * When broken, this module walks all style rules in document.styleSheets,
- * parses color-mix() values, resolves CSS var() references (recursively,
- * including vars whose value is itself a color-mix), computes the sRGB mix
- * (with premultiplied alpha so `transparent` is handled correctly), and
- * rewrites the declaration with plain rgb()/rgba(). Original values are
- * preserved so the polyfill can re-run when theme tokens change.
+ * parses color-mix() values, resolves CSS var() references (recursively;
+ * vars whose value is itself a color-mix are resolved when those chains are
+ * defined inside stylesheets, which the polyfill reads via getComputedStyle),
+ * computes the sRGB mix (with premultiplied alpha so `transparent` is handled
+ * correctly), and rewrites the declaration with plain rgb()/rgba(). Original
+ * values are preserved so the polyfill can re-run when theme tokens change.
+ *
+ * LAYERING: this runtime polyfill ONLY rewrites color-mix() that appear inside
+ * stylesheet CSSStyleRules. Theme tokens set as inline :root custom properties
+ * (via style.setProperty) and consumed BARE through var() aliases in app.css
+ * are NOT rewritten here — those are precomputed to plain rgb()/rgba() at apply
+ * time by src/theme/semantic-tokens.ts (see `deriveSemanticTokens`). Both layers
+ * are required on macOS; do not remove the precompute thinking the polyfill
+ * covers everything.
  *
  * Defensive: any rule/value that fails to parse is left untouched. On engines
  * that compute color-mix correctly (Windows/Chromium), the probe passes and the
  * module does nothing.
  */
 
-type RGBA = [number, number, number, number];
-
-const NAMED: Record<string, RGBA> = {
-	transparent: [0, 0, 0, 0],
-	black: [0, 0, 0, 1],
-	white: [255, 255, 255, 1],
-	red: [255, 0, 0, 1],
-	green: [0, 128, 0, 1],
-	blue: [0, 0, 255, 1],
-};
-
-function clamp(v: number, lo: number, hi: number): number {
-	return Math.min(hi, Math.max(lo, v));
-}
-
-/** Parse a concrete CSS color (hex / rgb() / rgba() legacy & modern / named) to [r,g,b,a]. */
-function parseColorRgba(raw: string): RGBA | null {
-	const v = raw.trim().toLowerCase();
-	if (!v) return null;
-	if (NAMED[v]) return NAMED[v];
-	if (v.startsWith("#")) {
-		const h = v.slice(1);
-		const hx = (s: string) => parseInt(s, 16);
-		if (h.length === 3) return [hx(h[0] + h[0]), hx(h[1] + h[1]), hx(h[2] + h[2]), 1];
-		if (h.length === 6) return [hx(h.slice(0, 2)), hx(h.slice(2, 4)), hx(h.slice(4, 6)), 1];
-		if (h.length === 8) return [hx(h.slice(0, 2)), hx(h.slice(2, 4)), hx(h.slice(4, 6)), hx(h.slice(6, 8)) / 255];
-		return null;
-	}
-	const m = /^rgba?\(([^)]+)\)$/.exec(v);
-	if (!m) return null;
-	const inner = m[1].replace("/", " ");
-	const toks = inner.split(/[,\s]+/).map((s) => s.trim()).filter((s) => s.length > 0);
-	if (toks.length < 3) return null;
-	const chan = (tok: string, isAlpha: boolean): number | null => {
-		if (tok.endsWith("%")) {
-			const n = parseFloat(tok);
-			if (Number.isNaN(n)) return null;
-			return isAlpha ? n / 100 : (n / 100) * 255;
-		}
-		const n = parseFloat(tok);
-		if (Number.isNaN(n)) return null;
-		return n;
-	};
-	const r = chan(toks[0], false);
-	const g = chan(toks[1], false);
-	const b = chan(toks[2], false);
-	const a = toks.length >= 4 ? chan(toks[3], true) : 1;
-	if (r === null || g === null || b === null || a === null) return null;
-	return [clamp(r, 0, 255), clamp(g, 0, 255), clamp(b, 0, 255), clamp(a, 0, 1)];
-}
+import { mixColors } from "./color-mix-helpers.js";
 
 /** Read a custom property from :root, resolving one level of var() indirection chain. */
 function readRootVar(name: string, maxDepth = 6): string | null {
@@ -150,21 +110,12 @@ function parseColorMixInner(inner: string): ParsedMix | null {
 	return { a: a.color, pA, b: b.color, pB };
 }
 
-/** Compute a parsed mix to rgb()/rgba() using premultiplied alpha (matches CSS srgb semantics). */
+/** Compute a parsed mix by delegating to the shared premultiplied-alpha mixer. */
 function computeMix(mix: ParsedMix, depth: number): string | null {
 	const aRaw = resolveToConcrete(mix.a, depth);
 	const bRaw = resolveToConcrete(mix.b, depth);
 	if (aRaw === null || bRaw === null) return null;
-	const a = parseColorRgba(aRaw);
-	const b = parseColorRgba(bRaw);
-	if (!a || !b) return null;
-	const outAlpha = mix.pA * a[3] + mix.pB * b[3];
-	if (outAlpha <= 1e-4) return "rgba(0, 0, 0, 0)";
-	const r = Math.round((mix.pA * a[3] * a[0] + mix.pB * b[3] * b[0]) / outAlpha);
-	const g = Math.round((mix.pA * a[3] * a[1] + mix.pB * b[3] * b[1]) / outAlpha);
-	const bl = Math.round((mix.pA * a[3] * a[2] + mix.pB * b[3] * b[2]) / outAlpha);
-	const aR = Math.round(outAlpha * 10000) / 10000;
-	return aR >= 1 ? `rgb(${r}, ${g}, ${bl})` : `rgba(${r}, ${g}, ${bl}, ${aR})`;
+	return mixColors(aRaw, mix.pA, bRaw, mix.pB);
 }
 
 /** Replace every color-mix(...) in a CSS value string. Returns null if ANY fails (caller keeps original). */

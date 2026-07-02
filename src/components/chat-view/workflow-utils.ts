@@ -167,12 +167,20 @@ export function summarizeToolCall(
 export function deriveWorkflowIntent(workflow: AssistantWorkflow): string | null {
 	const thinking = (workflow.thinkingText ?? "").trim();
 	if (thinking) {
-		const firstSentence = thinking
-			// Split on sentence-ending punctuation + whitespace, or a newline.
-			// Avoid lookbehind ((?<=...)) — unsupported on macOS WebKit (throws
-			// "Invalid regular expression: invalid group specifier name").
-			.split(/[.!?]\s+|\n/)[0]
-			.trim();
+		// Split on sentence-ending punctuation + whitespace, or a newline.
+		// Use a capturing group so the delimiter (punctuation/whitespace) is
+		// returned as a separate array element and can be reattached to keep
+		// the trailing punctuation (e.g. "Done. Next" → "Done."). Avoid
+		// lookbehind ((?<=...)) — unsupported on macOS WebKit (throws
+		// "Invalid regular expression: invalid group specifier name").
+		const parts = thinking.split(/([.!?]\s+|\n)/);
+		let firstSentence = parts[0];
+		if (parts[1]) {
+			// parts[1] is the delimiter (e.g. ". " or "\n"); reattach the
+			// punctuation, drop the trailing whitespace.
+			firstSentence += parts[1].trim();
+		}
+		firstSentence = firstSentence.trim();
 		const cap = 80;
 		if (!firstSentence) return null;
 		return firstSentence.length > cap ? `${firstSentence.slice(0, cap - 1)}…` : firstSentence;

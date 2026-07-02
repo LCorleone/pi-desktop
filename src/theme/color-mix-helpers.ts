@@ -7,77 +7,88 @@
  * Catalina, AppleWebKit/605.1.15) does not support and silently drops, causing
  * backgrounds to render transparent.
  *
- * Alpha semantics: CSS `color-mix(in srgb, C p%, transparent)` yields
- * `rgba(C, p/100)` — a translucent color. We replicate that by emitting
- * rgba() with the appropriate alpha whenever either operand is `transparent`,
- * instead of treating transparent as opaque black.
+ * Alpha semantics: mixing is performed with premultiplied alpha via the shared
+ * `mixColors` core, matching CSS `color-mix(in srgb, ...)` — `transparent` is
+ * treated as a color with alpha 0 rather than opaque black, so a mix of an
+ * opaque color with `transparent` yields an rgba() with the correct alpha.
  */
 
-type RGB = [number, number, number];
+type RGBA = [number, number, number, number];
 
-const NAMED_COLORS: Record<string, RGB> = {
-	transparent: [0, 0, 0],
-	black: [0, 0, 0],
-	white: [255, 255, 255],
-	red: [255, 0, 0],
-	green: [0, 128, 0],
-	blue: [0, 0, 255],
+const NAMED: Record<string, RGBA> = {
+	transparent: [0, 0, 0, 0],
+	black: [0, 0, 0, 1],
+	white: [255, 255, 255, 1],
+	red: [255, 0, 0, 1],
+	green: [0, 128, 0, 1],
+	blue: [0, 0, 255, 1],
 };
 
-function clamp(v: number, min = 0, max = 255): number {
-	return Math.min(max, Math.max(min, v));
+function clamp(v: number, lo: number, hi: number): number {
+	return Math.min(hi, Math.max(lo, v));
 }
 
-function parseHex(hex: string): RGB | null {
-	const h = hex.replace("#", "");
-	if (h.length === 3) {
-		return [
-			parseInt(h[0] + h[0], 16),
-			parseInt(h[1] + h[1], 16),
-			parseInt(h[2] + h[2], 16),
-		];
-	}
-	if (h.length === 6 || h.length === 8) {
-		return [
-			parseInt(h.slice(0, 2), 16),
-			parseInt(h.slice(2, 4), 16),
-			parseInt(h.slice(4, 6), 16),
-		];
-	}
-	return null;
-}
-
-function parseRgbParts(inner: string): RGB | null {
-	// Support both legacy "r, g, b" and modern "r g b" / "r g b / a" syntax.
-	const cleaned = inner.replace("/", " ").replace(/%/g, "");
-	// Split on either commas or whitespace.
-	const parts = cleaned.split(/[,\s]+/).map((p) => p.trim()).filter((p) => p.length > 0);
-	const nums: number[] = [];
-	for (let i = 0; i < 3 && i < parts.length; i++) {
-		nums.push(parseFloat(parts[i]));
-	}
-	if (nums.length < 3 || nums.some((n) => Number.isNaN(n))) return null;
-	// In modern "r g b" syntax (no commas), values 0-1 are not auto-scaled to
-	// 0-255 (that's only `rgb()` percentage-less in legacy); but theme values
-	// here are always 0-255 or percentages. Treat 0..1 only as-is; clamp the rest.
-	return [clamp(nums[0]), clamp(nums[1]), clamp(nums[2])];
-}
-
-/** Parse a CSS color string (hex, rgb()/rgba() legacy & modern, named black/white/transparent) to sRGB. Returns null if unsupported. */
-export function parseSrgbColor(input: string): RGB | null {
-	const v = input.trim().toLowerCase();
+/** Parse a concrete CSS color (hex / rgb() / rgba() legacy & modern / named) to [r,g,b,a]. */
+export function parseColorRgba(raw: string): RGBA | null {
+	const v = raw.trim().toLowerCase();
 	if (!v) return null;
-	if (NAMED_COLORS[v]) return NAMED_COLORS[v];
-	if (v.startsWith("#")) return parseHex(v);
-	const rgbMatch = /^rgba?\(([^)]+)\)$/.exec(v);
-	if (rgbMatch) return parseRgbParts(rgbMatch[1]);
-	// hsl() / oklch() / color() / etc. are not supported here — return null so
-	// the caller falls back to the original color-mix() string.
-	return null;
+	if (NAMED[v]) return NAMED[v];
+	if (v.startsWith("#")) {
+		const h = v.slice(1);
+		const hx = (s: string) => parseInt(s, 16);
+		if (h.length === 3) return [hx(h[0] + h[0]), hx(h[1] + h[1]), hx(h[2] + h[2]), 1];
+		if (h.length === 6) return [hx(h.slice(0, 2)), hx(h.slice(2, 4)), hx(h.slice(4, 6)), 1];
+		if (h.length === 8) return [hx(h.slice(0, 2)), hx(h.slice(2, 4)), hx(h.slice(4, 6)), hx(h.slice(6, 8)) / 255];
+		return null;
+	}
+	const m = /^rgba?\(([^)]+)\)$/.exec(v);
+	if (!m) return null;
+	const inner = m[1].replace("/", " ");
+	const toks = inner.split(/[,\s]+/).map((s) => s.trim()).filter((s) => s.length > 0);
+	if (toks.length < 3) return null;
+	const chan = (tok: string, isAlpha: boolean): number | null => {
+		if (tok.endsWith("%")) {
+			const n = parseFloat(tok);
+			if (Number.isNaN(n)) return null;
+			return isAlpha ? n / 100 : (n / 100) * 255;
+		}
+		const n = parseFloat(tok);
+		if (Number.isNaN(n)) return null;
+		return n;
+	};
+	const r = chan(toks[0], false);
+	const g = chan(toks[1], false);
+	const b = chan(toks[2], false);
+	const a = toks.length >= 4 ? chan(toks[3], true) : 1;
+	if (r === null || g === null || b === null || a === null) return null;
+	return [clamp(r, 0, 255), clamp(g, 0, 255), clamp(b, 0, 255), clamp(a, 0, 1)];
 }
 
 function round4(v: number): number {
 	return Math.round(v * 10000) / 10000;
+}
+
+/**
+ * Premultiplied-alpha sRGB mix, matching CSS `color-mix(in srgb, A pA%, B pB%)`.
+ * pA and pB are 0..1 weights; they are normalized internally so callers may pass
+ * un-normalized percentages (e.g. 0.2 / 0.8, or 1 / 4). Returns an rgb()/rgba()
+ * string, or null if either color cannot be parsed.
+ */
+export function mixColors(a: string, pA: number, b: string, pB: number): string | null {
+	const ca = parseColorRgba(a);
+	const cb = parseColorRgba(b);
+	if (!ca || !cb) return null;
+	const sum = pA + pB;
+	if (sum <= 0) return "rgba(0, 0, 0, 0)";
+	const wa = pA / sum;
+	const wb = pB / sum;
+	const outAlpha = wa * ca[3] + wb * cb[3];
+	if (outAlpha <= 1e-4) return "rgba(0, 0, 0, 0)";
+	const r = Math.round((wa * ca[3] * ca[0] + wb * cb[3] * cb[0]) / outAlpha);
+	const g = Math.round((wa * ca[3] * ca[1] + wb * cb[3] * cb[1]) / outAlpha);
+	const bl = Math.round((wa * ca[3] * ca[2] + wb * cb[3] * cb[2]) / outAlpha);
+	const aR = Math.round(outAlpha * 10000) / 10000;
+	return aR >= 1 ? `rgb(${r}, ${g}, ${bl})` : `rgba(${r}, ${g}, ${bl}, ${aR})`;
 }
 
 /**
@@ -91,32 +102,7 @@ function round4(v: number): number {
  * Returns null if a color can't be parsed (caller falls back to color-mix()).
  */
 export function srgbMix(c1: string, p1: number, c2: string): string | null {
-	const a = parseSrgbColor(c1);
-	const b = parseSrgbColor(c2);
-	if (!a || !b) return null;
-	const p = clamp(p1, 0, 100) / 100;
-
-	const aTransparent = c1.trim().toLowerCase() === "transparent";
-	const bTransparent = c2.trim().toLowerCase() === "transparent";
-
-	if (aTransparent && bTransparent) {
-		return "rgba(0, 0, 0, 0)";
-	}
-	// transparent contributes alpha 0; the opaque color's RGB is used directly,
-	// and its alpha weight is p (if it's c1) or (1-p) (if it's c2).
-	if (aTransparent) {
-		return `rgba(${b[0]}, ${b[1]}, ${b[2]}, ${round4(1 - p)})`;
-	}
-	if (bTransparent) {
-		return `rgba(${a[0]}, ${a[1]}, ${a[2]}, ${round4(p)})`;
-	}
-
-	const mixed: RGB = [
-		Math.round(a[0] * p + b[0] * (1 - p)),
-		Math.round(a[1] * p + b[1] * (1 - p)),
-		Math.round(a[2] * p + b[2] * (1 - p)),
-	];
-	return `rgb(${mixed[0]}, ${mixed[1]}, ${mixed[2]})`;
+	return mixColors(c1, p1, c2, 100 - p1);
 }
 
 /**
@@ -124,7 +110,7 @@ export function srgbMix(c1: string, p1: number, c2: string): string | null {
  * Returns null if the color can't be parsed.
  */
 export function srgbAlpha(color: string, alpha: number): string | null {
-	const rgb = parseSrgbColor(color);
+	const rgb = parseColorRgba(color);
 	if (!rgb) return null;
 	return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${round4(alpha)})`;
 }

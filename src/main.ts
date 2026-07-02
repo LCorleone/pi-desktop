@@ -3079,6 +3079,7 @@ function applyInitialTheme(): void {
 	const profiles = loadDesktopAppearanceProfiles();
 	void syncDesktopThemeWithPiTheme(null).finally(() => {
 		applyDesktopAppearanceProfileToRoot(resolved, profiles);
+		installColorMixPolyfill();
 	});
 }
 
@@ -5004,7 +5005,6 @@ function setupThemeSyncListeners(): void {
 }
 
 applyInitialTheme();
-requestAnimationFrame(() => installColorMixPolyfill());
 applyWindowChrome();
 void applyNativeWindowVisualFixes();
 setupThemeSyncListeners();
