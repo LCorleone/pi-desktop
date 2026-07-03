@@ -344,6 +344,12 @@ samp {
 	color: var(--accent);
 }
 
+.titlebar-pill.remote {
+	background: color-mix(in srgb, var(--success, var(--accent)) 16%, transparent);
+	color: var(--success, var(--accent));
+	font-weight: 600;
+}
+
 .titlebar-meta {
 	font-size: 11px;
 	color: var(--muted);

@@ -4,8 +4,9 @@
 
 import { html, nothing, render, type TemplateResult } from "lit";
 import { clearActiveDraggedFilePaths, setActiveDraggedFilePaths } from "./file-drag-transfer.js";
-import { captionIconSvg, getMaximized, subscribeMaximized } from "./window-chrome.js";
+	import { captionIconSvg, getMaximized, subscribeMaximized } from "./window-chrome.js";
 import { EMOJI_CATALOG } from "./emoji-catalog.js";
+import { getConnectionMode } from "../connection-state.js";
 import { fetchAndCacheSessionList, getCachedSessionList, invalidateSessionListCache } from "../rpc/session-cache.js";
 
 export type SidebarMode = "projects" | "files";
@@ -1633,6 +1634,16 @@ export class Sidebar {
 			const project = this.projects.find((p) => p.id === projectId);
 			if (!project) return;
 			const isStale = () => !this.isWorkspaceHydrationCurrent(hydrationToken) || !this.projects.includes(project);
+			// In SSH (remote) mode the session list is scanned from the LOCAL
+			// filesystem, which belongs to a different machine than the pi session.
+			// Skip the fetch and leave the list empty; the sidebar shows a notice.
+			if (getConnectionMode() === "ssh") {
+				project.sessions = [];
+				project.sessionsLoaded = true;
+				project.lastSessionsLoadedAt = Date.now();
+				if (!isStale()) this.render();
+				return;
+			}
 			const silent = options?.silent === true;
 			const now = Date.now();
 			if (silent && project.sessionsLoaded && now - project.lastSessionsLoadedAt < 2200) {
@@ -3728,7 +3739,7 @@ export class Sidebar {
 			if (this.query.trim()) {
 				return html`<div class="sidebar-empty">No sessions match your filter.</div>`;
 			}
-			return html`<div class="sidebar-empty">${this.sessionShow === "relevant" ? "No relevant sessions yet." : "No sessions yet."}</div>`;
+			return html`<div class="sidebar-empty">${getConnectionMode() === "ssh" ? "Session browser is local-only in SSH mode." : this.sessionShow === "relevant" ? "No relevant sessions yet." : "No sessions yet."}</div>`;
 		}
 
 		return html`
@@ -3870,7 +3881,7 @@ export class Sidebar {
 										${showBlockingSessionLoad
 											? html`<div class="sidebar-empty">Loading sessions…</div>`
 											: sessions.length === 0
-												? html`<div class="sidebar-empty">${this.sessionShow === "relevant" ? "No relevant sessions." : "No sessions yet."}</div>`
+												? html`<div class="sidebar-empty">${getConnectionMode() === "ssh" ? "Session browser is local-only in SSH mode." : this.sessionShow === "relevant" ? "No relevant sessions." : "No sessions yet."}</div>`
 												: sessions.map(
                                                     (session, index) => {
                                                         const normalizedSessionPath = normalizePath(session.path);

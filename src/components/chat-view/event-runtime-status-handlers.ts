@@ -178,7 +178,17 @@ export function handleRuntimeStatusEvent(
 			context.clearDisconnectNoticeTimer();
 			context.scheduleDisconnectNoticeTimer(() => {
 				if (!context.isRpcConnected()) {
-					context.pushNotice("Disconnected from pi process", "error");
+					const rawReason = pickString(event, ["reason"]);
+					// Only surface the backend reason when it carries useful detail
+					// (e.g. an SSH connection failure with stderr). A bare/empty
+					// "process exited" stays as the friendly default message.
+					const isGenericExit = !rawReason || /^process exited\s*$/i.test(rawReason);
+					context.pushNotice(
+						isGenericExit
+							? "Disconnected from pi process"
+							: `Disconnected from pi process: ${context.truncate(rawReason, 180)}`,
+						"error",
+					);
 					context.render();
 				}
 			}, 900);

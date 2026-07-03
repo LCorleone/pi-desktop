@@ -12,6 +12,7 @@ import {
 	type ThinkingLevel,
 	rpcBridge,
 } from "../rpc/bridge.js";
+import { getConnectionMode } from "../connection-state.js";
 import { buildGitBranchIndex, findGitBranchEntryByQuery, type GitBranchEntry } from "../git/branches.js";
 import {
 	createSlashPaletteItems,
@@ -3631,6 +3632,10 @@ export class ChatView {
 	}
 
 	async shareAsGist(): Promise<boolean> {
+		if (getConnectionMode() === "ssh") {
+			this.pushNotice("Share gist is not available in SSH (remote) mode — it reads a local file and runs the local GitHub CLI.", "info");
+			return false;
+		}
 		try {
 			const { tempDir } = await import("@tauri-apps/api/path");
 			const tempRoot = (await tempDir()).replace(/\\/g, "/").replace(/\/+$/, "");

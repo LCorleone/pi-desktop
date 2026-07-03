@@ -12,6 +12,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { html, render } from "lit";
+import { getConnectionMode } from "../connection-state.js";
 
 interface TerminalExecResult {
 	code: number | null;
@@ -112,6 +113,7 @@ export class TerminalPanel {
 	/** Run a command from an external trigger (e.g. command palette / chat).
 	 * The command is typed into the persistent shell followed by Enter. */
 	async runCommand(commandText: string): Promise<void> {
+		if (getConnectionMode() === "ssh") return;
 		const command = commandText.trim();
 		if (!command) return;
 		this.ensureTerminal();
@@ -195,6 +197,7 @@ export class TerminalPanel {
 	}
 
 	private async ensurePty(): Promise<void> {
+		if (getConnectionMode() === "ssh") return;
 		if (this.ptySpawned) return;
 		if (this.spawnInFlight) return this.spawnInFlight;
 		const attempt = (async () => {
@@ -225,6 +228,7 @@ export class TerminalPanel {
 	private async respawn(): Promise<void> {
 		// The backend pty_spawn supersedes an existing session under the same id
 		// (kills the old child). Reset the viewport and re-spawn in the new cwd.
+		if (getConnectionMode() === "ssh") return;
 		try {
 			const { cols, rows } = this.getDimensions();
 			this.ptySpawned = false;
@@ -374,6 +378,26 @@ export class TerminalPanel {
 	}
 
 	render(): void {
+		// Defense-in-depth: the terminal spawns a LOCAL PTY, which would run on
+		// the wrong machine in SSH mode. The dock launch is gated in main.ts; this
+		// guard ensures the panel never spawns a local shell if shown anyway.
+		if (getConnectionMode() === "ssh") {
+			const template = html`
+				<div class="terminal-panel-root">
+					<div class="terminal-panel-header">
+						<div class="terminal-panel-title">Terminal</div>
+						<div class="terminal-panel-actions">
+							<button class="ghost-btn terminal-close-btn" title="Close terminal" @click=${() => this.onRequestClose?.()}>✕</button>
+						</div>
+					</div>
+					<div class="terminal-panel-viewport" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);opacity:.85;padding:1rem;font-size:.9rem;">
+						Terminal panel is not available in SSH (remote) mode.
+					</div>
+				</div>
+			`;
+			render(template, this.container);
+			return;
+		}
 		const cwdLabel = this.cwd ? compactPath(this.cwd) : "No project open";
 		const template = html`
 			<div

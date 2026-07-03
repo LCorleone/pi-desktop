@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, Instant, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
 
 mod pty;
@@ -80,6 +80,39 @@ struct RpcStartOptions {
     provider: Option<String>,
     model: Option<String>,
     env: Option<std::collections::HashMap<String, String>>,
+    /// "local" (default) or "ssh" — connect to a pi process running on a remote host over ssh.
+    #[serde(default)]
+    pub connection_mode: Option<String>,
+    /// SSH connection config. Required when connection_mode == "ssh".
+    #[serde(default)]
+    pub ssh: Option<SshConnectionConfig>,
+}
+
+/// Configuration for connecting to a remote pi process over ssh.
+/// v1 is keys + ssh-agent only (BatchMode=yes); the remote pi owns its own provider/model config.
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct SshConnectionConfig {
+    #[serde(default)]
+    pub host: String,
+    #[serde(default)]
+    pub user: Option<String>,
+    #[serde(default)]
+    pub port: Option<u16>,
+    /// Path to the pi binary on the remote host. None -> "pi" on the remote PATH.
+    #[serde(default)]
+    pub remote_pi_path: Option<String>,
+    /// Working directory to launch pi in on the remote host.
+    #[serde(default)]
+    pub remote_cwd: Option<String>,
+    /// Path to an ssh identity file (-i).
+    #[serde(default)]
+    pub identity_file: Option<String>,
+    /// Extra ssh -o options, e.g. { "ProxyJump": "bastion" }.
+    #[serde(default)]
+    pub extra_options: Option<HashMap<String, String>>,
+    /// None | Some(true) -> StrictHostKeyChecking=accept-new; Some(false) -> =yes.
+    #[serde(default)]
+    pub accept_new_host: Option<bool>,
 }
 
 /// How the pi process was resolved
@@ -630,6 +663,85 @@ fn build_command(pi: &PiProcess, options: &RpcStartOptions) -> Command {
     cmd
 }
 
+/// Single-quote a string for a POSIX remote shell (wrap in `'…'`, escape embedded `'` as `'\''`).
+/// Every user-supplied string placed into the remote command string MUST pass through this.
+fn shell_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('\'');
+    for ch in s.chars() {
+        if ch == '\'' {
+            out.push_str("'\\'''");
+        } else {
+            out.push(ch);
+        }
+    }
+    out.push('\'');
+    out
+}
+
+/// Build an `ssh … <remote_command>` Command for the given SSH config.
+/// The remote command is passed as a single argv element (the remote POSIX shell parses it).
+/// Auth is keys + ssh-agent only (BatchMode=yes). No pty (-T) so ssh stays off the JSON stream.
+fn build_ssh_remote_command(ssh: &SshConnectionConfig, remote_command: &str) -> Command {
+    let mut cmd = Command::new("ssh");
+    cmd.arg("-T");
+    if let Some(port) = ssh.port {
+        cmd.arg("-p").arg(port.to_string());
+    }
+    if let Some(ref identity_file) = ssh.identity_file {
+        cmd.arg("-i").arg(identity_file);
+    }
+    cmd.arg("-o").arg("BatchMode=yes");
+    cmd.arg("-o").arg("ConnectTimeout=10");
+    let host_key_check = if ssh.accept_new_host == Some(false) {
+        "StrictHostKeyChecking=yes"
+    } else {
+        "StrictHostKeyChecking=accept-new"
+    };
+    cmd.arg("-o").arg(host_key_check);
+    cmd.arg("-o").arg("ServerAliveInterval=15");
+    cmd.arg("-o").arg("ServerAliveCountMax=3");
+    cmd.arg("-o").arg("LogLevel=ERROR");
+    if let Some(ref extra) = ssh.extra_options {
+        for (key, value) in extra {
+            cmd.arg("-o").arg(format!("{}={}", key, value));
+        }
+    }
+    let user_prefix = ssh
+        .user
+        .as_deref()
+        .map(|u| format!("{}@", u))
+        .unwrap_or_default();
+    cmd.arg(format!("{}{}", user_prefix, ssh.host));
+    cmd.arg(remote_command);
+
+    cmd.stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    // On Windows, prevent console window from appearing
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
+    cmd
+}
+
+/// Build the ssh Command that launches a remote pi process in RPC mode.
+/// NOTE: deliberately ignores options.provider/model/env — the remote pi owns its own config.
+fn build_ssh_command(ssh: &SshConnectionConfig, options: &RpcStartOptions) -> Command {
+    let pi = shell_quote(ssh.remote_pi_path.as_deref().unwrap_or("pi"));
+    let cwd = options.cwd.trim();
+    let remote = if cwd.is_empty() {
+        format!("{} --mode rpc", pi)
+    } else {
+        format!("cd {} && {} --mode rpc", shell_quote(cwd), pi)
+    };
+    build_ssh_remote_command(ssh, &remote)
+}
+
 fn write_rpc_line(stdin: &mut std::process::ChildStdin, line: &str) -> Result<(), String> {
     stdin
         .write_all(line.as_bytes())
@@ -666,15 +778,37 @@ async fn rpc_start(
         return Err("Failed to acquire RPC instances lock".to_string());
     };
 
-    let cwd_path = Path::new(&options.cwd);
-    if !cwd_path.is_dir() {
-        return Err(format!("Working directory does not exist: {}", options.cwd));
-    }
+    let mode = options.connection_mode.as_deref().unwrap_or("local");
+    let (mut cmd, discovery_label) = if mode == "ssh" {
+        let ssh = options
+            .ssh
+            .clone()
+            .ok_or_else(|| "SSH mode selected but no SSH config provided".to_string())?;
+        if ssh.host.trim().is_empty() {
+            return Err("SSH host is required".to_string());
+        }
+        if options.cwd.trim().is_empty() {
+            return Err("Remote working directory is required".to_string());
+        }
+        let label = format!(
+            "SSH {}{}:{}",
+            ssh.user
+                .as_deref()
+                .map(|u| format!("{}@", u))
+                .unwrap_or_default(),
+            ssh.host,
+            ssh.port.unwrap_or(22)
+        );
+        (build_ssh_command(&ssh, &options), label)
+    } else {
+        let cwd_path = Path::new(&options.cwd);
+        if !cwd_path.is_dir() {
+            return Err(format!("Working directory does not exist: {}", options.cwd));
+        }
+        let pi = discover_pi(&app, &options)?;
+        (build_command(&pi, &options), format!("{:?}", pi))
+    };
 
-    let pi = discover_pi(&app, &options)?;
-    let discovery_label = format!("{:?}", pi);
-
-    let mut cmd = build_command(&pi, &options);
     let mut child = cmd.spawn().map_err(|e| {
         let lower = e.to_string().to_lowercase();
         let missing_executable = matches!(e.raw_os_error(), Some(2) | Some(3))
@@ -682,11 +816,11 @@ async fn rpc_start(
             || (lower.contains("createprocess") && lower.contains("cannot find"));
         if missing_executable {
             return missing_pi_cli_error(Some(format!(
-                "Discovery details: {:?}\nSpawn error: {}",
-                pi, e
+                "Discovery details: {}\nSpawn error: {}",
+                discovery_label, e
             )));
         }
-        format!("Failed to spawn pi process ({:?}): {}", pi, e)
+        format!("Failed to spawn pi process ({}): {}", discovery_label, e)
     })?;
 
     let stdin = child.stdin.take().ok_or("Failed to get stdin")?;
@@ -707,10 +841,18 @@ async fn rpc_start(
         return Err("Failed to acquire RPC instances lock".to_string());
     }
 
+    // Shared ring buffer of recent stderr lines, used to surface legible failure reasons when
+    // the process exits early (e.g. ssh auth/host-key/path failures emit to stderr then exit).
+    let start_time = Instant::now();
+    let stderr_buf: Arc<Mutex<VecDeque<String>>> =
+        Arc::new(Mutex::new(VecDeque::with_capacity(32)));
+
     // Spawn thread to read stdout and emit events to frontend
     let app_handle = app.clone();
     let stdout_instance_id = instance_id.clone();
     let stdout_generation = generation;
+    let stdout_buf = stderr_buf.clone();
+    let stdout_start = start_time;
     std::thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
@@ -729,12 +871,31 @@ async fn rpc_start(
                 Err(_) => break,
             }
         }
+        // On early exit (< 8s), include recent stderr so auth/host-key/path failures
+        // are legible instead of a bare "process exited". Otherwise keep the plain reason.
+        let reason = if stdout_start.elapsed() < Duration::from_secs(8) {
+            let snapshot: Vec<String> = stdout_buf
+                .lock()
+                .ok()
+                .map(|buf| buf.iter().rev().take(8).rev().cloned().collect())
+                .unwrap_or_default();
+            if snapshot.is_empty() {
+                "process exited".to_string()
+            } else {
+                format!(
+                    "process exited early; recent stderr:\n{}",
+                    snapshot.join("\n")
+                )
+            }
+        } else {
+            "process exited".to_string()
+        };
         let _ = app_handle.emit(
             "rpc-closed",
             RpcClosedEventPayload {
                 instance_id: stdout_instance_id,
                 generation: stdout_generation,
-                reason: "process exited".to_string(),
+                reason,
             },
         );
     });
@@ -743,11 +904,18 @@ async fn rpc_start(
     let app_handle_err = app.clone();
     let stderr_instance_id = instance_id.clone();
     let stderr_generation = generation;
+    let stderr_buf_clone = stderr_buf.clone();
     std::thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
             match line {
                 Ok(line) => {
+                    if let Ok(mut buf) = stderr_buf_clone.lock() {
+                        if buf.len() == 32 {
+                            buf.pop_front();
+                        }
+                        buf.push_back(line.clone());
+                    }
                     let payload = RpcLineEventPayload {
                         instance_id: stderr_instance_id.clone(),
                         generation: stderr_generation,
@@ -1599,6 +1767,12 @@ pub struct AppSettings {
     pub model_provider: Option<String>,
     pub model_id: Option<String>,
     pub pi_path: Option<String>,
+    /// "local" (default) or "ssh" — global connection mode for this app.
+    #[serde(default)]
+    pub connection_mode: Option<String>,
+    /// SSH connection config, used when connection_mode == "ssh".
+    #[serde(default)]
+    pub ssh: Option<SshConnectionConfig>,
 }
 
 impl Default for AppSettings {
@@ -1613,6 +1787,8 @@ impl Default for AppSettings {
             model_provider: None,
             model_id: None,
             pi_path: None,
+            connection_mode: None,
+            ssh: None,
         }
     }
 }
@@ -2619,6 +2795,78 @@ async fn pi_generate_title(
     Ok(title)
 }
 
+/// Result of probing a remote host over ssh during settings setup.
+#[derive(Serialize)]
+struct SshTestResult {
+    ok: bool,
+    remote_pi_version: String,
+    remote_cwd_exists: bool,
+    stderr: String,
+    took_ms: u64,
+}
+
+/// Probe an SSH connection: run `pi --version` (and optionally check the remote cwd exists)
+/// on the remote host. Bounded to 12s. Keys + ssh-agent only (BatchMode=yes via build_ssh_remote_command).
+#[tauri::command]
+async fn test_ssh_connection(ssh: SshConnectionConfig) -> Result<SshTestResult, String> {
+    let pi_q = shell_quote(ssh.remote_pi_path.as_deref().unwrap_or("pi"));
+    let remote = if let Some(cwd) = ssh.remote_cwd.as_deref().filter(|s| !s.trim().is_empty()) {
+        format!(
+            "{{ test -d {} && echo CWD_OK || echo CWD_MISSING; }} ; {} --version",
+            shell_quote(cwd),
+            pi_q
+        )
+    } else {
+        format!("{} --version", pi_q)
+    };
+    let mut cmd = build_ssh_remote_command(&ssh, &remote);
+    let started = Instant::now();
+    let output = tokio::time::timeout(
+        Duration::from_secs(12),
+        tokio::task::spawn_blocking(move || cmd.output()),
+    )
+    .await
+    .map_err(|_| "SSH test timed out (>12s)".to_string())?
+    .map_err(|e| format!("SSH test failed: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr_raw = String::from_utf8_lossy(&output.stderr);
+    let took_ms = started.elapsed().as_millis() as u64;
+
+    // First non-empty line mentioning "pi" (e.g. the version banner), else the first line.
+    let remote_pi_version = stdout
+        .lines()
+        .find(|l| l.to_lowercase().contains("pi"))
+        .or_else(|| stdout.lines().next())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let remote_cwd_exists = stdout.contains("CWD_OK");
+    let cwd_check_requested = ssh
+        .remote_cwd
+        .as_deref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+    let ok = output.status.success() && (!cwd_check_requested || remote_cwd_exists);
+
+    // Keep stderr bounded so the UI isn't flooded by verbose ssh -v output. ceil_char_boundary
+    // keeps the byte slice on a UTF-8 boundary so we never split a multi-byte sequence.
+    let stderr = if stderr_raw.len() > 2048 {
+        let from = stderr_raw.ceil_char_boundary(stderr_raw.len() - 2048);
+        format!("...{}", &stderr_raw[from..])
+    } else {
+        stderr_raw.to_string()
+    };
+
+    Ok(SshTestResult {
+        ok,
+        remote_pi_version,
+        remote_cwd_exists,
+        stderr,
+        took_ms,
+    })
+}
+
 #[tauri::command]
 async fn load_models_config() -> Result<String, String> {
     let home = home_dir().ok_or("Could not find home directory")?;
@@ -2752,6 +3000,7 @@ pub fn run() {
             generate_session_title,
             pi_generate_title,
             test_provider_connection,
+            test_ssh_connection,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -17,13 +17,27 @@ import { Sidebar, type SidebarMode, type SidebarWorkspaceItem } from "./componen
 import { TerminalPanel } from "./components/terminal-panel.js";
 import { applyWindowChrome } from "./components/window-chrome.js";
 import { fetchDesktopUpdateStatus, type DesktopUpdateStatus } from "./desktop-updates.js";
-import { type CliUpdateStatus, RpcBridge, type RpcSessionState, rpcBridge, setActiveRpcBridge } from "./rpc/bridge.js";
+import {
+	type CliUpdateStatus,
+	RpcBridge,
+	type RpcSessionState,
+	type RpcStartOptions,
+	type SshConnectionConfig,
+	rpcBridge,
+	setActiveRpcBridge,
+} from "./rpc/bridge.js";
 import {
 	applyDesktopAppearanceProfileToRoot,
 	DESKTOP_APPEARANCE_PROFILE_CHANGED_EVENT,
 	loadDesktopAppearanceProfiles,
 } from "./theme/appearance-profiles.js";
 import { syncDesktopThemeWithPiTheme } from "./theme/pi-theme-bridge.js";
+import {
+	getConnectionMode as getConnectionModeImpl,
+	getSshConfig,
+	setConnectionState,
+	type ConnectionMode,
+} from "./connection-state.js";
 import { installColorMixPolyfill } from "./theme/color-mix-polyfill.js";
 import { DESKTOP_THEME_CHANGED_EVENT, getResolvedDesktopTheme, initializeDesktopTheme, toggleDesktopTheme } from "./theme/theme-manager.js";
 import { ensureBundledThemesInstalled } from "./theme/bundled-themes.js";
@@ -1645,14 +1659,23 @@ async function autoNameSessionIfNew(): Promise<void> {
 		// Let pi handle the API call: pi already knows credentials, proxy,
 		// TLS, and API format for every provider. No separate HTTP or config
 		// parsing needed — works with any model in the model picker.
+		//
+		// In SSH (remote) mode the session lives on the remote host, but
+		// pi_generate_title spawns a LOCAL pi process to derive a title — that
+		// would run against the wrong machine/credentials, so skip the LLM
+		// title entirely and fall through to the word-based fallback below.
 		let title: string;
 		try {
-			const raw = await invoke<string>("pi_generate_title", {
-				provider: state.model!.provider,
-				modelId: state.model!.id,
-				userMessage: userMessage,
-			});
-			title = cleanAutoTitle(raw);
+			if (getConnectionModeImpl() === "ssh") {
+				title = "";
+			} else {
+				const raw = await invoke<string>("pi_generate_title", {
+					provider: state.model!.provider,
+					modelId: state.model!.id,
+					userMessage: userMessage,
+				});
+				title = cleanAutoTitle(raw);
+			}
 		} catch (err) {
 			console.warn("[auto-name] pi_generate_title failed:", err);
 			title = "";
@@ -1729,7 +1752,7 @@ async function renameSessionFromWorkspace(projectId: string, sessionPath: string
 				const maintenanceBridge = new RpcBridge(uid("rename_rpc"));
 				maintenanceBridge.setPreferredPiPath(findPiBinaryPath());
 				try {
-					await maintenanceBridge.start({ cliPath: findCliPath(), piPath: findPiBinaryPath(), cwd: project.path });
+					await maintenanceBridge.start(buildRpcStartOptions(project.path));
 					const switched = await maintenanceBridge.switchSession(sessionPath);
 					if (switched.cancelled) return;
 					await maintenanceBridge.setSessionName(trimmedName);
@@ -2096,6 +2119,60 @@ async function loadPreferredPiBinaryPathFromSettings(): Promise<void> {
 	} catch {
 		applyPreferredPiBinaryPath(null);
 	}
+}
+
+/**
+ * Active connection mode (local or ssh). Re-exported from the connection-state
+ * leaf module so existing imports keep working; new consumers should import
+ * directly from connection-state.ts to avoid coupling to main.ts.
+ */
+export function getConnectionMode(): ConnectionMode {
+	return getConnectionModeImpl();
+}
+
+/** "user@host:port" when in SSH mode with a host configured, else null. */
+export { getSshTargetLabel } from "./connection-state.js";
+
+function applyConnectionConfig(mode: ConnectionMode, ssh: SshConnectionConfig | null): void {
+	setConnectionState(mode, ssh);
+}
+
+async function loadConnectionConfigFromSettings(): Promise<void> {
+	try {
+		const { invoke } = await import("@tauri-apps/api/core");
+		const saved = (await invoke("load_settings")) as {
+			connection_mode?: string | null;
+			ssh?: SshConnectionConfig | null;
+		};
+		const mode: ConnectionMode = saved?.connection_mode === "ssh" ? "ssh" : "local";
+		setConnectionState(mode, saved?.ssh ?? null);
+	} catch {
+		setConnectionState("local", null);
+	}
+}
+
+/**
+ * Build the RpcStartOptions for a runtime connection. In SSH mode the cwd becomes
+ * the remote working directory (required by the backend), and cli/pi paths are
+ * ignored (the remote pi owns its own config). In local mode everything is as today.
+ */
+function buildRpcStartOptions(localCwd: string): RpcStartOptions {
+	const sshConfig = getSshConfig();
+	if (getConnectionModeImpl() === "ssh") {
+		return {
+			cliPath: null,
+			piPath: null,
+			cwd: sshConfig?.remote_cwd ?? "",
+			connectionMode: "ssh",
+			ssh: sshConfig,
+		};
+	}
+	return {
+		cliPath: findCliPath(),
+		piPath: findPiBinaryPath(),
+		cwd: localCwd,
+		connectionMode: "local",
+	};
 }
 
 function findCliPath(): string | null {
@@ -2840,7 +2917,7 @@ async function ensureRuntimeForSessionTab(
 		if (!bridge.isConnected) {
 			runtime.phase = "starting";
 			recordDebugTrace(`ensureRuntime:start-bridge instance=${runtime.instanceId}`);
-			await bridge.start({ cliPath: findCliPath(), piPath: findPiBinaryPath(), cwd: projectPath });
+			await bridge.start(buildRpcStartOptions(projectPath));
 			recordDebugTrace(`ensureRuntime:bridge-started instance=${runtime.instanceId} discovery=${bridge.discoveryInfo ?? "-"}`);
 			if (typeof taskVersion === "number") {
 				assertProjectTaskCurrent(taskVersion);
@@ -3202,6 +3279,7 @@ async function initialize(): Promise<void> {
 	initializeComponents();
 	loadWorkspaces();
 	await loadPreferredPiBinaryPathFromSettings();
+	await loadConnectionConfigFromSettings();
 	loadSidebarWidth();
 	applySidebarWidth();
 	await ensureBundledThemesInstalled();
@@ -3540,6 +3618,13 @@ function mountSettingsPanel(): SettingsPanel {
 			chatView?.notify("Saved CLI binary path override. Use /reload to reconnect active runtimes.", "info");
 		}
 	});
+	panel.setOnConnectionConfigChange((mode, ssh) => {
+		applyConnectionConfig(mode, ssh);
+		recordDebugTrace(`connection-config updated mode=${mode}`);
+		if (mode === "ssh") {
+			chatView?.notify("Saved SSH connection settings. Use /reload to reconnect active runtimes.", "info");
+		}
+	});
 	panel.setOnClose(() => {
 		const workspace = getActiveWorkspace();
 		if (!workspace || workspace.pane !== "settings") return;
@@ -3697,6 +3782,10 @@ function openPackagesPane(): void {
 }
 
 function toggleTerminalDock(forceOpen?: boolean): void {
+	if (getConnectionModeImpl() === "ssh") {
+		chatView?.notify("Terminal panel is not available in SSH (remote) mode.", "info");
+		return;
+	}
 	const workspace = getActiveWorkspace();
 	if (!workspace) return;
 	const shouldOpen = typeof forceOpen === "boolean" ? forceOpen : workspace.pane !== "chat" ? true : !workspace.terminalOpen;

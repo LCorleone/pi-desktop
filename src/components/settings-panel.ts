@@ -19,6 +19,8 @@ import {
 	type PiAuthStatus,
 	type QueueMode,
 	type RpcCompatibilityReport,
+	type SshConnectionConfig,
+	type SshTestResult,
 	rpcBridge,
 } from "../rpc/bridge.js";
 import { applyDesktopTheme, getResolvedDesktopTheme, readStoredDesktopTheme, type DesktopThemeMode } from "../theme/theme-manager.js";
@@ -53,6 +55,14 @@ interface SettingsState {
 	steeringMode: QueueMode;
 	followUpMode: QueueMode;
 	piBinaryPath: string;
+	connectionMode: "local" | "ssh";
+	sshHost: string;
+	sshUser: string;
+	sshPort: string;
+	sshRemotePiPath: string;
+	sshRemoteCwd: string;
+	sshIdentityFile: string;
+	sshAcceptNewHost: boolean;
 }
 
 interface ScopedModelOption {
@@ -90,6 +100,14 @@ export class SettingsPanel {
 		steeringMode: "one-at-a-time",
 		followUpMode: "one-at-a-time",
 		piBinaryPath: "",
+		connectionMode: "local",
+		sshHost: "",
+		sshUser: "",
+		sshPort: "",
+		sshRemotePiPath: "",
+		sshRemoteCwd: "",
+		sshIdentityFile: "",
+		sshAcceptNewHost: true,
 	};
 	private onClose: (() => void) | null = null;
 	private onRequestAddProject: (() => void) | null = null;
@@ -106,8 +124,13 @@ export class SettingsPanel {
 	private cliUpdating = false;
 	private cliActionMessage = "";
 	private piPathActionMessage = "";
+	private sshTesting = false;
+	private sshTestResult: SshTestResult | null = null;
+	private sshTestError = "";
+	private sshActionMessage = "";
 	private onCliStatusChange: ((status: CliUpdateStatus | null) => void) | null = null;
 	private onPiBinaryPathChange: ((path: string | null) => void) | null = null;
+	private onConnectionConfigChange: ((mode: "local" | "ssh", ssh: SshConnectionConfig | null) => void) | null = null;
 	private onNavigationStateChange: ((state: SettingsNavigationState) => void) | null = null;
 	private compatibilityReport: RpcCompatibilityReport | null = null;
 	private compatibilityLoading = false;
@@ -187,6 +210,10 @@ export class SettingsPanel {
 
 	setOnPiBinaryPathChange(callback: ((path: string | null) => void) | null): void {
 		this.onPiBinaryPathChange = callback;
+	}
+
+	setOnConnectionConfigChange(callback: ((mode: "local" | "ssh", ssh: SshConnectionConfig | null) => void) | null): void {
+		this.onConnectionConfigChange = callback;
 	}
 
 	setOnNavigationStateChange(callback: ((state: SettingsNavigationState) => void) | null): void {
@@ -975,6 +1002,107 @@ export class SettingsPanel {
 		await this.savePiBinaryPathOverride();
 	}
 
+	private buildSshConfigFromState(): SshConnectionConfig {
+		const port = Number.parseInt(this.state.sshPort, 10);
+		return {
+			host: this.state.sshHost.trim(),
+			user: this.state.sshUser.trim() || null,
+			port: Number.isFinite(port) && port > 0 && port <= 65535 ? port : null,
+			remote_pi_path: this.state.sshRemotePiPath.trim() || null,
+			remote_cwd: this.state.sshRemoteCwd.trim() || null,
+			identity_file: this.state.sshIdentityFile.trim() || null,
+			accept_new_host: this.state.sshAcceptNewHost,
+		};
+	}
+
+	private setConnectionMode(mode: "local" | "ssh"): void {
+		this.state.connectionMode = mode;
+		this.sshTestResult = null;
+		this.sshTestError = "";
+		this.sshActionMessage = "";
+		this.render();
+	}
+
+	private setSshField(field: keyof SettingsState, value: string): void {
+		(this.state[field] as string) = value;
+		this.sshTestResult = null;
+		this.sshTestError = "";
+		this.sshActionMessage = "";
+		this.render();
+	}
+
+	private async chooseSshIdentityFile(): Promise<void> {
+		try {
+			const { open } = await import("@tauri-apps/plugin-dialog");
+			const selected = await open({
+				multiple: false,
+				directory: false,
+				title: "Select SSH identity file",
+			});
+			if (typeof selected !== "string" || selected.trim().length === 0) return;
+			this.state.sshIdentityFile = selected;
+			this.render();
+		} catch (err) {
+			this.sshActionMessage = err instanceof Error ? err.message : "Could not open file picker.";
+			this.render();
+		}
+	}
+
+	private async testSshConnectionNow(): Promise<void> {
+		const config = this.buildSshConfigFromState();
+		if (!config.host) {
+			this.sshTestError = "SSH host is required.";
+			this.render();
+			return;
+		}
+		if (!config.remote_cwd) {
+			this.sshTestError = "Remote working directory is required.";
+			this.render();
+			return;
+		}
+		this.sshTesting = true;
+		this.sshTestResult = null;
+		this.sshTestError = "";
+		this.render();
+		try {
+			const result = await rpcBridge.testSshConnection(config);
+			this.sshTestResult = result;
+		} catch (err) {
+			this.sshTestError = err instanceof Error ? err.message : String(err);
+		} finally {
+			this.sshTesting = false;
+			this.render();
+		}
+	}
+
+	private async saveConnectionSettings(): Promise<void> {
+		if (this.state.connectionMode === "ssh") {
+			const config = this.buildSshConfigFromState();
+			if (!config.host) {
+				this.sshActionMessage = "SSH host is required.";
+				this.render();
+				return;
+			}
+			if (!config.remote_cwd) {
+				this.sshActionMessage = "Remote working directory is required.";
+				this.render();
+				return;
+			}
+		}
+		try {
+			await this.saveSettings();
+			const mode = this.state.connectionMode;
+			const ssh = mode === "ssh" ? this.buildSshConfigFromState() : null;
+			this.onConnectionConfigChange?.(mode, ssh);
+			this.sshActionMessage = mode === "ssh"
+				? "Saved SSH connection settings. Use /reload to reconnect active runtimes."
+				: "Saved local connection settings. Use /reload to reconnect active runtimes.";
+		} catch (err) {
+			this.sshActionMessage = err instanceof Error ? err.message : "Failed to save connection settings.";
+		}
+		this.render();
+	}
+
 	private async loadState(): Promise<void> {
 		const runtimeReady = Boolean(this.runtimeProjectPath) && rpcBridge.isConnected;
 		if (runtimeReady) {
@@ -1010,6 +1138,8 @@ export class SettingsPanel {
 				theme?: string;
 				auto_retry?: boolean;
 				pi_path?: string | null;
+				connection_mode?: string | null;
+				ssh?: SshConnectionConfig | null;
 			};
 			if (saved.theme === "dark" || saved.theme === "light" || saved.theme === "system") {
 				this.state.theme = saved.theme;
@@ -1021,6 +1151,15 @@ export class SettingsPanel {
 			const normalizedPiPath = this.normalizePiBinaryPath(saved.pi_path);
 			this.state.piBinaryPath = normalizedPiPath ?? "";
 			this.onPiBinaryPathChange?.(normalizedPiPath);
+			const ssh = saved.ssh ?? null;
+			this.state.connectionMode = saved.connection_mode === "ssh" ? "ssh" : "local";
+			this.state.sshHost = ssh?.host ?? "";
+			this.state.sshUser = ssh?.user ?? "";
+			this.state.sshPort = ssh?.port != null ? String(ssh.port) : "";
+			this.state.sshRemotePiPath = ssh?.remote_pi_path ?? "";
+			this.state.sshRemoteCwd = ssh?.remote_cwd ?? "";
+			this.state.sshIdentityFile = ssh?.identity_file ?? "";
+			this.state.sshAcceptNewHost = ssh?.accept_new_host ?? true;
 		} catch {
 			// ignore missing persisted settings
 		}
@@ -1152,6 +1291,11 @@ export class SettingsPanel {
 
 
 	private async updateCliNow(): Promise<void> {
+		if (this.state.connectionMode === "ssh") {
+			this.cliActionMessage = "Remote mode: update the pi CLI on the remote host directly.";
+			this.render();
+			return;
+		}
 		if (this.cliUpdating) return;
 		this.cliUpdating = true;
 		this.cliActionMessage = "Updating CLI via npm…";
@@ -1652,6 +1796,8 @@ export class SettingsPanel {
 					model_provider: null,
 					model_id: null,
 					pi_path: this.normalizePiBinaryPath(this.state.piBinaryPath),
+					connection_mode: this.state.connectionMode,
+					ssh: this.state.connectionMode === "ssh" ? this.buildSshConfigFromState() : null,
 				},
 			});
 		} catch (err) {
@@ -2051,11 +2197,13 @@ export class SettingsPanel {
 				<section class="settings-group">
 					<div class="settings-section">
 						<div class="settings-section-title">Current account diagnostics</div>
-						${!runtimeControlsEnabled
-							? html`<div class="settings-desc">${runtimeMessage}</div>`
-							: this.authLoading
-								? html`<div class="settings-desc">Checking account diagnostics…</div>`
-								: html`
+						${this.state.connectionMode === "ssh"
+							? html`<div class="settings-desc">Not available in SSH (remote) mode — account diagnostics read the LOCAL <code>~/.pi/agent/auth.json</code>, which belongs to a different machine than your pi session. Configure credentials on the remote host directly.</div>`
+							: !runtimeControlsEnabled
+								? html`<div class="settings-desc">${runtimeMessage}</div>`
+								: this.authLoading
+									? html`<div class="settings-desc">Checking account diagnostics…</div>`
+									: html`
 									<div class="settings-desc">
 										${connectedProviders.length > 0
 											? `Connected providers detected: ${connectedProviders.length}`
@@ -2086,10 +2234,99 @@ export class SettingsPanel {
 		`;
 	}
 
+	private renderConnectionSection(): TemplateResult {
+		return html`
+			<div class="settings-section">
+				<div class="settings-section-title">Connection</div>
+				<div class="settings-row settings-row-top">
+					<div>
+						<div class="settings-label">Connection mode</div>
+						<div class="settings-desc">Connect to a local pi binary, or to a pi process running on a remote host over SSH.</div>
+					</div>
+				</div>
+				<div class="settings-actions">
+					<button class="ghost-btn" ?disabled=${this.state.connectionMode === "local"} @click=${() => this.setConnectionMode("local")}>Local</button>
+					<button class="ghost-btn" ?disabled=${this.state.connectionMode === "ssh"} @click=${() => this.setConnectionMode("ssh")}>SSH (remote)</button>
+				</div>
+				${this.state.connectionMode === "ssh"
+					? html`
+						<div class="settings-desc">Desktop launches <code>pi --mode rpc</code> on a remote host over SSH. Keys + ssh-agent only (BatchMode=yes). The remote pi owns its own provider/model config.</div>
+						<div class="settings-row settings-row-top">
+							<div>
+								<div class="settings-label">Host</div>
+								<div class="settings-desc">Remote hostname or IP address.</div>
+							</div>
+						</div>
+						<input type="text" class="settings-path-input" placeholder="hostname or ip" .value=${this.state.sshHost} @input=${(e: Event) => this.setSshField("sshHost", (e.target as HTMLInputElement).value)} />
+						<div class="settings-row settings-row-top">
+							<div>
+								<div class="settings-label">User (optional)</div>
+							</div>
+						</div>
+						<input type="text" class="settings-path-input" placeholder="remote user" .value=${this.state.sshUser} @input=${(e: Event) => this.setSshField("sshUser", (e.target as HTMLInputElement).value)} />
+						<div class="settings-row settings-row-top">
+							<div>
+								<div class="settings-label">Port (optional)</div>
+							</div>
+						</div>
+						<input type="number" class="settings-path-input" placeholder="22" .value=${this.state.sshPort} @input=${(e: Event) => this.setSshField("sshPort", (e.target as HTMLInputElement).value)} />
+						<div class="settings-row settings-row-top">
+							<div>
+								<div class="settings-label">Remote pi path (optional)</div>
+								<div class="settings-desc">Defaults to <code>pi</code> on the remote PATH.</div>
+							</div>
+						</div>
+						<input type="text" class="settings-path-input" placeholder="pi" .value=${this.state.sshRemotePiPath} @input=${(e: Event) => this.setSshField("sshRemotePiPath", (e.target as HTMLInputElement).value)} />
+						<div class="settings-row settings-row-top">
+							<div>
+								<div class="settings-label">Remote working directory (required)</div>
+								<div class="settings-desc">Where pi launches on the remote host.</div>
+							</div>
+						</div>
+						<input type="text" class="settings-path-input" placeholder="/home/user/project" .value=${this.state.sshRemoteCwd} @input=${(e: Event) => this.setSshField("sshRemoteCwd", (e.target as HTMLInputElement).value)} />
+						<div class="settings-row settings-row-top">
+							<div>
+								<div class="settings-label">Identity file (optional)</div>
+								<div class="settings-desc">SSH private key. Defaults to ssh-agent / ~/.ssh/config.</div>
+							</div>
+						</div>
+						<input type="text" class="settings-path-input" placeholder="~/.ssh/id_ed25519" .value=${this.state.sshIdentityFile} @input=${(e: Event) => this.setSshField("sshIdentityFile", (e.target as HTMLInputElement).value)} />
+						<div class="settings-actions" style="margin-top:8px;">
+							<button class="ghost-btn" @click=${() => this.chooseSshIdentityFile()}>Browse…</button>
+						</div>
+						<label class="settings-row" style="gap:8px;align-items:flex-start;">
+							<input type="checkbox" style="margin-top:4px;" .checked=${this.state.sshAcceptNewHost} @change=${(e: Event) => { this.state.sshAcceptNewHost = (e.target as HTMLInputElement).checked; this.render(); }} />
+							<div>
+								<div class="settings-label">Trust new host on first connect</div>
+								<div class="settings-desc">Uses <code>StrictHostKeyChecking=accept-new</code>. Uncheck to require pre-trusted hosts only.</div>
+							</div>
+						</label>
+						<div class="settings-actions">
+							<button class="ghost-btn" ?disabled=${this.sshTesting || !this.state.sshHost.trim()} @click=${() => this.testSshConnectionNow()}>
+								${this.sshTesting ? "Testing…" : "Test connection"}
+							</button>
+							<button class="ghost-btn" ?disabled=${this.saving} @click=${() => this.saveConnectionSettings()}>
+								${this.saving ? "Saving…" : "Save connection settings"}
+							</button>
+						</div>
+						${this.sshTestError ? html`<div class="settings-desc" style="color:var(--color-text-danger,#c00)">✗ ${this.sshTestError}</div>` : null}
+						${this.sshTestResult
+							? this.sshTestResult.ok
+								? html`<div class="settings-desc">✓ Connected in ${this.sshTestResult.took_ms}ms · remote pi <code>${this.sshTestResult.remote_pi_version || "unknown"}</code>${this.sshTestResult.remote_cwd_exists ? " · remote directory exists" : " · remote directory NOT found"}</div>`
+								: html`<div class="settings-desc" style="color:var(--color-text-danger,#c00)">✗ Connection failed${this.sshTestResult.stderr ? `: ${this.sshTestResult.stderr.slice(0, 300)}` : ""} (${this.sshTestResult.took_ms}ms)</div>`
+							: null}
+						${this.sshActionMessage ? html`<div class="settings-desc">${this.sshActionMessage}</div>` : null}
+					`
+					: html`<div class="settings-desc">Desktop discovers and launches a local <code>pi</code> binary. Configure the binary path below under “CLI updates”.</div>`}
+			</div>
+		`;
+	}
+
 	private renderUpdatesSection(runtimeControlsEnabled: boolean, compatibilityChecks: string[]): TemplateResult {
 		return html`
 			<div class="settings-view-grid">
 				<section class="settings-group settings-group-full">
+					${this.renderConnectionSection()}
 					<div class="settings-section">
 						<div class="settings-section-title">Desktop updates</div>
 						${this.desktopLoading
@@ -2126,35 +2363,40 @@ export class SettingsPanel {
 									: html`<div class="settings-desc">CLI status unavailable. Install or reconnect CLI, then refresh.</div>`}
 								${this.cliStatus?.note ? html`<div class="settings-desc">${this.cliStatus.note}</div>` : null}
 							`}
-						<div class="settings-row settings-row-top">
-							<div>
-								<div class="settings-label">CLI binary path override (optional)</div>
-								<div class="settings-desc">Set an absolute path to your <code>pi</code> binary if Desktop cannot discover it automatically.</div>
-								<div class="settings-desc">Examples: <code>~/.npm-global/bin/pi</code>, <code>/usr/local/bin/pi</code>, <code>C:\\Users\\you\\AppData\\Roaming\\npm\\pi.cmd</code></div>
-							</div>
-						</div>
-						<input
-							type="text"
-							class="settings-path-input"
-							placeholder="/absolute/path/to/pi"
-							.value=${this.state.piBinaryPath}
-							@input=${(e: Event) => this.setPiBinaryPathDraft((e.target as HTMLInputElement).value)}
-						/>
-						<div class="settings-actions" style="margin-top:8px;">
-							<button class="ghost-btn" @click=${() => this.choosePiBinaryPathFromDialog()}>Browse…</button>
-							<button class="ghost-btn" ?disabled=${this.saving} @click=${() => this.savePiBinaryPathOverride()}>
-								${this.saving ? "Saving…" : "Save path override"}
-							</button>
-							<button class="ghost-btn" ?disabled=${this.saving || this.state.piBinaryPath.trim().length === 0} @click=${() => this.clearPiBinaryPathOverride()}>
-								Clear override
-							</button>
-						</div>
-						${this.piPathActionMessage ? html`<div class="settings-desc">${this.piPathActionMessage}</div>` : null}
+						${this.state.connectionMode === "local"
+							? html`
+								<div class="settings-row settings-row-top">
+									<div>
+										<div class="settings-label">CLI binary path override (optional)</div>
+										<div class="settings-desc">Set an absolute path to your <code>pi</code> binary if Desktop cannot discover it automatically.</div>
+										<div class="settings-desc">Examples: <code>~/.npm-global/bin/pi</code>, <code>/usr/local/bin/pi</code>, <code>C:\\Users\\you\\AppData\\Roaming\\npm\\pi.cmd</code></div>
+									</div>
+								</div>
+								<input
+									type="text"
+									class="settings-path-input"
+									placeholder="/absolute/path/to/pi"
+									.value=${this.state.piBinaryPath}
+									@input=${(e: Event) => this.setPiBinaryPathDraft((e.target as HTMLInputElement).value)}
+								/>
+								<div class="settings-actions" style="margin-top:8px;">
+									<button class="ghost-btn" @click=${() => this.choosePiBinaryPathFromDialog()}>Browse…</button>
+									<button class="ghost-btn" ?disabled=${this.saving} @click=${() => this.savePiBinaryPathOverride()}>
+										${this.saving ? "Saving…" : "Save path override"}
+									</button>
+									<button class="ghost-btn" ?disabled=${this.saving || this.state.piBinaryPath.trim().length === 0} @click=${() => this.clearPiBinaryPathOverride()}>
+										Clear override
+									</button>
+								</div>
+								${this.piPathActionMessage ? html`<div class="settings-desc">${this.piPathActionMessage}</div>` : null}
+							`
+							: html`<div class="settings-desc">Binary path override is not used in SSH mode — the remote pi is discovered on the host.</div>`}
 						<div class="settings-actions">
 							<button class="ghost-btn" ?disabled=${this.cliLoading} @click=${() => this.refreshCliStatus()}>Refresh CLI status</button>
 							<button
 								class="ghost-btn"
 								?disabled=${
+									this.state.connectionMode === "ssh" ||
 									this.cliUpdating ||
 									!this.cliStatus?.can_update_in_app ||
 									!this.cliStatus?.npm_available ||
@@ -2165,7 +2407,9 @@ export class SettingsPanel {
 								${this.cliUpdating ? "Updating…" : "Update CLI now"}
 							</button>
 						</div>
-						${this.cliActionMessage ? html`<div class="settings-desc">${this.cliActionMessage}</div>` : null}
+						${this.state.connectionMode === "ssh"
+							? html`<div class="settings-desc">Remote mode: update the pi CLI on the remote host directly. The local Update CLI action is disabled.</div>`
+							: this.cliActionMessage ? html`<div class="settings-desc">${this.cliActionMessage}</div>` : null}
 						${runtimeControlsEnabled
 							? html`
 								<details class="settings-advanced">

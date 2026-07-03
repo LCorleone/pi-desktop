@@ -10,6 +10,7 @@ import { collectBuiltInOAuthProviderIds } from "../auth/provider-auth.js";
 import { isExtensionConfigIntent } from "../extensions/extension-command-intent.js";
 import { extensionCommandUsageHint, withExtensionCommandUsageHint } from "../extensions/extension-command-hints.js";
 import { getBundledThemesStatus, isBundledThemeId, removeBundledThemes, restoreBundledThemes } from "../theme/bundled-themes.js";
+import { getConnectionMode } from "../connection-state.js";
 
 interface CatalogPackageItem {
 	name: string;
@@ -4671,6 +4672,30 @@ Execute the required file creation/edits directly, then summarize exactly which 
 	}
 
 	render(): void {
+		// Package install/remove shells out to the LOCAL pi CLI, which would run
+		// against the wrong machine in SSH mode. Show a notice and bail before any
+		// command can be issued.
+		if (getConnectionMode() === "ssh") {
+			const template = html`
+				<div class="packages-view-root">
+					<div class="packages-view-header">
+						<div class="packages-view-title-wrap">
+							<div class="packages-view-title">Packages</div>
+						</div>
+						<div class="packages-view-header-actions">
+							${this.onBack
+								? html`<button class="packages-back-btn" @click=${() => this.onBack?.()}>← Back</button>`
+								: nothing}
+						</div>
+					</div>
+					<div class="packages-view-body minimal">
+						<div class="packages-banner info">Package management is not available in SSH (remote) mode — install/remove runs against the local pi CLI. Manage packages on the remote host directly.</div>
+					</div>
+				</div>
+			`;
+			render(template, this.container);
+			return;
+		}
 		const installedItems = this.getInstalledItems();
 		const catalogItems = this.filteredCatalogItems();
 		const skillResources = this.filteredSkillResources();

@@ -5,6 +5,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { html, nothing, render } from "lit";
 import { type CliUpdateStatus, type RpcSessionState, rpcBridge } from "../rpc/bridge.js";
+import { getConnectionMode, getSshTargetLabel } from "../connection-state.js";
 
 interface SessionStats {
 	tokens: { total?: number };
@@ -175,8 +176,11 @@ export class TitleBar {
 					${this.currentProject ? html`<span class="titlebar-sep">/</span><span class="titlebar-project">${this.currentProject}</span>` : nothing}
 				</div>
 
-				<div class="titlebar-center" data-tauri-drag-region>
-					<span class="titlebar-model" title=${modelId}>${modelId}</span>
+			<div class="titlebar-center" data-tauri-drag-region>
+				${getConnectionMode() === "ssh"
+					? html`<span class="titlebar-pill remote" title="Connected to a remote pi over SSH">Remote: ${getSshTargetLabel() ?? "SSH"}</span>`
+					: nothing}
+				<span class="titlebar-model" title=${modelId}>${modelId}</span>
 					${thinkingLevel && thinkingLevel !== "off"
 						? html`<span class="titlebar-pill thinking">${thinkingLevel}</span>`
 						: nothing}
@@ -192,8 +196,9 @@ export class TitleBar {
 						? html`
 							<button
 								class="titlebar-action update"
-								?disabled=${this.cliUpdating}
+								?disabled=${this.cliUpdating || getConnectionMode() === "ssh"}
 								@click=${() => {
+									if (getConnectionMode() === "ssh") { this.onOpenSettings?.(); return; }
 									if (canUpdateInApp) this.onUpdateCli?.();
 									else this.onOpenSettings?.();
 								}}

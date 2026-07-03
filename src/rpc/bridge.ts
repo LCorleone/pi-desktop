@@ -16,6 +16,34 @@ export interface RpcStartOptions {
 	provider?: string;
 	model?: string;
 	env?: Record<string, string>;
+	/** "local" (default) or "ssh" — connect to a pi process running on a remote host over ssh. */
+	connectionMode?: "local" | "ssh";
+	/** SSH connection config. Required when connectionMode is "ssh". */
+	ssh?: SshConnectionConfig | null;
+}
+
+/**
+ * SSH connection config. Field names are snake_case to match the Rust struct's
+ * serde wire format (consumed directly by rpc_start / test_ssh_connection / AppSettings).
+ */
+export interface SshConnectionConfig {
+	host: string;
+	user?: string | null;
+	port?: number | null;
+	remote_pi_path?: string | null;
+	remote_cwd?: string | null;
+	identity_file?: string | null;
+	extra_options?: Record<string, string> | null;
+	accept_new_host?: boolean | null;
+}
+
+/** Result of probing an SSH connection (snake_case to match the Rust serde return). */
+export interface SshTestResult {
+	ok: boolean;
+	remote_pi_version: string;
+	remote_cwd_exists: boolean;
+	stderr: string;
+	took_ms: number;
 }
 
 export interface RpcImageInput {
@@ -306,6 +334,8 @@ export class RpcBridge {
 					provider: startOptions.provider || null,
 					model: startOptions.model || null,
 					env: startOptions.env || null,
+					connection_mode: startOptions.connectionMode ?? null,
+					ssh: startOptions.ssh ?? null,
 				},
 				instanceId: this.instanceId,
 			});
@@ -585,6 +615,14 @@ export class RpcBridge {
 		return invoke<NpmCommandResult>("update_cli_via_npm");
 	}
 
+	/**
+	 * Probe an SSH connection: runs `pi --version` and optionally checks the remote cwd
+	 * exists on the remote host. Bounded to ~12s on the backend. Keys + ssh-agent only.
+	 */
+	async testSshConnection(ssh: SshConnectionConfig): Promise<SshTestResult> {
+		return invoke<SshTestResult>("test_ssh_connection", { ssh });
+	}
+
 	async checkRpcCompatibility(): Promise<RpcCompatibilityReport> {
 		const checks: string[] = [];
 		if (!this.isConnected) {
@@ -669,7 +707,8 @@ export class RpcBridge {
 					this._isConnected = false;
 					traceBridge(`closed instance=${this.instanceId} generation=${payload.generation ?? -1} reason=${typeof payload.reason === "string" ? payload.reason : "RPC process closed"}`);
 					this.rejectAllPending(typeof payload.reason === "string" ? payload.reason : "RPC process closed");
-					this.emitToListeners({ type: "rpc_disconnected" });
+					const closedReason = typeof payload.reason === "string" ? payload.reason : undefined;
+					this.emitToListeners({ type: "rpc_disconnected", ...(closedReason ? { reason: closedReason } : {}) });
 				});
 
 				unlistenStderrLocal = await listen<RpcLineEventPayload>("rpc-stderr", (event) => {
@@ -1052,6 +1091,10 @@ class ActiveRpcBridgeProxy {
 
 	async updateCliViaNpm(): Promise<NpmCommandResult> {
 		return this.activeBridge.updateCliViaNpm();
+	}
+
+	async testSshConnection(ssh: SshConnectionConfig): Promise<SshTestResult> {
+		return this.activeBridge.testSshConnection(ssh);
 	}
 
 	async checkRpcCompatibility(): Promise<RpcCompatibilityReport> {
