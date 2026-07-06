@@ -2974,6 +2974,45 @@ async fn test_ssh_connection(ssh: SshConnectionConfig) -> Result<SshTestResult, 
     })
 }
 
+/// List sessions from the REMOTE pi's session directory over SSH.
+/// Runs a small Node scanner on the remote host (after profile-source via
+/// build_remote_prefix, so `node` resolves via nvm) that mirrors the local
+/// parse_session_info. Output is line-delimited JSON parsed back into SessionInfo.
+/// Used by the sidebar in SSH mode so the session browser shows remote sessions.
+#[tauri::command]
+async fn list_remote_sessions(ssh: SshConnectionConfig) -> Result<Vec<SessionInfo>, String> {
+    let scanner = r#"const fs=require('fs'),path=require('path');
+function agentDir(){const e=(process.env.PI_CODING_AGENT_DIR||'').trim();const home=process.env.HOME||process.env.USERPROFILE||'.';if(e){if(e==='~')return home;if(e.slice(0,2)==='~/'||e.slice(0,2)==='~\\')return path.join(home,e.slice(2));return e;}return path.join(home,'.pi','agent');}
+function walk(d,o){let en;try{en=fs.readdirSync(d,{withFileTypes:true});}catch(_){return;}for(const f of en){const p=path.join(d,f.name);try{if(f.isDirectory())walk(p,o);else if(f.isFile()&&/\.jsonl$/i.test(f.name))o.push(p);}catch(_){}}}
+function info(file){let c;try{c=fs.readFileSync(file,'utf8');}catch(_){return null;}let id=path.basename(file).replace(/\.[^.]+$/,'');let name=null,cwd=null,tokens=0,cost=0;for(const line of c.split(/\r?\n/)){const tl=line.trim();if(!tl)continue;let v;try{v=JSON.parse(tl);}catch(_){continue;}if(!v||typeof v!=='object')continue;const t=v.type;if(t==='session'){if(typeof v.id==='string')id=v.id;const cw=typeof v.cwd==='string'?v.cwd.trim():'';if(cw)cwd=cw;}else if(t==='session_info'){const nm=typeof v.name==='string'?v.name.trim():'';if(nm)name=nm;}else if(t==='message'){const m=v.message;if(m&&m.role==='assistant'){const u=m.usage||{};tokens+=Number(u.totalTokens)||0;cost+=Number(u.cost&&u.cost.total)||0;}}}let st;try{st=fs.statSync(file);}catch(_){return null;}const mtime=Math.floor(st.mtimeMs)||0;const created=Math.floor(st.birthtimeMs)||mtime;return{id:id,name:name,path:file,cwd:cwd,created_at:created,modified_at:mtime,tokens:tokens,cost:cost};}
+const files=[];walk(path.join(agentDir(),'sessions'),files);
+const out=[];for(const f of files){const inf=info(f);if(inf)out.push(inf);}
+out.sort(function(a,b){return b.modified_at-a.modified_at;});
+process.stdout.write(JSON.stringify(out));"#;
+    let prefix = build_remote_prefix(&ssh);
+    let remote = format!("{}; node -e {}", prefix, shell_quote(scanner));
+    let mut cmd = build_ssh_remote_command(&ssh, &remote);
+    let output = tokio::time::timeout(
+        Duration::from_secs(20),
+        tokio::task::spawn_blocking(move || cmd.output()),
+    )
+    .await
+    .map_err(|_| "Remote session list timed out (>20s)".to_string())?
+    .map_err(|e| format!("Remote session list failed to join: {}", e))?
+    .map_err(|e| format!("Remote session list failed to run ssh: {}", e))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let msg = stderr.trim();
+        return Err(if msg.is_empty() {
+            "Remote session list failed (ssh exited non-zero).".to_string()
+        } else {
+            format!("Remote session list failed: {}", &msg[..msg.len().min(300)])
+        });
+    }
+    serde_json::from_slice::<Vec<SessionInfo>>(&output.stdout)
+        .map_err(|e| format!("Failed to parse remote sessions: {}", e))
+}
+
 #[tauri::command]
 async fn load_models_config() -> Result<String, String> {
     let home = home_dir().ok_or("Could not find home directory")?;
@@ -3108,6 +3147,7 @@ pub fn run() {
             pi_generate_title,
             test_provider_connection,
             test_ssh_connection,
+            list_remote_sessions,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
