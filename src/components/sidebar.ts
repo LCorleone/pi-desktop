@@ -896,10 +896,10 @@ export class Sidebar {
 		}
 	}
 
-	refreshActiveProjectSessions(): void {
+	refreshActiveProjectSessions(force = false): void {
 		const active = this.getActiveProject();
 		if (!active) return;
-		void this.loadSessionsForProject(active.id, { silent: true });
+		void this.loadSessionsForProject(active.id, { silent: true, force });
 	}
 
 	upsertSession(
@@ -1619,7 +1619,7 @@ export class Sidebar {
 		}
 	}
 
-	private async loadSessionsForProject(projectId: string, options?: { silent?: boolean; hydrationToken?: number }): Promise<void> {
+	private async loadSessionsForProject(projectId: string, options?: { silent?: boolean; hydrationToken?: number; force?: boolean }): Promise<void> {
 		const hydrationToken = options?.hydrationToken;
 		if (!this.isWorkspaceHydrationCurrent(hydrationToken)) return;
 
@@ -1646,7 +1646,7 @@ export class Sidebar {
 			}
 			const silent = options?.silent === true;
 			const now = Date.now();
-			if (silent && project.sessionsLoaded && now - project.lastSessionsLoadedAt < 2200) {
+			if (silent && !options?.force && project.sessionsLoaded && now - project.lastSessionsLoadedAt < 2200) {
 				return;
 			}
 			const loadingBefore = project.loadingSessions;

@@ -1832,13 +1832,13 @@ async function reloadActiveWorkspaceRuntime(): Promise<boolean> {
 	return !failed;
 }
 
-function scheduleSidebarSessionsRefresh(delayMs = 180): void {
+function scheduleSidebarSessionsRefresh(delayMs = 180, force = false): void {
 	if (sidebarSessionsRefreshTimer) {
 		clearTimeout(sidebarSessionsRefreshTimer);
 	}
 	sidebarSessionsRefreshTimer = setTimeout(() => {
 		sidebarSessionsRefreshTimer = null;
-		sidebar?.refreshActiveProjectSessions();
+		sidebar?.refreshActiveProjectSessions(force);
 	}, delayMs);
 }
 
@@ -3622,8 +3622,9 @@ function mountSettingsPanel(): SettingsPanel {
 		applyConnectionConfig(mode, ssh);
 		// Refresh the session list immediately so it reflects the new mode
 		// (local sessions appear when switching to Local; clears in SSH mode)
-		// instead of staying on the stale SSH-mode empty state until a /reload.
-		scheduleSidebarSessionsRefresh(0);
+		// instead of staying on the stale SSH-mode empty state until a /reload. Forced so
+		// the 2.2s silent-refresh cooldown can't suppress it right after a prior session load.
+		scheduleSidebarSessionsRefresh(0, true);
 		recordDebugTrace(`connection-config updated mode=${mode}`);
 		chatView?.notify(
 			mode === "ssh"
