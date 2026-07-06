@@ -1721,6 +1721,8 @@ async fn get_pi_oauth_providers(app: AppHandle) -> Result<Vec<PiOAuthProviderInf
         provider: None,
         model: None,
         env: None,
+        connection_mode: None,
+        ssh: None,
     };
 
     let Ok(pi) = discover_pi(&app, &discovery_opts) else {
@@ -2215,6 +2217,8 @@ async fn run_pi_cli_command(
         provider: None,
         model: None,
         env: options.env.clone(),
+        connection_mode: None,
+        ssh: None,
     };
 
     let pi = discover_pi(&app, &discovery_opts)?;
@@ -2252,6 +2256,8 @@ async fn get_cli_update_status(
         provider: None,
         model: None,
         env: opts.env.clone(),
+        connection_mode: None,
+        ssh: None,
     };
 
     let pi = discover_pi(&app, &discovery_opts)?;
@@ -2313,6 +2319,8 @@ async fn get_pi_changelog(
         provider: None,
         model: None,
         env: opts.env.clone(),
+        connection_mode: None,
+        ssh: None,
     };
 
     let pi = discover_pi(&app, &discovery_opts)?;
@@ -2711,6 +2719,8 @@ async fn pi_generate_title(
         provider: Some(provider.clone()),
         model: Some(model_id.clone()),
         env: None,
+        connection_mode: None,
+        ssh: None,
     };
     let pi = discover_pi(&app, &options)
         .map_err(|e| format!("Could not find pi binary: {}", e))?;
