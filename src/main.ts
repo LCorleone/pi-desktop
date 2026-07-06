@@ -3620,10 +3620,17 @@ function mountSettingsPanel(): SettingsPanel {
 	});
 	panel.setOnConnectionConfigChange((mode, ssh) => {
 		applyConnectionConfig(mode, ssh);
+		// Refresh the session list immediately so it reflects the new mode
+		// (local sessions appear when switching to Local; clears in SSH mode)
+		// instead of staying on the stale SSH-mode empty state until a /reload.
+		scheduleSidebarSessionsRefresh(0);
 		recordDebugTrace(`connection-config updated mode=${mode}`);
-		if (mode === "ssh") {
-			chatView?.notify("Saved SSH connection settings. Use /reload to reconnect active runtimes.", "info");
-		}
+		chatView?.notify(
+			mode === "ssh"
+				? "Saved SSH connection settings. Use /reload to reconnect active runtimes."
+				: "Switched to Local mode. Use /reload to reconnect active runtimes.",
+			"info",
+		);
 	});
 	panel.setOnQuickReconnect(async (ssh) => {
 		applyConnectionConfig("ssh", ssh);

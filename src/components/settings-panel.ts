@@ -1114,12 +1114,25 @@ export class SettingsPanel {
 		this.render();
 	}
 
-	private setConnectionMode(mode: "local" | "ssh"): void {
+	private async setConnectionMode(mode: "local" | "ssh"): Promise<void> {
 		this.state.connectionMode = mode;
 		this.sshTestResult = null;
 		this.sshTestError = "";
 		this.sshActionMessage = "";
 		this.render();
+		// Local needs no config, so make "Local" a one-click switch back from SSH:
+		// saving + applying here refreshes the session list (via onConnectionConfigChange)
+		// and applies local mode. SSH requires configuration, so the toggle just selects
+		// the mode to edit — use "Save connection settings" or a saved config's "Connect".
+		if (mode === "local") {
+			try {
+				await this.saveSettings();
+				this.onConnectionConfigChange?.("local", null);
+			} catch (err) {
+				this.sshActionMessage = err instanceof Error ? err.message : "Failed to switch to Local mode.";
+				this.render();
+			}
+		}
 	}
 
 	private setSshField(field: keyof SettingsState, value: string): void {
