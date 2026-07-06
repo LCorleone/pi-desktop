@@ -1054,16 +1054,19 @@ export class SettingsPanel {
 	}
 
 	private async connectSavedSsh(entry: SshSavedConfig): Promise<void> {
+		// Populate the editor fields for visibility, but apply the FULL saved config
+		// directly — round-tripping through buildSshConfigFromState() would drop
+		// fields that have no editor UI (e.g. extra_options / ProxyJump).
 		this.loadSshConfigIntoState(entry.config);
 		this.state.connectionMode = "ssh";
-		const config = this.buildSshConfigFromState();
-		if (!config.host || !config.remote_cwd) {
+		const config = entry.config;
+		if (!config.host?.trim() || !config.remote_cwd?.trim()) {
 			this.sshActionMessage = `“${entry.name}” is missing a host or remote working directory.`;
 			this.render();
 			return;
 		}
 		try {
-			await this.saveSettings();
+			await this.saveSettings(config);
 			this.sshActionMessage = `Connecting to “${entry.name}”…`;
 			this.render();
 			await this.onQuickReconnect?.(config);
@@ -1907,7 +1910,7 @@ export class SettingsPanel {
 		`;
 	}
 
-	private async saveSettings(): Promise<void> {
+	private async saveSettings(activeSshOverride?: SshConnectionConfig): Promise<void> {
 		if (this.saving) return;
 		this.saving = true;
 		try {
@@ -1924,7 +1927,7 @@ export class SettingsPanel {
 					model_id: null,
 					pi_path: this.normalizePiBinaryPath(this.state.piBinaryPath),
 					connection_mode: this.state.connectionMode,
-					ssh: this.state.connectionMode === "ssh" ? this.buildSshConfigFromState() : null,
+					ssh: activeSshOverride !== undefined ? activeSshOverride : (this.state.connectionMode === "ssh" ? this.buildSshConfigFromState() : null),
 					ssh_configs: this.state.sshSavedConfigs,
 				},
 			});
