@@ -57,6 +57,10 @@ interface WorkspaceSessionTab {
 	ephemeral: boolean;
 	needsAttention: boolean;
 	attentionMessage: string | null;
+	/** Per-tab connection mode. Each tab remembers local-vs-ssh independently. */
+	connectionMode: "local" | "ssh";
+	/** SSH config used when connectionMode === "ssh". Null in local mode. */
+	sshConfig: SshConnectionConfig | null;
 }
 
 interface WorkspaceFileTab {
@@ -101,6 +105,10 @@ interface SessionRuntime {
 	phase: "idle" | "starting" | "switching_session" | "creating_session" | "ready" | "failed";
 	lastError: string | null;
 	eventUnlisten: (() => void) | null;
+	/** The connection mode this runtime's bridge was last spawned with. */
+	connectionMode: "local" | "ssh";
+	/** The SSH config this runtime's bridge was last spawned with. */
+	sshConfig: SshConnectionConfig | null;
 }
 
 const WORKSPACES_STORAGE_KEY = "pi-desktop.workspaces.v1";
@@ -563,6 +571,8 @@ function getOrCreateRuntimeForTab(workspaceId: string, tabId: string, projectPat
 		phase: "idle",
 		lastError: null,
 		eventUnlisten: null,
+		connectionMode: "local",
+		sshConfig: null,
 	};
 	runtime.eventUnlisten = runtime.bridge.onEvent((event) => {
 		handleBackgroundRuntimeNotifyEvent(runtime.key, event);
@@ -931,6 +941,8 @@ function createSessionTab(
 		ephemeral: !normalizedSessionPath,
 		needsAttention: false,
 		attentionMessage: null,
+		connectionMode: "local",
+		sshConfig: null,
 	};
 }
 
@@ -971,6 +983,8 @@ function ensureWorkspaceContentState(workspace: WorkspaceState): void {
 					typeof attentionMessageRaw === "string" && attentionMessageRaw.trim().length > 0
 						? attentionMessageRaw.trim()
 						: null,
+				connectionMode: (tab as Partial<WorkspaceSessionTab>).connectionMode === "ssh" ? "ssh" : "local",
+				sshConfig: (tab as Partial<WorkspaceSessionTab>).sshConfig ?? null,
 			};
 		});
 
@@ -1156,6 +1170,7 @@ function setActiveSessionTab(workspace: WorkspaceState, tabId: string): Workspac
 	workspace.sessionTitle = tab.title;
 	setWorkspaceActiveProject(workspace, { id: tab.projectId, path: tab.projectPath });
 	workspace.pane = "chat";
+	syncActiveConnectionState();
 	return tab;
 }
 
@@ -1375,6 +1390,9 @@ function createAndActivateEmptySessionTab(
 	const tab = createSessionTab(title, null, projectId, projectPath);
 	tab.messageCount = 0;
 	tab.ephemeral = true;
+	// Brand-new blank tabs inherit the default connection (from Settings).
+	tab.connectionMode = defaultConnectionMode;
+	tab.sshConfig = defaultSshConfig;
 	workspace.sessionTabs.push(tab);
 	workspace.activeSessionTabId = tab.id;
 	workspace.sessionTitle = tab.title;
@@ -1666,7 +1684,7 @@ async function autoNameSessionIfNew(): Promise<void> {
 		// title entirely and fall through to the word-based fallback below.
 		let title: string;
 		try {
-			if (getConnectionModeImpl() === "ssh") {
+			if (activeSession.connectionMode === "ssh") {
 				title = "";
 			} else {
 				const raw = await invoke<string>("pi_generate_title", {
@@ -1752,7 +1770,7 @@ async function renameSessionFromWorkspace(projectId: string, sessionPath: string
 				const maintenanceBridge = new RpcBridge(uid("rename_rpc"));
 				maintenanceBridge.setPreferredPiPath(findPiBinaryPath());
 				try {
-					await maintenanceBridge.start(buildRpcStartOptions(project.path));
+					await maintenanceBridge.start(buildRpcStartOptions(project.path, getConnectionModeImpl(), getSshConfig()));
 					const switched = await maintenanceBridge.switchSession(sessionPath);
 					if (switched.cancelled) return;
 					await maintenanceBridge.setSessionName(trimmedName);
@@ -2133,8 +2151,25 @@ export function getConnectionMode(): ConnectionMode {
 /** "user@host:port" when in SSH mode with a host configured, else null. */
 export { getSshTargetLabel } from "./connection-state.js";
 
-function applyConnectionConfig(mode: ConnectionMode, ssh: SshConnectionConfig | null): void {
-	setConnectionState(mode, ssh);
+/**
+ * Default connection for NEW blank tabs, loaded from Settings. In the per-tab
+ * model each session tab carries its own connectionMode/sshConfig; this is only
+ * the seed value for brand-new tabs (and the fallback when no tab is active).
+ * The active tab's mode is pushed into connection-state via syncActiveConnectionState().
+ */
+let defaultConnectionMode: ConnectionMode = "local";
+let defaultSshConfig: SshConnectionConfig | null = null;
+
+/**
+ * Push the ACTIVE session tab's connection into connection-state so every UI
+ * consumer (titlebar pill, chat banner, terminal/packages/auth gating, sidebar)
+ * reflects the currently-active tab. Idempotent — safe to call on any tab/runtime
+ * change. Falls back to the default when no tab is active.
+ */
+function syncActiveConnectionState(): void {
+	const ws = getActiveWorkspace();
+	const tab = ws ? getActiveSessionTab(ws) : null;
+	setConnectionState(tab?.connectionMode ?? defaultConnectionMode, tab?.sshConfig ?? defaultSshConfig);
 }
 
 async function loadConnectionConfigFromSettings(): Promise<void> {
@@ -2145,26 +2180,33 @@ async function loadConnectionConfigFromSettings(): Promise<void> {
 			ssh?: SshConnectionConfig | null;
 		};
 		const mode: ConnectionMode = saved?.connection_mode === "ssh" ? "ssh" : "local";
-		setConnectionState(mode, saved?.ssh ?? null);
+		const ssh = saved?.ssh ?? null;
+		defaultConnectionMode = mode;
+		defaultSshConfig = ssh;
+		// Seed connection-state with the default; syncActiveConnectionState()
+		// refines it to the active tab once workspaces are loaded.
+		setConnectionState(mode, ssh);
 	} catch {
+		defaultConnectionMode = "local";
+		defaultSshConfig = null;
 		setConnectionState("local", null);
 	}
 }
 
 /**
- * Build the RpcStartOptions for a runtime connection. In SSH mode the cwd becomes
+ * Build the RpcStartOptions for a runtime connection from an EXPLICIT per-tab
+ * mode + ssh config (not the global module state). In SSH mode the cwd becomes
  * the remote working directory (required by the backend), and cli/pi paths are
  * ignored (the remote pi owns its own config). In local mode everything is as today.
  */
-function buildRpcStartOptions(localCwd: string): RpcStartOptions {
-	const sshConfig = getSshConfig();
-	if (getConnectionModeImpl() === "ssh") {
+function buildRpcStartOptions(localCwd: string, mode: "local" | "ssh", ssh: SshConnectionConfig | null): RpcStartOptions {
+	if (mode === "ssh") {
 		return {
 			cliPath: null,
 			piPath: null,
-			cwd: sshConfig?.remote_cwd ?? "",
+			cwd: ssh?.remote_cwd ?? "",
 			connectionMode: "ssh",
-			ssh: sshConfig,
+			ssh,
 		};
 	}
 	return {
@@ -2358,6 +2400,8 @@ function loadWorkspaces(): void {
 									typeof attentionMessageRaw === "string" && attentionMessageRaw.trim().length > 0
 										? attentionMessageRaw.trim()
 										: null,
+								connectionMode: (tab.connectionMode === "ssh" ? "ssh" : "local") as ConnectionMode,
+								sshConfig: tab.sshConfig ?? null,
 							};
 						});
 
@@ -2645,6 +2689,9 @@ function syncActiveChatRuntimeBinding(
 	}
 	ensureWorkspaceContentState(workspace);
 	const activeSessionTab = getActiveSessionTab(workspace);
+	// Reflect the active tab's connection (local/ssh) in connection-state BEFORE any
+	// re-render so the chat banner + titlebar pill show the right mode.
+	syncActiveConnectionState();
 	const projectPath = getSessionTabProjectPath(activeSessionTab) ?? getWorkspaceActiveProjectPath(workspace);
 	const expectedRuntime = getRuntimeForTab(workspace.id, activeSessionTab.id);
 	const expectedRuntimeKey = expectedRuntime?.key ?? null;
@@ -2894,14 +2941,17 @@ async function ensureRuntimeForSessionTab(
 	const bridge = runtime.bridge;
 
 	const projectChanged = normalizeProjectPath(runtime.projectPath) !== normalizeProjectPath(projectPath);
+	const connectionChanged =
+		runtime.connectionMode !== sessionTab.connectionMode ||
+		JSON.stringify(runtime.sshConfig ?? null) !== JSON.stringify(sessionTab.sshConfig ?? null);
 	runtime.projectPath = projectPath;
 	runtime.lastError = null;
 	recordDebugTrace(
-		`ensureRuntime:start workspace=${workspace.id} tab=${sessionTab.id} project=${projectPath} session=${sessionTab.sessionPath ?? "draft"}`,
+		`ensureRuntime:start workspace=${workspace.id} tab=${sessionTab.id} project=${projectPath} session=${sessionTab.sessionPath ?? "draft"} mode=${sessionTab.connectionMode}`,
 	);
 
 	try {
-		if (projectChanged && bridge.isConnected) {
+		if ((projectChanged || connectionChanged) && bridge.isConnected) {
 			runtime.phase = "starting";
 			await bridge.stop().catch(() => {
 				/* ignore */
@@ -2916,8 +2966,10 @@ async function ensureRuntimeForSessionTab(
 
 		if (!bridge.isConnected) {
 			runtime.phase = "starting";
-			recordDebugTrace(`ensureRuntime:start-bridge instance=${runtime.instanceId}`);
-			await bridge.start(buildRpcStartOptions(projectPath));
+			recordDebugTrace(`ensureRuntime:start-bridge instance=${runtime.instanceId} mode=${sessionTab.connectionMode}`);
+			await bridge.start(buildRpcStartOptions(projectPath, sessionTab.connectionMode, sessionTab.sshConfig));
+			runtime.connectionMode = sessionTab.connectionMode;
+			runtime.sshConfig = sessionTab.sshConfig;
 			recordDebugTrace(`ensureRuntime:bridge-started instance=${runtime.instanceId} discovery=${bridge.discoveryInfo ?? "-"}`);
 			if (typeof taskVersion === "number") {
 				assertProjectTaskCurrent(taskVersion);
@@ -3008,6 +3060,8 @@ async function activateWorkspace(workspaceId: string, taskVersion?: number): Pro
 	recordDebugTrace(`activateWorkspace:start id=${workspaceId}`);
 	activeWorkspaceId = workspace.id;
 	ensureWorkspaceContentState(workspace);
+	// Reflect the newly-active workspace's active tab connection in connection-state.
+	syncActiveConnectionState();
 	persistWorkspaces();
 	syncWorkspaceTabsBar();
 
@@ -3280,6 +3334,9 @@ async function initialize(): Promise<void> {
 	loadWorkspaces();
 	await loadPreferredPiBinaryPathFromSettings();
 	await loadConnectionConfigFromSettings();
+	// Push the active tab's connection (or default) into connection-state now that
+	// workspaces are loaded, so the first render reflects the right mode.
+	syncActiveConnectionState();
 	loadSidebarWidth();
 	applySidebarWidth();
 	await ensureBundledThemesInstalled();
@@ -3619,22 +3676,31 @@ function mountSettingsPanel(): SettingsPanel {
 		}
 	});
 	panel.setOnConnectionConfigChange((mode, ssh) => {
-		applyConnectionConfig(mode, ssh);
-		// Refresh the session list immediately so it reflects the new mode
-		// (local sessions appear when switching to Local; clears in SSH mode)
-		// instead of staying on the stale SSH-mode empty state until a /reload. Forced so
-		// the 2.2s silent-refresh cooldown can't suppress it right after a prior session load.
+		// Per-tab model: Settings controls the DEFAULT connection for new tabs,
+		// not the active tab's connection. The active tab keeps its own mode.
+		defaultConnectionMode = mode;
+		defaultSshConfig = ssh;
+		syncActiveConnectionState();
 		scheduleSidebarSessionsRefresh(0, true);
-		recordDebugTrace(`connection-config updated mode=${mode}`);
+		recordDebugTrace(`connection-config default updated mode=${mode}`);
 		chatView?.notify(
 			mode === "ssh"
-				? "Saved SSH connection settings. Use /reload to reconnect active runtimes."
-				: "Switched to Local mode. Use /reload to reconnect active runtimes.",
+				? "Default SSH connection updated — new tabs will use it. Open a saved connection to reconnect now."
+				: "Default connection set to Local — new tabs will use it.",
 			"info",
 		);
 	});
 	panel.setOnQuickReconnect(async (ssh) => {
-		applyConnectionConfig("ssh", ssh);
+		// Quick-reconnect stamps the ACTIVE tab with the saved config and reconnects
+		// its runtime to the remote host.
+		const ws = getActiveWorkspace();
+		const tab = ws ? getActiveSessionTab(ws) : null;
+		if (tab) {
+			tab.connectionMode = "ssh";
+			tab.sshConfig = ssh;
+			persistWorkspaces();
+		}
+		syncActiveConnectionState();
 		await reloadActiveWorkspaceRuntime();
 		chatView?.notify("Reconnected to remote pi.", "success");
 	});
@@ -4861,6 +4927,12 @@ function renderApp(): void {
 		const project = sidebar?.getProjectById(projectId);
 		if (!workspace || !project) return;
 
+		// Capture the active tab's connection BEFORE opening the session tab: the
+		// sidebar lists sessions for the active tab's connection, so the opened
+		// session inherits that same connection (local or ssh + its config).
+		const sourceMode = getConnectionModeImpl();
+		const sourceSsh = getSshConfig();
+
 		const autoTabCountBefore = getVisibleContentTabCount(workspace);
 		const canAutoCreateTab = autoTabCountBefore < DEFAULT_AUTO_CONTENT_TAB_LIMIT;
 		setWorkspaceActiveProject(workspace, project);
@@ -4868,6 +4940,10 @@ function renderApp(): void {
 		const sessionTab = openOrActivateSessionTab(workspace, sessionPath, project.id, project.path, sessionName, {
 			allowCreateTab: canAutoCreateTab,
 		});
+		// Stamp the opened session tab with the connection it was browsed under, so
+		// ensureRuntimeForSessionTab connects to the right host and resumes it.
+		sessionTab.connectionMode = sourceMode;
+		sessionTab.sshConfig = sourceSsh;
 		pruneInactiveEphemeralSessionTabs(workspace, [sessionTab.id]);
 		persistWorkspaces();
 		syncWorkspaceTabsBar();
