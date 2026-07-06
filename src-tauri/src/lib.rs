@@ -134,6 +134,16 @@ pub struct SshProxyConfig {
     pub no_proxy: Option<String>,
 }
 
+/// A named, saved SSH connection target (the catalog of reusable hosts).
+/// The currently-active connection lives in AppSettings.connection_mode / AppSettings.ssh.
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct SshSavedConfig {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub config: SshConnectionConfig,
+}
+
 /// How the pi process was resolved
 #[derive(Debug, Clone)]
 enum PiProcess {
@@ -1858,6 +1868,9 @@ pub struct AppSettings {
     /// SSH connection config, used when connection_mode == "ssh".
     #[serde(default)]
     pub ssh: Option<SshConnectionConfig>,
+    /// Catalog of named, saved SSH connection targets (independent of the active one).
+    #[serde(default)]
+    pub ssh_configs: Option<Vec<SshSavedConfig>>,
 }
 
 impl Default for AppSettings {
@@ -1874,6 +1887,7 @@ impl Default for AppSettings {
             pi_path: None,
             connection_mode: None,
             ssh: None,
+            ssh_configs: None,
         }
     }
 }

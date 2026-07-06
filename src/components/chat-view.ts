@@ -12,7 +12,7 @@ import {
 	type ThinkingLevel,
 	rpcBridge,
 } from "../rpc/bridge.js";
-import { getConnectionMode } from "../connection-state.js";
+import { getConnectionMode, getSshTargetLabel, getSshConfig } from "../connection-state.js";
 import { buildGitBranchIndex, findGitBranchEntryByQuery, type GitBranchEntry } from "../git/branches.js";
 import {
 	createSlashPaletteItems,
@@ -4948,6 +4948,7 @@ export class ChatView {
 					this.handleDroppedDataTransfer(e.dataTransfer ?? null);
 				}}
 			>
+				${getConnectionMode() === "ssh" ? this.renderRemoteBanner() : nothing}
 				<div class="chat-scroll ${hasProject ? "" : "welcome-scroll"}" id="chat-scroll" @scroll=${(e: Event) => this.handleChatScroll(e)}>
 					${!hasProject
 						? this.renderWelcomeDashboard()
@@ -4968,6 +4969,24 @@ export class ChatView {
 		render(template, this.container);
 		this.scrollContainer = this.container.querySelector("#chat-scroll");
 		this.updateComposerOffset();
+	}
+
+	private renderRemoteBanner(): TemplateResult {
+		const remoteCwd = getSshConfig()?.remote_cwd?.trim() || "(login dir)";
+		return html`
+			<div class="chat-remote-banner" role="status">
+				<span class="chat-remote-banner-icon" aria-hidden="true">
+					<svg viewBox="0 0 16 16" aria-hidden="true">
+						<path d="M6.5 9.5a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 0 0-3.5-3.5l-1 1"></path>
+						<path d="M9.5 6.5a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 0 0 3.5 3.5l1-1"></path>
+					</svg>
+				</span>
+				<span class="chat-remote-banner-label">Remote session</span>
+				<span class="chat-remote-banner-target" title="SSH target"><code>${getSshTargetLabel() ?? "SSH"}</code></span>
+				<span class="chat-remote-banner-cwd" title="Remote working directory">cwd <code>${remoteCwd}</code></span>
+				<span class="chat-remote-banner-hint">bash &amp; tools run on the remote host</span>
+			</div>
+		`;
 	}
 
 	render(): void {

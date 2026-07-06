@@ -178,7 +178,7 @@ export class TitleBar {
 
 			<div class="titlebar-center" data-tauri-drag-region>
 				${getConnectionMode() === "ssh"
-					? html`<span class="titlebar-pill remote" title="Connected to a remote pi over SSH">Remote: ${getSshTargetLabel() ?? "SSH"}</span>`
+					? html`<span class="titlebar-pill remote" title="Connected to a remote pi over SSH"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 9.5a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 0 0-3.5-3.5l-1 1"></path><path d="M9.5 6.5a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 0 0 3.5 3.5l1-1"></path></svg>Remote: ${getSshTargetLabel() ?? "SSH"}</span>`
 					: nothing}
 				<span class="titlebar-model" title=${modelId}>${modelId}</span>
 					${thinkingLevel && thinkingLevel !== "off"

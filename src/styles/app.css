@@ -345,9 +345,24 @@ samp {
 }
 
 .titlebar-pill.remote {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
 	background: color-mix(in srgb, var(--success, var(--accent)) 16%, transparent);
 	color: var(--success, var(--accent));
+	border-color: color-mix(in srgb, var(--success, var(--accent)) 36%, var(--border));
 	font-weight: 600;
+}
+
+.titlebar-pill.remote svg {
+	width: 12px;
+	height: 12px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.5;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	flex-shrink: 0;
 }
 
 .titlebar-meta {
@@ -4666,6 +4681,59 @@ body.file-split-resizing #file-split-resize-handle::after {
 	overflow-x: hidden;
 	padding: 24px 0 calc(var(--composer-offset, 196px) + 10px);
 	scrollbar-gutter: stable;
+}
+
+.chat-remote-banner {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 12px;
+	flex-shrink: 0;
+	height: 30px;
+	font-size: 11px;
+	line-height: 1;
+	background: color-mix(in srgb, var(--accent) 8%, transparent);
+	border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+	color: var(--muted);
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.chat-remote-banner-icon {
+	display: inline-flex;
+	color: var(--accent);
+}
+
+.chat-remote-banner-icon svg {
+	width: 13px;
+	height: 13px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.5;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	flex-shrink: 0;
+}
+
+.chat-remote-banner-label {
+	color: var(--text);
+	font-weight: 600;
+}
+
+.chat-remote-banner-target {
+	color: var(--accent);
+	font-weight: 600;
+}
+
+.chat-remote-banner-target code,
+.chat-remote-banner-cwd code {
+	font-family: var(--font-family-mono, ui-monospace, monospace);
+	font-size: 11px;
+}
+
+.chat-remote-banner-cwd,
+.chat-remote-banner-hint {
+	color: var(--muted);
 }
 
 .chat-jump-latest {

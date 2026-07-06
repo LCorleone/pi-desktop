@@ -20,6 +20,7 @@ import {
 	type QueueMode,
 	type RpcCompatibilityReport,
 	type SshConnectionConfig,
+	type SshSavedConfig,
 	type SshTestResult,
 	rpcBridge,
 } from "../rpc/bridge.js";
@@ -66,6 +67,8 @@ interface SettingsState {
 	sshProxyUrl: string;
 	sshNoProxy: string;
 	sshEnvPairs: Array<{ key: string; value: string }>;
+	sshSavedConfigs: Array<SshSavedConfig>;
+	sshSaveAsName: string;
 }
 
 interface ScopedModelOption {
@@ -114,6 +117,8 @@ export class SettingsPanel {
 		sshProxyUrl: "",
 		sshNoProxy: "",
 		sshEnvPairs: [],
+		sshSavedConfigs: [],
+		sshSaveAsName: "",
 	};
 	private onClose: (() => void) | null = null;
 	private onRequestAddProject: (() => void) | null = null;
@@ -137,6 +142,7 @@ export class SettingsPanel {
 	private onCliStatusChange: ((status: CliUpdateStatus | null) => void) | null = null;
 	private onPiBinaryPathChange: ((path: string | null) => void) | null = null;
 	private onConnectionConfigChange: ((mode: "local" | "ssh", ssh: SshConnectionConfig | null) => void) | null = null;
+	private onQuickReconnect: ((ssh: SshConnectionConfig) => Promise<void> | void) | null = null;
 	private onNavigationStateChange: ((state: SettingsNavigationState) => void) | null = null;
 	private compatibilityReport: RpcCompatibilityReport | null = null;
 	private compatibilityLoading = false;
@@ -220,6 +226,10 @@ export class SettingsPanel {
 
 	setOnConnectionConfigChange(callback: ((mode: "local" | "ssh", ssh: SshConnectionConfig | null) => void) | null): void {
 		this.onConnectionConfigChange = callback;
+	}
+
+	setOnQuickReconnect(callback: ((ssh: SshConnectionConfig) => Promise<void> | void) | null): void {
+		this.onQuickReconnect = callback;
 	}
 
 	setOnNavigationStateChange(callback: ((state: SettingsNavigationState) => void) | null): void {
@@ -1030,6 +1040,77 @@ export class SettingsPanel {
 		};
 	}
 
+	private loadSshConfigIntoState(config: SshConnectionConfig): void {
+		this.state.sshHost = config.host ?? "";
+		this.state.sshUser = config.user ?? "";
+		this.state.sshPort = config.port != null ? String(config.port) : "";
+		this.state.sshRemotePiPath = config.remote_pi_path ?? "";
+		this.state.sshRemoteCwd = config.remote_cwd ?? "";
+		this.state.sshIdentityFile = config.identity_file ?? "";
+		this.state.sshAcceptNewHost = config.accept_new_host ?? true;
+		this.state.sshProxyUrl = config.proxy?.url ?? "";
+		this.state.sshNoProxy = config.proxy?.no_proxy ?? "";
+		this.state.sshEnvPairs = Object.entries(config.env ?? {}).map(([key, value]) => ({ key, value }));
+	}
+
+	private async connectSavedSsh(entry: SshSavedConfig): Promise<void> {
+		this.loadSshConfigIntoState(entry.config);
+		this.state.connectionMode = "ssh";
+		const config = this.buildSshConfigFromState();
+		if (!config.host || !config.remote_cwd) {
+			this.sshActionMessage = `“${entry.name}” is missing a host or remote working directory.`;
+			this.render();
+			return;
+		}
+		try {
+			await this.saveSettings();
+			this.sshActionMessage = `Connecting to “${entry.name}”…`;
+			this.render();
+			await this.onQuickReconnect?.(config);
+			this.sshActionMessage = `Connected to “${entry.name}”.`;
+		} catch (err) {
+			this.sshActionMessage = err instanceof Error ? err.message : `Failed to connect to “${entry.name}”.`;
+		}
+		this.render();
+	}
+
+	private async saveCurrentAsSsh(): Promise<void> {
+		const name = this.state.sshSaveAsName.trim();
+		if (!name) {
+			this.sshActionMessage = "Enter a name to save this connection.";
+			this.render();
+			return;
+		}
+		const config = this.buildSshConfigFromState();
+		if (!config.host || !config.remote_cwd) {
+			this.sshActionMessage = "Set a host and remote working directory before saving.";
+			this.render();
+			return;
+		}
+		const entry: SshSavedConfig = { name, config };
+		const others = this.state.sshSavedConfigs.filter((c) => c.name !== name);
+		this.state.sshSavedConfigs = [...others, entry];
+		this.state.sshSaveAsName = "";
+		try {
+			await this.saveSettings();
+			this.sshActionMessage = `Saved connection “${name}”.`;
+		} catch (err) {
+			this.sshActionMessage = err instanceof Error ? err.message : "Failed to save connection.";
+		}
+		this.render();
+	}
+
+	private async deleteSavedSsh(name: string): Promise<void> {
+		this.state.sshSavedConfigs = this.state.sshSavedConfigs.filter((c) => c.name !== name);
+		try {
+			await this.saveSettings();
+			this.sshActionMessage = `Deleted connection “${name}”.`;
+		} catch (err) {
+			this.sshActionMessage = err instanceof Error ? err.message : "Failed to delete connection.";
+		}
+		this.render();
+	}
+
 	private setConnectionMode(mode: "local" | "ssh"): void {
 		this.state.connectionMode = mode;
 		this.sshTestResult = null;
@@ -1181,6 +1262,7 @@ export class SettingsPanel {
 				pi_path?: string | null;
 				connection_mode?: string | null;
 				ssh?: SshConnectionConfig | null;
+				ssh_configs?: SshSavedConfig[] | null;
 			};
 			if (saved.theme === "dark" || saved.theme === "light" || saved.theme === "system") {
 				this.state.theme = saved.theme;
@@ -1204,6 +1286,7 @@ export class SettingsPanel {
 			this.state.sshProxyUrl = ssh?.proxy?.url ?? "";
 			this.state.sshNoProxy = ssh?.proxy?.no_proxy ?? "";
 			this.state.sshEnvPairs = Object.entries(ssh?.env ?? {}).map(([key, value]) => ({ key, value }));
+			this.state.sshSavedConfigs = Array.isArray(saved.ssh_configs) ? saved.ssh_configs : [];
 		} catch {
 			// ignore missing persisted settings
 		}
@@ -1842,6 +1925,7 @@ export class SettingsPanel {
 					pi_path: this.normalizePiBinaryPath(this.state.piBinaryPath),
 					connection_mode: this.state.connectionMode,
 					ssh: this.state.connectionMode === "ssh" ? this.buildSshConfigFromState() : null,
+					ssh_configs: this.state.sshSavedConfigs,
 				},
 			});
 		} catch (err) {
@@ -2391,6 +2475,39 @@ export class SettingsPanel {
 						${this.sshActionMessage ? html`<div class="settings-desc">${this.sshActionMessage}</div>` : null}
 					`
 					: html`<div class="settings-desc">Desktop discovers and launches a local <code>pi</code> binary. Configure the binary path below under “CLI updates”.</div>`}
+				<div class="settings-section" style="margin-top:16px;border-top:1px solid var(--color-border-subtle, rgba(0,0,0,0.1));padding-top:12px;">
+					<div class="settings-row settings-row-top">
+						<div>
+							<div class="settings-label">Saved connections</div>
+							<div class="settings-desc">Save this host and reconnect with one click. Click Connect to switch to SSH and reconnect immediately.</div>
+						</div>
+					</div>
+					${this.state.sshSavedConfigs.length === 0
+						? html`<div class="settings-desc">No saved connections yet.${this.state.connectionMode === "ssh" ? " Fill the fields above and save a name below." : ""}</div>`
+						: this.state.sshSavedConfigs.map((entry) => {
+							const target = `${entry.config.user ? entry.config.user + "@" : ""}${entry.config.host}${entry.config.port ? ":" + entry.config.port : ""}`;
+							const isActive = this.state.sshHost.trim() === entry.config.host
+								&& this.state.sshRemoteCwd.trim() === (entry.config.remote_cwd ?? "")
+								&& this.state.connectionMode === "ssh";
+							return html`
+								<div class="settings-row" style="gap:8px;align-items:center;">
+									<div style="min-width:0;flex:1;">
+										<div class="settings-label">${entry.name}${isActive ? html` <span class="settings-desc" style="display:inline;">(active)</span>` : null}</div>
+										<div class="settings-desc" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${target}</div>
+									</div>
+									<button class="ghost-btn" ?disabled=${this.saving} @click=${() => this.connectSavedSsh(entry)}>${isActive ? "Reconnect" : "Connect"}</button>
+									<button class="ghost-btn" @click=${() => this.deleteSavedSsh(entry.name)}>Delete</button>
+								</div>
+							`;
+						})}
+					${this.state.connectionMode === "ssh"
+						? html`
+							<div class="settings-actions" style="gap:8px;align-items:center;">
+								<input type="text" class="settings-path-input" placeholder="connection name (e.g. dev server)" .value=${this.state.sshSaveAsName} @input=${(e: Event) => { this.state.sshSaveAsName = (e.target as HTMLInputElement).value; this.render(); }} />
+								<button class="ghost-btn" ?disabled=${this.saving} @click=${() => this.saveCurrentAsSsh()}>Save current as…</button>
+							</div>`
+						: null}
+				</div>
 			</div>
 		`;
 	}

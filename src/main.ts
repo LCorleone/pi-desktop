@@ -3625,6 +3625,11 @@ function mountSettingsPanel(): SettingsPanel {
 			chatView?.notify("Saved SSH connection settings. Use /reload to reconnect active runtimes.", "info");
 		}
 	});
+	panel.setOnQuickReconnect(async (ssh) => {
+		applyConnectionConfig("ssh", ssh);
+		await reloadActiveWorkspaceRuntime();
+		chatView?.notify("Reconnected to remote pi.", "success");
+	});
 	panel.setOnClose(() => {
 		const workspace = getActiveWorkspace();
 		if (!workspace || workspace.pane !== "settings") return;

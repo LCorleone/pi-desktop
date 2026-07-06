@@ -50,6 +50,12 @@ export interface SshConnectionConfig {
 	proxy?: SshProxyConfig | null;
 }
 
+/** A named, saved SSH connection target. snake_case to match the Rust serde wire format. */
+export interface SshSavedConfig {
+	name: string;
+	config: SshConnectionConfig;
+}
+
 /** Result of probing an SSH connection (snake_case to match the Rust serde return). */
 export interface SshTestResult {
 	ok: boolean;
