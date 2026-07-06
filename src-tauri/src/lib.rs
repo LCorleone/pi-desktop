@@ -670,7 +670,11 @@ fn shell_quote(s: &str) -> String {
     out.push('\'');
     for ch in s.chars() {
         if ch == '\'' {
-            out.push_str("'\\'''");
+            // POSIX single-quote escape: close the quoted string ('), add an
+            // escaped quote (\'), and reopen the quoted string ('). MUST be the
+            // 4-char idiom '\'' — an extra trailing ' breaks the quoting and
+            // allows remote-shell injection.
+            out.push_str("'\\''");
         } else {
             out.push(ch);
         }
@@ -704,6 +708,17 @@ fn build_ssh_remote_command(ssh: &SshConnectionConfig, remote_command: &str) -> 
     cmd.arg("-o").arg("LogLevel=ERROR");
     if let Some(ref extra) = ssh.extra_options {
         for (key, value) in extra {
+            // Reject exec-capable ssh options so a malicious/mistyped
+            // settings.json can't use extra_options as a local command-execution
+            // vector. (BatchMode/StrictHostKeyChecking above are already pushed
+            // first and so cannot be overridden here.)
+            let lower = key.to_lowercase();
+            if matches!(
+                lower.as_str(),
+                "proxycommand" | "localcommand" | "remotecommand" | "permitlocalcommand"
+            ) {
+                continue;
+            }
             cmd.arg("-o").arg(format!("{}={}", key, value));
         }
     }
@@ -2827,7 +2842,8 @@ async fn test_ssh_connection(ssh: SshConnectionConfig) -> Result<SshTestResult, 
     )
     .await
     .map_err(|_| "SSH test timed out (>12s)".to_string())?
-    .map_err(|e| format!("SSH test failed: {}", e))?;
+    .map_err(|e| format!("SSH test failed to join: {}", e))?
+    .map_err(|e| format!("SSH test failed to run ssh: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr_raw = String::from_utf8_lossy(&output.stderr);

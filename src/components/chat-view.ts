@@ -1078,6 +1078,12 @@ export class ChatView {
 	}
 
 	private async loadProviderAuthStatus(force = false): Promise<void> {
+		if (getConnectionMode() === "ssh") {
+			// SSH mode drives a REMOTE pi; get_pi_auth_status only reads LOCAL
+			// ~/.pi/auth.json, so skip it to avoid showing the local machine's
+			// credentials as if they were this session's.
+			return;
+		}
 		if (this.loadingProviderAuth) return;
 		const stale = Date.now() - this.providerAuthLoadedAt > MODEL_PICKER_AUTH_CACHE_MS;
 		if (!force && this.providerAuthLoadedAt > 0 && !stale) return;
