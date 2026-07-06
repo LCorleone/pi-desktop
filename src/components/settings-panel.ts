@@ -1170,6 +1170,13 @@ export class SettingsPanel {
 		this.render();
 	}
 
+	// Mirrors the Rust is_valid_env_key rule so the UI can warn before save: an
+	// env-var name is [A-Za-z_][A-Za-z0-9_]*. Invalid keys are silently dropped
+	// by the backend, so surface them here to avoid confusion.
+	private isValidEnvKey(key: string): boolean {
+		return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key.trim());
+	}
+
 	private addSshEnvPair(): void {
 		this.state.sshEnvPairs = [...this.state.sshEnvPairs, { key: "", value: "" }];
 		this.sshTestResult = null;
@@ -2464,13 +2471,17 @@ export class SettingsPanel {
 								<div class="settings-desc">Extra vars exported on the remote host before pi starts (e.g. NODE_EXTRA_CA_CERTS). Keys must be valid env-var names.</div>
 							</div>
 						</div>
-						${this.state.sshEnvPairs.map((pair, index) => html`
+						${this.state.sshEnvPairs.map((pair, index) => {
+							const keyInvalid = pair.key.trim() !== "" && !this.isValidEnvKey(pair.key);
+							return html`
 							<div class="settings-actions" style="gap:8px;align-items:center;">
 								<input type="text" class="settings-path-input" placeholder="KEY" .value=${pair.key} @input=${(e: Event) => this.setSshEnvPair(index, "key", (e.target as HTMLInputElement).value)} />
 								<input type="text" class="settings-path-input" placeholder="value" .value=${pair.value} @input=${(e: Event) => this.setSshEnvPair(index, "value", (e.target as HTMLInputElement).value)} />
 								<button class="ghost-btn" @click=${() => this.removeSshEnvPair(index)}>Remove</button>
 							</div>
-						`)}
+							${keyInvalid ? html`<div class="settings-desc" style="color:var(--color-text-danger,#c00);margin:-2px 0 6px;">“${pair.key}” is not a valid env-var name (letters/digits/_; must not start with a digit) — it will be ignored.</div>` : nothing}
+						`;
+						})}}
 						<div class="settings-actions" style="margin-top:8px;">
 							<button class="ghost-btn" @click=${() => this.addSshEnvPair()}>Add variable</button>
 						</div>
