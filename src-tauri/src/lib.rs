@@ -113,6 +113,25 @@ pub struct SshConnectionConfig {
     /// None | Some(true) -> StrictHostKeyChecking=accept-new; Some(false) -> =yes.
     #[serde(default)]
     pub accept_new_host: Option<bool>,
+    /// Extra environment variables to export before launching the remote pi
+    /// (e.g. NODE_EXTRA_CA_CERTS, NO_COLOR). Keys must be valid env identifiers.
+    #[serde(default)]
+    pub env: Option<HashMap<String, String>>,
+    /// Optional HTTP(S) proxy applied to the remote pi launch (both cases set).
+    #[serde(default)]
+    pub proxy: Option<SshProxyConfig>,
+}
+
+/// Dedicated proxy config for the remote pi launch. Sets both lower- and
+/// upper-case proxy vars (Node/undici reads uppercase; many tools read lowercase).
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct SshProxyConfig {
+    /// e.g. "http://10.172.64.36:80".
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Comma-separated host list for no_proxy/NO_PROXY.
+    #[serde(default)]
+    pub no_proxy: Option<String>,
 }
 
 /// How the pi process was resolved
@@ -744,15 +763,64 @@ fn build_ssh_remote_command(ssh: &SshConnectionConfig, remote_command: &str) -> 
     cmd
 }
 
+/// True if `k` is a valid POSIX environment-variable identifier: starts with a
+/// letter or `_`, followed by letters/digits/`_`. Rejecting bad keys keeps a
+/// malformed settings.json from injecting arbitrary tokens into the export line.
+fn is_valid_env_key(k: &str) -> bool {
+    let mut chars = k.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Build the remote-shell prefix that (1) silently sources login/profile files so
+/// nvm/asdf/volta PATH loads, and (2) exports proxy + extra env vars. Profile
+/// output is redirected to keep pi's JSON RPC stdout stream clean.
+fn build_remote_prefix(ssh: &SshConnectionConfig) -> String {
+    let mut s = String::from(
+        "for f in \"$HOME\"/.bash_profile \"$HOME\"/.profile \"$HOME\"/.bashrc; do [ -f \"$f\" ] && . \"$f\" >/dev/null 2>&1 || true; done",
+    );
+    let mut exports: Vec<String> = Vec::new();
+    if let Some(p) = &ssh.proxy {
+        if let Some(url) = p.url.as_deref().map(str::trim).filter(|u| !u.is_empty()) {
+            let q = shell_quote(url);
+            for k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"] {
+                exports.push(format!("{k}={q}"));
+            }
+        }
+        if let Some(np) = p.no_proxy.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+            let q = shell_quote(np);
+            for k in ["no_proxy", "NO_PROXY"] {
+                exports.push(format!("{k}={q}"));
+            }
+        }
+    }
+    if let Some(env) = &ssh.env {
+        for (k, v) in env {
+            if is_valid_env_key(k) {
+                exports.push(format!("{}={}", k, shell_quote(v)));
+            }
+        }
+    }
+    if !exports.is_empty() {
+        s.push_str(&format!("; export {}", exports.join(" ")));
+    }
+    s
+}
+
 /// Build the ssh Command that launches a remote pi process in RPC mode.
 /// NOTE: deliberately ignores options.provider/model/env — the remote pi owns its own config.
+/// The NEW env/proxy injection comes from ssh.env/ssh.proxy via build_remote_prefix.
 fn build_ssh_command(ssh: &SshConnectionConfig, options: &RpcStartOptions) -> Command {
     let pi = shell_quote(ssh.remote_pi_path.as_deref().unwrap_or("pi"));
     let cwd = options.cwd.trim();
+    let prefix = build_remote_prefix(ssh);
     let remote = if cwd.is_empty() {
-        format!("{} --mode rpc", pi)
+        format!("{}; exec {} --mode rpc", prefix, pi)
     } else {
-        format!("cd {} && {} --mode rpc", shell_quote(cwd), pi)
+        format!("{}; cd {} && exec {} --mode rpc", prefix, shell_quote(cwd), pi)
     };
     build_ssh_remote_command(ssh, &remote)
 }
@@ -2835,14 +2903,13 @@ struct SshTestResult {
 #[tauri::command]
 async fn test_ssh_connection(ssh: SshConnectionConfig) -> Result<SshTestResult, String> {
     let pi_q = shell_quote(ssh.remote_pi_path.as_deref().unwrap_or("pi"));
-    let remote = if let Some(cwd) = ssh.remote_cwd.as_deref().filter(|s| !s.trim().is_empty()) {
-        format!(
-            "{{ test -d {} && echo CWD_OK || echo CWD_MISSING; }} ; {} --version",
-            shell_quote(cwd),
-            pi_q
-        )
-    } else {
-        format!("{} --version", pi_q)
+    let prefix = build_remote_prefix(&ssh);
+    let remote = match ssh.remote_cwd.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(cwd) => format!(
+            "{}; if cd {} 2>/dev/null; then echo CWD_OK; else echo CWD_MISSING; fi; {} --version",
+            prefix, shell_quote(cwd), pi_q
+        ),
+        None => format!("{}; {} --version", prefix, pi_q),
     };
     let mut cmd = build_ssh_remote_command(&ssh, &remote);
     let started = Instant::now();

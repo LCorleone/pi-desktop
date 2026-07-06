@@ -63,6 +63,9 @@ interface SettingsState {
 	sshRemoteCwd: string;
 	sshIdentityFile: string;
 	sshAcceptNewHost: boolean;
+	sshProxyUrl: string;
+	sshNoProxy: string;
+	sshEnvPairs: Array<{ key: string; value: string }>;
 }
 
 interface ScopedModelOption {
@@ -108,6 +111,9 @@ export class SettingsPanel {
 		sshRemoteCwd: "",
 		sshIdentityFile: "",
 		sshAcceptNewHost: true,
+		sshProxyUrl: "",
+		sshNoProxy: "",
+		sshEnvPairs: [],
 	};
 	private onClose: (() => void) | null = null;
 	private onRequestAddProject: (() => void) | null = null;
@@ -1004,6 +1010,13 @@ export class SettingsPanel {
 
 	private buildSshConfigFromState(): SshConnectionConfig {
 		const port = Number.parseInt(this.state.sshPort, 10);
+		const proxyUrl = this.state.sshProxyUrl.trim();
+		const noProxy = this.state.sshNoProxy.trim();
+		const envPairs: Record<string, string> = {};
+		for (const pair of this.state.sshEnvPairs) {
+			const key = pair.key.trim();
+			if (key) envPairs[key] = pair.value;
+		}
 		return {
 			host: this.state.sshHost.trim(),
 			user: this.state.sshUser.trim() || null,
@@ -1012,6 +1025,8 @@ export class SettingsPanel {
 			remote_cwd: this.state.sshRemoteCwd.trim() || null,
 			identity_file: this.state.sshIdentityFile.trim() || null,
 			accept_new_host: this.state.sshAcceptNewHost,
+			proxy: proxyUrl || noProxy ? { url: proxyUrl || null, no_proxy: noProxy || null } : null,
+			env: Object.keys(envPairs).length > 0 ? envPairs : null,
 		};
 	}
 
@@ -1046,6 +1061,32 @@ export class SettingsPanel {
 			this.sshActionMessage = err instanceof Error ? err.message : "Could not open file picker.";
 			this.render();
 		}
+	}
+
+	private setSshEnvPair(index: number, field: "key" | "value", value: string): void {
+		const pair = this.state.sshEnvPairs[index];
+		if (!pair) return;
+		pair[field] = value;
+		this.sshTestResult = null;
+		this.sshTestError = "";
+		this.sshActionMessage = "";
+		this.render();
+	}
+
+	private addSshEnvPair(): void {
+		this.state.sshEnvPairs = [...this.state.sshEnvPairs, { key: "", value: "" }];
+		this.sshTestResult = null;
+		this.sshTestError = "";
+		this.sshActionMessage = "";
+		this.render();
+	}
+
+	private removeSshEnvPair(index: number): void {
+		this.state.sshEnvPairs = this.state.sshEnvPairs.filter((_, i) => i !== index);
+		this.sshTestResult = null;
+		this.sshTestError = "";
+		this.sshActionMessage = "";
+		this.render();
 	}
 
 	private async testSshConnectionNow(): Promise<void> {
@@ -1160,6 +1201,9 @@ export class SettingsPanel {
 			this.state.sshRemoteCwd = ssh?.remote_cwd ?? "";
 			this.state.sshIdentityFile = ssh?.identity_file ?? "";
 			this.state.sshAcceptNewHost = ssh?.accept_new_host ?? true;
+			this.state.sshProxyUrl = ssh?.proxy?.url ?? "";
+			this.state.sshNoProxy = ssh?.proxy?.no_proxy ?? "";
+			this.state.sshEnvPairs = Object.entries(ssh?.env ?? {}).map(([key, value]) => ({ key, value }));
 		} catch {
 			// ignore missing persisted settings
 		}
@@ -2301,6 +2345,35 @@ export class SettingsPanel {
 								<div class="settings-desc">Uses <code>StrictHostKeyChecking=accept-new</code>. Uncheck to require pre-trusted hosts only.</div>
 							</div>
 						</label>
+						<div class="settings-row settings-row-top">
+							<div>
+								<div class="settings-label">Proxy</div>
+								<div class="settings-desc">Applied as http_proxy/https_proxy (both cases) so pi can reach providers through a corporate proxy. Leave blank for none.</div>
+							</div>
+						</div>
+						<input type="text" class="settings-path-input" placeholder="http://proxy.host:port" .value=${this.state.sshProxyUrl} @input=${(e: Event) => this.setSshField("sshProxyUrl", (e.target as HTMLInputElement).value)} />
+						<div class="settings-row settings-row-top">
+							<div>
+								<div class="settings-label">No-proxy hosts (optional)</div>
+							</div>
+						</div>
+						<input type="text" class="settings-path-input" placeholder="localhost,127.0.0.1,internal.host" .value=${this.state.sshNoProxy} @input=${(e: Event) => this.setSshField("sshNoProxy", (e.target as HTMLInputElement).value)} />
+						<div class="settings-row settings-row-top">
+							<div>
+								<div class="settings-label">Environment variables</div>
+								<div class="settings-desc">Extra vars exported on the remote host before pi starts (e.g. NODE_EXTRA_CA_CERTS). Keys must be valid env-var names.</div>
+							</div>
+						</div>
+						${this.state.sshEnvPairs.map((pair, index) => html`
+							<div class="settings-actions" style="gap:8px;align-items:center;">
+								<input type="text" class="settings-path-input" placeholder="KEY" .value=${pair.key} @input=${(e: Event) => this.setSshEnvPair(index, "key", (e.target as HTMLInputElement).value)} />
+								<input type="text" class="settings-path-input" placeholder="value" .value=${pair.value} @input=${(e: Event) => this.setSshEnvPair(index, "value", (e.target as HTMLInputElement).value)} />
+								<button class="ghost-btn" @click=${() => this.removeSshEnvPair(index)}>Remove</button>
+							</div>
+						`)}
+						<div class="settings-actions" style="margin-top:8px;">
+							<button class="ghost-btn" @click=${() => this.addSshEnvPair()}>Add variable</button>
+						</div>
 						<div class="settings-actions">
 							<button class="ghost-btn" ?disabled=${this.sshTesting || !this.state.sshHost.trim()} @click=${() => this.testSshConnectionNow()}>
 								${this.sshTesting ? "Testing…" : "Test connection"}

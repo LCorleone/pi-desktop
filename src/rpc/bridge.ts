@@ -26,6 +26,15 @@ export interface RpcStartOptions {
  * SSH connection config. Field names are snake_case to match the Rust struct's
  * serde wire format (consumed directly by rpc_start / test_ssh_connection / AppSettings).
  */
+/**
+ * SSH proxy config. Field names are snake_case to match the Rust serde wire format.
+ * Applied as http_proxy/https_proxy (both upper- and lower-case) on the remote host.
+ */
+export interface SshProxyConfig {
+	url?: string | null;
+	no_proxy?: string | null;
+}
+
 export interface SshConnectionConfig {
 	host: string;
 	user?: string | null;
@@ -35,6 +44,10 @@ export interface SshConnectionConfig {
 	identity_file?: string | null;
 	extra_options?: Record<string, string> | null;
 	accept_new_host?: boolean | null;
+	/** Extra environment variables exported on the remote host before pi starts. */
+	env?: Record<string, string> | null;
+	/** Optional proxy applied as http_proxy/https_proxy (both cases) on the remote host. */
+	proxy?: SshProxyConfig | null;
 }
 
 /** Result of probing an SSH connection (snake_case to match the Rust serde return). */
