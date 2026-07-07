@@ -5042,7 +5042,7 @@ function renderApp(): void {
 		projectId: string,
 		sessionPath: string,
 		sessionName?: string,
-		options?: { label?: string; onActivated?: () => void | Promise<void>; onFailed?: (err: unknown) => void },
+		options?: { label?: string; onActivated?: () => void | Promise<void>; onFailed?: (err: unknown) => void; connectionMode?: "local" | "ssh"; sshConfig?: SshConnectionConfig | null },
 	): void => {
 		const workspace = getActiveWorkspace();
 		const project = sidebar?.getProjectById(projectId);
@@ -5061,10 +5061,11 @@ function renderApp(): void {
 		const sessionTab = openOrActivateSessionTab(workspace, sessionPath, project.id, project.path, sessionName, {
 			allowCreateTab: canAutoCreateTab,
 		});
-		// Stamp the opened session tab with the connection it was browsed under, so
-		// ensureRuntimeForSessionTab connects to the right host and resumes it.
-		sessionTab.connectionMode = sourceMode;
-		sessionTab.sshConfig = sourceSsh;
+		// Stamp the opened session tab with the connection it was browsed under.
+		// If the caller provides an explicit mode/config (e.g. the local sidebar
+		// always stamps local), use it; otherwise capture the active tab's connection.
+		sessionTab.connectionMode = options?.connectionMode ?? sourceMode;
+		sessionTab.sshConfig = options?.sshConfig !== undefined ? options.sshConfig : sourceSsh;
 		pruneInactiveEphemeralSessionTabs(workspace, [sessionTab.id]);
 		persistWorkspaces();
 		syncWorkspaceTabsBar();
@@ -5202,13 +5203,15 @@ function renderApp(): void {
 	});
 
 	sidebar.setOnSessionSelect((projectId, sessionPath, sessionName) => {
-		activateSidebarSession(projectId, sessionPath, sessionName, { label: "sidebar-session-select" });
+		// Local sidebar always lists local sessions — stamp the tab as local.
+		activateSidebarSession(projectId, sessionPath, sessionName, { label: "sidebar-session-select", connectionMode: "local" });
 	});
 
 	sidebar.setOnSessionFork((projectId, sessionPath, sessionName) => {
 		chatView?.openHistoryViewerForFork({ loading: true, sessionName });
 		activateSidebarSession(projectId, sessionPath, sessionName, {
 			label: "sidebar-session-fork",
+			connectionMode: "local",
 			onActivated: () => {
 				chatView?.openHistoryViewerForFork({ loading: false, sessionName });
 			},
