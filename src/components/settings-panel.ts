@@ -142,7 +142,7 @@ export class SettingsPanel {
 	private onCliStatusChange: ((status: CliUpdateStatus | null) => void) | null = null;
 	private onPiBinaryPathChange: ((path: string | null) => void) | null = null;
 	private onConnectionConfigChange: ((mode: "local" | "ssh", ssh: SshConnectionConfig | null) => void) | null = null;
-	private onQuickReconnect: ((ssh: SshConnectionConfig) => Promise<void> | void) | null = null;
+	private onQuickReconnect: ((ssh: SshConnectionConfig, name?: string) => Promise<void> | void) | null = null;
 	private onNavigationStateChange: ((state: SettingsNavigationState) => void) | null = null;
 	private compatibilityReport: RpcCompatibilityReport | null = null;
 	private compatibilityLoading = false;
@@ -228,7 +228,7 @@ export class SettingsPanel {
 		this.onConnectionConfigChange = callback;
 	}
 
-	setOnQuickReconnect(callback: ((ssh: SshConnectionConfig) => Promise<void> | void) | null): void {
+	setOnQuickReconnect(callback: ((ssh: SshConnectionConfig, name?: string) => Promise<void> | void) | null): void {
 		this.onQuickReconnect = callback;
 	}
 
@@ -1069,7 +1069,7 @@ export class SettingsPanel {
 			await this.saveSettings(config);
 			this.sshActionMessage = `Connecting to “${entry.name}”…`;
 			this.render();
-			await this.onQuickReconnect?.(config);
+			await this.onQuickReconnect?.(config, entry.name);
 			this.sshActionMessage = `Connected to “${entry.name}”.`;
 		} catch (err) {
 			this.sshActionMessage = err instanceof Error ? err.message : `Failed to connect to “${entry.name}”.`;

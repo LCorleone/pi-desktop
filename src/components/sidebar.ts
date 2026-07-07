@@ -369,6 +369,9 @@ export class Sidebar {
 			}
 			this.refreshActiveProjectSessions(true);
 		});
+		// Eagerly load saved SSH configs so findMatchingSshConfigName / findSshConfigByName
+		// have a warm cache even before the Remote browser view is first opened.
+		void this.loadSavedConfigs();
 	}
 
 	private loadSidebarState(): void {

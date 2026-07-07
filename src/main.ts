@@ -921,6 +921,7 @@ function removeRuntimeByKey(runtimeKey: string): void {
 }
 
 function removeRuntimeForTab(workspaceId: string, tabId: string): void {
+	clearAutoReconnect(workspaceId, tabId);
 	removeRuntimeByKey(sessionRuntimeKey(workspaceId, tabId));
 }
 
@@ -1456,6 +1457,15 @@ function createAndActivateEmptySessionTab(
 		activeSessionTab.ephemeral = true;
 		clearSessionAttention(activeSessionTab);
 		setSessionTabProject(activeSessionTab, projectId, projectPath);
+		// Also adopt the project's connection preference (same as the create path below).
+		const projPref = projectId ? sidebar?.getProjectById(projectId) : null;
+		if (projPref && projPref.preferredConnectionMode === "ssh" && projPref.preferredSshConfigName) {
+			activeSessionTab.connectionMode = "ssh";
+			activeSessionTab.sshConfig = sidebar?.findSshConfigByNameSync(projPref.preferredSshConfigName) ?? defaultSshConfig;
+		} else {
+			activeSessionTab.connectionMode = defaultConnectionMode;
+			activeSessionTab.sshConfig = defaultSshConfig;
+		}
 		workspace.activeSessionTabId = activeSessionTab.id;
 		workspace.sessionTitle = activeSessionTab.title;
 		setWorkspaceActiveProject(workspace, { id: activeSessionTab.projectId, path: activeSessionTab.projectPath });
@@ -3784,13 +3794,13 @@ function mountSettingsPanel(): SettingsPanel {
 			"info",
 		);
 	});
-	panel.setOnQuickReconnect(async (ssh) => {
+	panel.setOnQuickReconnect(async (ssh: SshConnectionConfig, name?: string) => {
 		// Quick-reconnect stamps the ACTIVE tab with the saved config and reconnects
 		// its runtime to the remote host. Also stamps the tab's project so the
 		// connection preference is remembered per-project.
 		const ws = getActiveWorkspace();
 		const tab = ws ? getActiveSessionTab(ws) : null;
-		const configName = sidebar?.findMatchingSshConfigName(ssh);
+		const configName = name ?? sidebar?.findMatchingSshConfigName(ssh);
 		if (tab) {
 			tab.connectionMode = "ssh";
 			tab.sshConfig = ssh;
