@@ -23,6 +23,22 @@ export function getConnectionMode(): ConnectionMode {
 	return connectionMode;
 }
 
+type ConnectionChangeListener = (mode: ConnectionMode, ssh: SshConnectionConfig | null) => void;
+const connectionChangeListeners = new Set<ConnectionChangeListener>();
+
+/**
+ * Subscribe to ACTIVE connection changes (mode or ssh config). Returns an
+ * unsubscribe. Used by surfaces that cache per-connection data (e.g. the
+ * sidebar's session list) so they can invalidate when the active tab's
+ * connection flips between local and remote.
+ */
+export function onConnectionChange(cb: ConnectionChangeListener): () => void {
+	connectionChangeListeners.add(cb);
+	return () => {
+		connectionChangeListeners.delete(cb);
+	};
+}
+
 /**
  * A short "user@host:port" label for the active SSH connection, or null when
  * in local mode (or SSH mode with no host configured). Port is omitted when it
@@ -46,6 +62,14 @@ export function getSshConfig(): SshConnectionConfig | null {
  * /reload to take effect on active runtimes).
  */
 export function setConnectionState(mode: ConnectionMode, ssh: SshConnectionConfig | null): void {
+	const changed =
+		mode !== connectionMode ||
+		JSON.stringify(ssh ?? null) !== JSON.stringify(sshConfig ?? null);
 	connectionMode = mode;
 	sshConfig = ssh;
+	if (changed) {
+		for (const cb of connectionChangeListeners) {
+			cb(mode, ssh);
+		}
+	}
 }

@@ -6,7 +6,7 @@ import { html, nothing, render, type TemplateResult } from "lit";
 import { clearActiveDraggedFilePaths, setActiveDraggedFilePaths } from "./file-drag-transfer.js";
 	import { captionIconSvg, getMaximized, subscribeMaximized } from "./window-chrome.js";
 import { EMOJI_CATALOG } from "./emoji-catalog.js";
-import { getConnectionMode, getSshConfig } from "../connection-state.js";
+import { getConnectionMode, getSshConfig, onConnectionChange } from "../connection-state.js";
 import { fetchAndCacheSessionList, getCachedSessionList, invalidateSessionListCache } from "../rpc/session-cache.js";
 
 export type SidebarMode = "projects" | "files";
@@ -265,6 +265,7 @@ export class Sidebar {
 	private collapsed = false;
 	private isMaximized = false;
 	private maximizedUnlisten: (() => void) | null = null;
+	private connectionChangeUnlisten: (() => void) | null = null;
 	private storageKey = workspaceStorageKey("workspace_default");
 
 	private fileTrees = new Map<string, FileNode[]>();
@@ -327,6 +328,16 @@ export class Sidebar {
 		this.render();
 		this.workspaceHydrationToken += 1;
 		void this.hydrateProjects(this.workspaceHydrationToken);
+		// When the ACTIVE connection flips (local↔remote, or a different SSH host/config),
+		// every project's cached session list belongs to the other machine — invalidate
+		// them all and force-refresh the visible one so stale sessions can't be clicked.
+		this.connectionChangeUnlisten = onConnectionChange(() => {
+			for (const project of this.projects) {
+				project.sessionsLoaded = false;
+				project.lastSessionsLoadedAt = 0;
+			}
+			this.refreshActiveProjectSessions(true);
+		});
 	}
 
 	private loadSidebarState(): void {
@@ -409,6 +420,8 @@ export class Sidebar {
 	destroy(): void {
 		this.maximizedUnlisten?.();
 		this.maximizedUnlisten = null;
+		this.connectionChangeUnlisten?.();
+		this.connectionChangeUnlisten = null;
 	}
 
 	setOnOpenSettings(cb: () => void): void {

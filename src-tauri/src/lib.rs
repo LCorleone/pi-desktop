@@ -3006,7 +3006,7 @@ process.stdout.write(JSON.stringify(out));"#;
         return Err(if msg.is_empty() {
             "Remote session list failed (ssh exited non-zero).".to_string()
         } else {
-            format!("Remote session list failed: {}", &msg[..msg.len().min(300)])
+            format!("Remote session list failed: {}", msg.chars().take(300).collect::<String>())
         });
     }
     serde_json::from_slice::<Vec<SessionInfo>>(&output.stdout)
