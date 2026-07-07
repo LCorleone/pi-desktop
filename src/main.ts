@@ -2667,7 +2667,7 @@ function syncSidebarSelectionFromWorkspace(workspace: WorkspaceState | null = ge
 
 	const activeSession = getActiveSessionTab(workspace) ?? null;
 	sidebar.setActiveSessionPath(activeSession?.sessionPath ?? null);
-	if (activeSession && isEphemeralSessionTab(activeSession)) {
+	if (activeSession && isEphemeralSessionTab(activeSession) && activeSession.connectionMode !== "ssh") {
 		const projectId = getSessionTabProjectId(activeSession) ?? getWorkspaceActiveProjectId(workspace);
 		if (projectId) {
 			sidebar.setTransientSessionDraft({

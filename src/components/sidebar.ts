@@ -4261,7 +4261,15 @@ export class Sidebar {
 			const { invoke } = await import("@tauri-apps/api/core");
 			const all = await invoke<RemoteSession[]>("list_remote_sessions", { ssh: config.config });
 			if (this.configFetchSeq.get(config.name) !== seq) return;
-			this.configSessionCache.set(config.name, { sessions: all, loadedAt: Date.now() });
+			// Only show sessions under this config's remote working directory.
+			const remoteCwd = (config.config.remote_cwd ?? "").trim();
+			const filtered = remoteCwd
+				? all.filter((s) => {
+					const cwdPath = (s.cwd ?? "").trim();
+					return cwdPath === remoteCwd || (s.path ?? "").includes(remoteCwd);
+					})
+				: all;
+			this.configSessionCache.set(config.name, { sessions: filtered, loadedAt: Date.now() });
 			this.configStatusError.delete(config.name);
 		} catch (e) {
 			if (this.configFetchSeq.get(config.name) !== seq) return;
