@@ -9796,3 +9796,132 @@ button:active:not(:disabled),
 	}
 }
 
+/* ── Sidebar Local | Remote toggle ──────────────────────────────────── */
+.sidebar-mode-toggle {
+	display: flex;
+	gap: 2px;
+	padding: 4px 6px;
+	border-bottom: 1px solid var(--border);
+}
+.sidebar-mode-toggle button {
+	flex: 1;
+	height: 26px;
+	border-radius: 6px;
+	border: 1px solid transparent;
+	background: transparent;
+	color: var(--muted);
+	font-size: 12px;
+	font-weight: 500;
+	cursor: pointer;
+}
+.sidebar-mode-toggle button.active {
+	background: color-mix(in srgb, var(--bg-soft) 78%, var(--bg-elev));
+	color: var(--text);
+	border-color: color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+/* ── Remote browser ─────────────────────────────────────────────────── */
+.sidebar-remote-browser {
+	padding: 0 8px 12px;
+	overflow-y: auto;
+}
+.sidebar-remote-config-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 4px;
+	margin: 1px 0;
+	border-radius: 6px;
+	cursor: pointer;
+}
+.sidebar-remote-config-row:hover {
+	background: var(--bg-soft);
+}
+.sidebar-remote-config-row.active {
+	background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.sidebar-remote-config-name {
+	font-weight: 600;
+	font-size: 12px;
+	flex: 1;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.sidebar-remote-config-target {
+	font-size: 11px;
+	color: var(--muted);
+	margin-right: 4px;
+}
+.sidebar-remote-status-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 999px;
+	flex-shrink: 0;
+}
+.sidebar-remote-status-dot.online {
+	background: var(--success, #22c55e);
+}
+.sidebar-remote-status-dot.offline {
+	background: var(--danger, #ef4444);
+}
+.sidebar-remote-status-dot.pinging {
+	background: var(--warning, #f59e0b);
+	animation: sidebar-ping-pulse 1s infinite;
+}
+.sidebar-remote-expand {
+	font-size: 12px;
+	color: var(--muted-2);
+	width: 14px;
+	text-align: center;
+	flex-shrink: 0;
+}
+
+/* Grouped sessions */
+.sidebar-remote-group {
+	margin-left: 12px;
+}
+.sidebar-remote-group-title {
+	font-size: 11px;
+	color: var(--muted-2);
+	padding: 4px 0 2px 4px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.sidebar-remote-session-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 6px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 12px;
+}
+.sidebar-remote-session-row:hover {
+	background: var(--bg-soft);
+}
+.sidebar-remote-session-name {
+	flex: 1;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-weight: 500;
+}
+.sidebar-remote-session-meta {
+	font-size: 11px;
+	color: var(--muted-2);
+	flex-shrink: 0;
+}
+.sidebar-remote-new-session {
+	margin-top: 4px;
+	font-size: 11px;
+}
+
+@keyframes sidebar-ping-pulse {
+	0%, 100% { opacity: 1; }
+	50% { opacity: 0.4; }
+}
+

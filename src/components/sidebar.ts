@@ -8,6 +8,7 @@ import { clearActiveDraggedFilePaths, setActiveDraggedFilePaths } from "./file-d
 import { EMOJI_CATALOG } from "./emoji-catalog.js";
 import { getConnectionMode, getSshConfig, onConnectionChange } from "../connection-state.js";
 import { fetchAndCacheSessionList, getCachedSessionList, invalidateSessionListCache } from "../rpc/session-cache.js";
+import type { SshConnectionConfig, SshSavedConfig } from "../rpc/bridge.js";
 
 export type SidebarMode = "projects" | "files";
 
@@ -37,6 +38,17 @@ interface SidebarSession {
 	cost: number;
 	optimistic?: boolean;
 	transient?: boolean;
+}
+
+interface RemoteSession {
+	id: string;
+	name: string | null;
+	path: string;
+	cwd: string | null;
+	created_at: number;
+	modified_at: number;
+	tokens: number;
+	cost: number;
 }
 
 interface Project {
@@ -84,6 +96,7 @@ type SidebarContextTarget =
 const LEGACY_STORAGE_KEY = "pi-desktop.projects.v1";
 const WORKSPACE_STORAGE_KEY_PREFIX = "pi-desktop.workspace-projects.v1";
 const SIDEBAR_COLLAPSED_KEY = "pi-desktop.sidebar.collapsed.v1";
+const SIDEBAR_REMOTE_VIEW_KEY = "pi-desktop.sidebar-remote-view.v1";
 const SESSION_PINS_STORAGE_KEY_SUFFIX = ".session-pins.v1";
 const WORKSPACE_DRAG_THRESHOLD_PX = 5;
 const WORKSPACE_SWIPE_THRESHOLD_PX = 34;
@@ -263,7 +276,17 @@ export class Sidebar {
 	private activeSettingsNavId: string | null = null;
 	private query = "";
 	private collapsed = false;
+	private remoteView = false;
 	private isMaximized = false;
+	// Remote browser state
+	private savedConfigs: SshSavedConfig[] = [];
+	private remoteViewLoaded = false;
+	private expandedConfigName: string | null = null;
+	private configSessionCache = new Map<string, { sessions: RemoteSession[]; loadedAt: number }>();
+	private configLoading = new Set<string>();
+	private configPinging = new Set<string>();
+	private configOnline = new Map<string, boolean>();
+	private configStatusError = new Map<string, string>();
 	private maximizedUnlisten: (() => void) | null = null;
 	private connectionChangeUnlisten: (() => void) | null = null;
 	private storageKey = workspaceStorageKey("workspace_default");
@@ -302,6 +325,8 @@ export class Sidebar {
 	private onWorkspaceDelete: ((workspaceId: string) => void) | null = null;
 	private onProjectSelect: ((project: { id: string; name: string; path: string } | null) => void) | null = null;
 	private onSessionSelect: ((projectId: string, sessionPath: string, sessionName?: string) => void) | null = null;
+	private onRemoteSessionSelect: ((config: SshConnectionConfig, sessionPath: string, sessionName: string) => void) | null = null;
+	private onNewRemoteSession: ((config: SshConnectionConfig) => void) | null = null;
 	private onSessionRename: ((projectId: string, sessionPath: string, currentName: string, nextName: string) => void) | null = null;
 	private onSessionDelete: ((projectId: string, sessionPath: string) => void) | null = null;
 	private onSessionFork: ((projectId: string, sessionPath: string, sessionName?: string) => void) | null = null;
@@ -345,6 +370,11 @@ export class Sidebar {
 			this.collapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
 		} catch {
 			this.collapsed = false;
+		}
+		try {
+			this.remoteView = localStorage.getItem(SIDEBAR_REMOTE_VIEW_KEY) === "1";
+		} catch {
+			this.remoteView = false;
 		}
 	}
 
@@ -537,6 +567,14 @@ export class Sidebar {
 
 	setOnSessionSelect(cb: (projectId: string, sessionPath: string, sessionName?: string) => void): void {
 		this.onSessionSelect = cb;
+	}
+
+	setOnRemoteSessionSelect(cb: (config: SshConnectionConfig, sessionPath: string, sessionName: string) => void): void {
+		this.onRemoteSessionSelect = cb;
+	}
+
+	setOnNewRemoteSession(cb: (config: SshConnectionConfig) => void): void {
+		this.onNewRemoteSession = cb;
 	}
 
 	setOnSessionRename(cb: (projectId: string, sessionPath: string, currentName: string, nextName: string) => void): void {
@@ -4185,8 +4223,189 @@ export class Sidebar {
 		`;
 	}
 
+	// ── Remote browser ──────────────────────────────────────────
+
+	private toggleRemoteView(view: boolean): void {
+		this.remoteView = view;
+		try { localStorage.setItem(SIDEBAR_REMOTE_VIEW_KEY, view ? "1" : "0"); } catch { /* ignore */ }
+		this.render();
+		if (view && !this.remoteViewLoaded) {
+			void this.loadSavedConfigs();
+		}
+	}
+
+	private async loadSavedConfigs(): Promise<void> {
+		try {
+			const { invoke } = await import("@tauri-apps/api/core");
+			const settings = await invoke<{ ssh_configs?: SshSavedConfig[] }>("load_settings");
+			this.savedConfigs = settings?.ssh_configs ?? [];
+			this.remoteViewLoaded = true;
+			this.render();
+		} catch {
+			this.savedConfigs = [];
+			this.remoteViewLoaded = true;
+			this.render();
+		}
+	}
+
+	private renderRemoteBrowser(): TemplateResult {
+		if (!this.remoteViewLoaded) {
+			void this.loadSavedConfigs();
+			return html`<div class="sidebar-section-title" style="padding:8px 10px">Loading connections…</div>`;
+		}
+
+		if (this.savedConfigs.length === 0) {
+			return html`
+				<div style="padding: 14px 10px; display: flex; flex-direction: column; gap: 6px;">
+					<div class="sidebar-section-title">No saved connections</div>
+					<div class="settings-desc" style="font-size:12px">Add an SSH connection in Settings → Connection to browse remote sessions.</div>
+					<button class="ghost-btn" @click=${() => this.onOpenSettings?.()}>Open Settings</button>
+				</div>
+			`;
+		}
+
+		return html`
+			<div class="sidebar-remote-browser">
+				<div class="sidebar-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+					<span>Connections</span>
+					<div style="display:flex;gap:2px">
+						<button class="ghost-btn" @click=${() => this.onOpenSettings?.()} title="Add connection" style="padding:0 6px;font-size:14px">+</button>
+					</div>
+				</div>
+				${this.renderRemoteConfigs()}
+			</div>
+		`;
+	}
+
+	private renderRemoteConfigs(): TemplateResult {
+		if (this.savedConfigs.length === 0) return html``;
+		return html`${this.savedConfigs.map((config) => this.renderRemoteConfigRow(config))}`;
+	}
+
+	private renderRemoteConfigRow(config: SshSavedConfig): TemplateResult {
+		const cfg = config.config;
+		const target = `${cfg.user ? cfg.user + "@" : ""}${cfg.host}${cfg.port ? ":" + cfg.port : ""}`;
+		const isActive = getConnectionMode() === "ssh" && getSshConfig()?.host === cfg.host && getSshConfig()?.user === cfg.user && getSshConfig()?.port === cfg.port;
+		const isExpanded = this.expandedConfigName === config.name;
+		const isLoading = this.configLoading.has(config.name);
+		const isPinging = this.configPinging.has(config.name);
+		const online = this.configOnline.get(config.name);
+		const error = this.configStatusError.get(config.name);
+
+		return html`
+			<div class="sidebar-remote-config-row ${isActive ? "active" : ""}" @click=${() => this.toggleConfigExpand(config)}>
+				<span class="sidebar-remote-expand">${isExpanded ? "▾" : "▸"}</span>
+				<span class="sidebar-remote-config-name">${config.name}</span>
+				<span class="sidebar-remote-config-target">${target}</span>
+				${isActive ? html`<span class="sidebar-remote-status-dot online" title="Active"></span>` : nothing}
+				${isPinging
+					? html`<span class="sidebar-remote-status-dot pinging" title="Checking…"></span>`
+					: online !== undefined
+						? html`<span class="sidebar-remote-status-dot ${online ? "online" : "offline"}" title=${online ? "Online" : "Offline"}></span>`
+					: nothing}
+			</div>
+			${isExpanded ? this.renderRemoteConfigSessions(config, isLoading, error) : nothing}
+		`;
+	}
+
+	private toggleConfigExpand(config: SshSavedConfig): void {
+		if (this.expandedConfigName === config.name) {
+			this.expandedConfigName = null;
+			this.render();
+			return;
+		}
+		this.expandedConfigName = config.name;
+		this.configStatusError.delete(config.name);
+		this.render();
+		void this.fetchConfigSessions(config);
+		void this.pingConfig(config);
+	}
+
+	private async fetchConfigSessions(config: SshSavedConfig): Promise<void> {
+		this.configLoading.add(config.name);
+		this.render();
+		try {
+			const { invoke } = await import("@tauri-apps/api/core");
+			const all = await invoke<RemoteSession[]>("list_remote_sessions", { ssh: config.config });
+			this.configSessionCache.set(config.name, { sessions: all, loadedAt: Date.now() });
+		} catch (e) {
+			this.configStatusError.set(config.name, e instanceof Error ? e.message : "Failed to list sessions");
+		} finally {
+			this.configLoading.delete(config.name);
+			this.render();
+		}
+	}
+
+	private async pingConfig(config: SshSavedConfig): Promise<void> {
+		this.configPinging.add(config.name);
+		this.render();
+		try {
+			const { invoke } = await import("@tauri-apps/api/core");
+			const result = await invoke<{ ok: boolean }>("test_ssh_connection", { ssh: config.config });
+			this.configOnline.set(config.name, result.ok);
+		} catch {
+			this.configOnline.set(config.name, false);
+		} finally {
+			this.configPinging.delete(config.name);
+			this.render();
+		}
+	}
+
+	private renderRemoteConfigSessions(config: SshSavedConfig, isLoading: boolean, error?: string): TemplateResult {
+		if (isLoading) {
+			return html`<div style="padding:4px 0 4px 24px;font-size:11px;color:var(--muted-2)">Loading sessions…</div>`;
+		}
+		if (error) {
+			return html`
+				<div style="padding:4px 0 4px 24px;font-size:11px;color:var(--danger,#ef4444)">${error}</div>
+				<button class="ghost-btn" style="margin-left:24px;font-size:11px" @click=${(e: Event) => { e.stopPropagation(); void this.fetchConfigSessions(config); }}>Retry</button>
+			`;
+		}
+
+		const cache = this.configSessionCache.get(config.name);
+		const sessions = cache?.sessions ?? [];
+
+		if (sessions.length === 0) {
+			return html`
+				<div style="padding:4px 0 8px 24px;font-size:11px;color:var(--muted-2)">No sessions found.</div>
+				<div style="margin-left:24px">
+					<button class="sidebar-remote-new-session ghost-btn" @click=${(e: Event) => { e.stopPropagation(); this.onNewRemoteSession?.(config.config); }}>+ New session</button>
+				</div>
+			`;
+		}
+
+		// Group by remote cwd
+		const groups = new Map<string, RemoteSession[]>();
+		for (const s of sessions) {
+			const cwd = s.cwd || "(no directory)";
+			if (!groups.has(cwd)) groups.set(cwd, []);
+			groups.get(cwd)!.push(s);
+		}
+		const sortedGroups = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+
+		return html`
+			${sortedGroups.map(([cwd, groupSessions]) => html`
+				<div class="sidebar-remote-group">
+					<div class="sidebar-remote-group-title">${cwd}</div>
+					${groupSessions.map((s) => html`
+						<div class="sidebar-remote-session-row" @click=${(e: Event) => { e.stopPropagation(); this.onRemoteSessionSelect?.(config.config, s.path, s.name || "Untitled session"); }}>
+							<span class="sidebar-remote-session-name">${s.name || "Untitled session"}</span>
+							<span class="sidebar-remote-session-meta">${formatTokens(s.tokens)}${s.cost ? " · " + formatCost(s.cost) : ""} · ${formatRelativeDate(s.modified_at)}</span>
+						</div>
+					`)}
+				</div>
+			`)}
+			<div style="margin-left:12px">
+				<button class="sidebar-remote-new-session ghost-btn" @click=${() => this.onNewRemoteSession?.(config.config)}>+ New session</button>
+			</div>
+		`;
+	}
+
+	// ────────────────────────────────────────────────────────────
+
 	private renderModeBody(): TemplateResult {
 		if (this.settingsShellActive) return this.renderSettingsShellBody();
+		if (this.remoteView) return this.renderRemoteBrowser();
 		if (this.mode === "files") return this.renderFilesMode();
 		return this.renderProjectsMode();
 	}
@@ -4320,6 +4539,10 @@ export class Sidebar {
 					if (changed) this.render();
 				}}
 			>
+				<div class="sidebar-mode-toggle">
+					<button class=${this.remoteView ? "" : "active"} @click=${() => this.toggleRemoteView(false)}>Local</button>
+					<button class=${this.remoteView ? "active" : ""} @click=${() => this.toggleRemoteView(true)}>Remote</button>
+				</div>
 				${this.renderWorkspaceWindowRow()}
 
 				<div class="sidebar-topbar" data-tauri-drag-region>

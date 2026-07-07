@@ -78,7 +78,7 @@ interface ScopedModelOption {
 	name: string;
 }
 
-export type SettingsSectionId = "general" | "appearance" | "account" | "providers" | "updates";
+export type SettingsSectionId = "general" | "appearance" | "account" | "providers" | "updates" | "connection";
 
 export interface SettingsSectionNavItem {
 	id: SettingsSectionId;
@@ -2197,6 +2197,11 @@ export class SettingsPanel {
 				description: "Configure OpenAI-compatible API providers and models.",
 			},
 			{
+				id: "connection",
+				label: "Connection",
+				description: "Local or remote SSH connection settings and saved configs.",
+			},
+			{
 				id: "updates",
 				label: "Updates",
 				description: "Desktop releases, CLI version, and runtime diagnostics.",
@@ -2543,7 +2548,6 @@ export class SettingsPanel {
 		return html`
 			<div class="settings-view-grid">
 				<section class="settings-group settings-group-full">
-					${this.renderConnectionSection()}
 					<div class="settings-section">
 						<div class="settings-section-title">Desktop updates</div>
 						${this.desktopLoading
@@ -2909,6 +2913,14 @@ export class SettingsPanel {
 				return this.renderAccountSection(runtimeControlsEnabled, hasProjectContext, authProviders);
 			case "updates":
 				return this.renderUpdatesSection(runtimeControlsEnabled, compatibilityChecks);
+			case "connection":
+				return html`
+					<div class="settings-view-grid">
+						<section class="settings-group settings-group-full">
+							${this.renderConnectionSection()}
+						</section>
+					</div>
+				`;
 			case "general":
 			default:
 				return this.renderGeneralSection(runtimeControlsEnabled, hasProjectContext);

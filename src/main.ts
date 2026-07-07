@@ -4978,6 +4978,105 @@ function renderApp(): void {
 		);
 	};
 
+	const activateRemoteSession = (
+		config: SshConnectionConfig,
+		sessionPath: string,
+		sessionName: string,
+	): void => {
+		const workspace = getActiveWorkspace();
+		if (!workspace) return;
+
+		const projectId = workspace.activeProjectId;
+		const projectPath = workspace.activeProjectPath;
+		const project = projectId ? sidebar?.getProjectById(projectId) : null;
+		const label = "remote-session-select";
+
+		const autoTabCountBefore = getVisibleContentTabCount(workspace);
+		const canAutoCreateTab = autoTabCountBefore < DEFAULT_AUTO_CONTENT_TAB_LIMIT;
+
+		// Update the active project if there's a matching sidebar project
+		if (project) {
+			setWorkspaceActiveProject(workspace, project);
+		}
+
+		const sessionTab = openOrActivateSessionTab(workspace, sessionPath, projectId, projectPath, sessionName, {
+			allowCreateTab: canAutoCreateTab,
+		});
+		sessionTab.connectionMode = "ssh";
+		sessionTab.sshConfig = config;
+		pruneInactiveEphemeralSessionTabs(workspace, [sessionTab.id]);
+		persistWorkspaces();
+		syncWorkspaceTabsBar();
+		syncContentTabsBar(workspace);
+		syncActiveChatRuntimeBinding(workspace, { forceReset: true, statusText: "Loading remote session…" });
+		void applyWorkspacePane(workspace);
+
+		void queueProjectTask(
+			async (version) => {
+				const runtimeProjectPath = workspace.activeProjectPath || "";
+				await ensureRuntimeForSessionTab(workspace, sessionTab, runtimeProjectPath, true, version);
+				assertProjectTaskCurrent(version);
+				await chatView?.refreshFromBackend({ throwOnError: true });
+				assertProjectTaskCurrent(version);
+				await chatView?.refreshModels();
+				assertProjectTaskCurrent(version);
+				await applyWorkspacePane(workspace);
+			},
+			(err) => {
+				console.error("Failed to activate remote session:", err);
+				chatView?.notify("Failed to activate remote session", "error");
+			},
+			{ label },
+		);
+	};
+
+	const createRemoteSession = (config: SshConnectionConfig): void => {
+		const workspace = getActiveWorkspace();
+		if (!workspace) return;
+
+		const projectId = workspace.activeProjectId;
+		const projectPath = workspace.activeProjectPath;
+		const label = "remote-new-session";
+
+		pruneInactiveEphemeralSessionTabs(workspace);
+		const sessionTab = createSessionTab(NEW_SESSION_TAB_TITLE, null, projectId, projectPath);
+		sessionTab.connectionMode = "ssh";
+		sessionTab.sshConfig = config;
+		workspace.sessionTabs.push(sessionTab);
+		workspace.activeSessionTabId = sessionTab.id;
+		persistWorkspaces();
+		syncWorkspaceTabsBar();
+		syncContentTabsBar(workspace);
+		syncActiveChatRuntimeBinding(workspace, { forceReset: true, statusText: "Starting new remote session…" });
+		void applyWorkspacePane(workspace);
+
+		void queueProjectTask(
+			async (version) => {
+				const runtimeProjectPath = workspace.activeProjectPath || "";
+				await ensureRuntimeForSessionTab(workspace, sessionTab, runtimeProjectPath, true, version);
+				assertProjectTaskCurrent(version);
+				await chatView?.refreshFromBackend({ throwOnError: true });
+				assertProjectTaskCurrent(version);
+				await chatView?.refreshModels();
+				assertProjectTaskCurrent(version);
+				await applyWorkspacePane(workspace);
+			},
+			(err) => {
+				console.error("Failed to create remote session:", err);
+				chatView?.notify("Failed to create remote session", "error");
+			},
+			{ label },
+		);
+	};
+
+	sidebar.setOnRemoteSessionSelect((config, sessionPath, sessionName) => {
+		activateRemoteSession(config, sessionPath, sessionName);
+	});
+
+	sidebar.setOnNewRemoteSession((config) => {
+		createRemoteSession(config);
+	});
+
 	sidebar.setOnSessionSelect((projectId, sessionPath, sessionName) => {
 		activateSidebarSession(projectId, sessionPath, sessionName, { label: "sidebar-session-select" });
 	});
