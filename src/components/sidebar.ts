@@ -281,11 +281,13 @@ export class Sidebar {
 	// Remote browser state
 	private savedConfigs: SshSavedConfig[] = [];
 	private remoteViewLoaded = false;
+	private loadingConfigs = false;
 	private expandedConfigName: string | null = null;
 	private configSessionCache = new Map<string, { sessions: RemoteSession[]; loadedAt: number }>();
 	private configLoading = new Set<string>();
 	private configPinging = new Set<string>();
 	private configOnline = new Map<string, boolean>();
+	private configFetchSeq = new Map<string, number>();
 	private configStatusError = new Map<string, string>();
 	private maximizedUnlisten: (() => void) | null = null;
 	private connectionChangeUnlisten: (() => void) | null = null;
@@ -4235,6 +4237,8 @@ export class Sidebar {
 	}
 
 	private async loadSavedConfigs(): Promise<void> {
+		if (this.loadingConfigs) return;
+		this.loadingConfigs = true;
 		try {
 			const { invoke } = await import("@tauri-apps/api/core");
 			const settings = await invoke<{ ssh_configs?: SshSavedConfig[] }>("load_settings");
@@ -4245,6 +4249,8 @@ export class Sidebar {
 			this.savedConfigs = [];
 			this.remoteViewLoaded = true;
 			this.render();
+		} finally {
+			this.loadingConfigs = false;
 		}
 	}
 
@@ -4285,7 +4291,7 @@ export class Sidebar {
 	private renderRemoteConfigRow(config: SshSavedConfig): TemplateResult {
 		const cfg = config.config;
 		const target = `${cfg.user ? cfg.user + "@" : ""}${cfg.host}${cfg.port ? ":" + cfg.port : ""}`;
-		const isActive = getConnectionMode() === "ssh" && getSshConfig()?.host === cfg.host && getSshConfig()?.user === cfg.user && getSshConfig()?.port === cfg.port;
+		const isActive = getConnectionMode() === "ssh" && getSshConfig()?.host === cfg.host && getSshConfig()?.user === cfg.user && getSshConfig()?.port === cfg.port && getSshConfig()?.remote_cwd === cfg.remote_cwd;
 		const isExpanded = this.expandedConfigName === config.name;
 		const isLoading = this.configLoading.has(config.name);
 		const isPinging = this.configPinging.has(config.name);
@@ -4322,16 +4328,23 @@ export class Sidebar {
 	}
 
 	private async fetchConfigSessions(config: SshSavedConfig): Promise<void> {
+		const seq = (this.configFetchSeq.get(config.name) ?? 0) + 1;
+		this.configFetchSeq.set(config.name, seq);
 		this.configLoading.add(config.name);
 		this.render();
 		try {
 			const { invoke } = await import("@tauri-apps/api/core");
 			const all = await invoke<RemoteSession[]>("list_remote_sessions", { ssh: config.config });
+			if (this.configFetchSeq.get(config.name) !== seq) return;
 			this.configSessionCache.set(config.name, { sessions: all, loadedAt: Date.now() });
+			this.configStatusError.delete(config.name);
 		} catch (e) {
+			if (this.configFetchSeq.get(config.name) !== seq) return;
 			this.configStatusError.set(config.name, e instanceof Error ? e.message : "Failed to list sessions");
 		} finally {
-			this.configLoading.delete(config.name);
+			if (this.configFetchSeq.get(config.name) === seq) {
+				this.configLoading.delete(config.name);
+			}
 			this.render();
 		}
 	}
