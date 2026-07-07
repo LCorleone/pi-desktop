@@ -64,6 +64,8 @@ interface Project {
 	lastSessionsLoadedAt: number;
 	pathExists: boolean | null;
 	checkingPath: boolean;
+	preferredConnectionMode: "local" | "ssh";
+	preferredSshConfigName: string | null;
 }
 
 interface PersistedProject {
@@ -72,6 +74,8 @@ interface PersistedProject {
 	name: string;
 	color: string;
 	emoji?: string;
+	preferredConnectionMode?: "local" | "ssh";
+	preferredSshConfigName?: string | null;
 }
 
 interface FileNode {
@@ -761,10 +765,10 @@ export class Sidebar {
 		return this.projects.map((project) => ({ id: project.id, name: project.name, path: project.path }));
 	}
 
-	getProjectById(projectId: string | null | undefined): { id: string; name: string; path: string } | null {
+	getProjectById(projectId: string | null | undefined): { id: string; name: string; path: string; preferredConnectionMode: "local" | "ssh"; preferredSshConfigName: string | null } | null {
 		if (!projectId) return null;
 		const project = this.projects.find((entry) => entry.id === projectId) ?? null;
-		return project ? { id: project.id, name: project.name, path: project.path } : null;
+		return project ? { id: project.id, name: project.name, path: project.path, preferredConnectionMode: project.preferredConnectionMode, preferredSshConfigName: project.preferredSshConfigName } : null;
 	}
 
 	getProjectByPath(projectPath: string | null | undefined): { id: string; name: string; path: string } | null {
@@ -772,6 +776,70 @@ export class Sidebar {
 		if (!normalized) return null;
 		const project = this.projects.find((entry) => normalizePath(entry.path) === normalized) ?? null;
 		return project ? { id: project.id, name: project.name, path: project.path } : null;
+	}
+
+	/**
+	 * Look up a saved SSH config by name. Returns the full config or null.
+	 * Uses the locally cached list (loaded by the Remote browser), or forces a
+	 * load from settings when the cache is empty.
+	 */
+	async findSshConfigByName(name: string): Promise<SshConnectionConfig | null> {
+		if (this.savedConfigs.length === 0) {
+			await this.loadSavedConfigs();
+		}
+		const entry = this.savedConfigs.find((s) => s.name === name);
+		return entry?.config ?? null;
+	}
+
+	/**
+	 * Synchronous variant — only checks the in-memory cache. Returns null
+	 * when the saved-configs list hasn't been loaded yet (callers fall back
+	 * to the global default). Used from sync code paths like new-tab creation.
+	 */
+	findSshConfigByNameSync(name: string): SshConnectionConfig | null {
+		const entry = this.savedConfigs.find((s) => s.name === name);
+		return entry?.config ?? null;
+	}
+
+	/**
+	 * Reverse-lookup: find the saved config name that matches the given SSH
+	 * config (by host + user + port + remote_cwd). Returns the name or null.
+	 */
+	findMatchingSshConfigName(ssh: SshConnectionConfig | null | undefined): string | null {
+		if (!ssh?.host) return null;
+		const normalizeStr = (s: string | null | undefined) => (s ?? "").trim();
+		const match = this.savedConfigs.find((entry) => {
+			const c = entry.config;
+			return (
+				normalizeStr(c.host) === normalizeStr(ssh.host) &&
+				normalizeStr(c.user) === normalizeStr(ssh.user) &&
+				(c.port ?? 22) === (ssh.port ?? 22) &&
+				normalizeStr(c.remote_cwd) === normalizeStr(ssh.remote_cwd)
+			);
+		});
+		return match?.name ?? null;
+	}
+
+	/**
+	 * Resolve a project's preferred SSH config name into a concrete
+	 * SshConnectionConfig, loading saved configs from settings if necessary.
+	 * Returns null for local-mode projects or when the config can't be found.
+	 */
+	async getProjectConnectionConfig(projectId: string): Promise<SshConnectionConfig | null> {
+		const project = this.projects.find((p) => p.id === projectId);
+		if (!project || project.preferredConnectionMode !== "ssh" || !project.preferredSshConfigName) return null;
+		return this.findSshConfigByName(project.preferredSshConfigName);
+	}
+
+	/**
+	 * Stamp a project with its last-used connection, and persist.
+	 */
+	setProjectConnectionPreference(projectId: string, mode: "local" | "ssh", configName?: string | null): void {
+		const project = this.projects.find((p) => p.id === projectId);
+		if (!project) return;
+		project.preferredConnectionMode = mode;
+		project.preferredSshConfigName = mode === "ssh" ? (configName ?? null) : null;
+		this.persistProjects();
 	}
 
 	clearActiveProject(emitSelect = false): void {
@@ -1056,6 +1124,8 @@ export class Sidebar {
 				lastSessionsLoadedAt: 0,
 				pathExists: true,
 				checkingPath: false,
+				preferredConnectionMode: "local",
+				preferredSshConfigName: null,
 			};
 
 			this.projects.unshift(project);
@@ -2017,6 +2087,8 @@ export class Sidebar {
 			name: p.name,
 			color: p.color,
 			emoji: normalizeProjectEmoji(p.emoji),
+			preferredConnectionMode: p.preferredConnectionMode,
+			preferredSshConfigName: p.preferredSshConfigName,
 		}));
 		localStorage.setItem(this.storageKey, JSON.stringify(data));
 	}
@@ -2127,6 +2199,8 @@ export class Sidebar {
 					lastSessionsLoadedAt: 0,
 					pathExists: null,
 					checkingPath: false,
+					preferredConnectionMode: (p.preferredConnectionMode === "ssh") ? "ssh" : "local",
+					preferredSshConfigName: p.preferredSshConfigName ?? null,
 				}));
 			this.sortProjectsInPlace();
 			this.activeProjectId = this.projects[0]?.id ?? null;
@@ -3882,6 +3956,7 @@ export class Sidebar {
 											${unreadCount > 0
 												? html`<span class="sidebar-project-unread-count" title=${`${unreadCount} unread session${unreadCount === 1 ? "" : "s"}`}>${unreadCount}</span>`
 												: nothing}
+											${project.preferredConnectionMode === "ssh" ? html`<span class="sidebar-project-ssh-badge" title="Remote: ${project.preferredSshConfigName ?? ""}">↗</span>` : nothing}
 										</span>
 									</button>
 								</div>
@@ -4058,6 +4133,7 @@ export class Sidebar {
 											${unreadCount > 0
 												? html`<span class="sidebar-project-unread-count" title=${`${unreadCount} unread session${unreadCount === 1 ? "" : "s"}`}>${unreadCount}</span>`
 												: nothing}
+											${project.preferredConnectionMode === "ssh" ? html`<span class="sidebar-project-ssh-badge" title="Remote: ${project.preferredSshConfigName ?? ""}">↗</span>` : nothing}
 										</span>
 									</button>
 								</div>

@@ -3995,6 +3995,22 @@ body.file-split-resizing #file-split-resize-handle::after {
 	flex-shrink: 0;
 }
 
+.sidebar-project-ssh-badge {
+	display: inline-grid;
+	place-items: center;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	border-radius: 999px;
+	font-size: 10px;
+	font-weight: 600;
+	line-height: 1;
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
+	border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+	flex-shrink: 0;
+}
+
 .sidebar-project-row.active .sidebar-project-unread-count {
 	background: color-mix(in srgb, var(--bg-soft) 92%, transparent);
 }

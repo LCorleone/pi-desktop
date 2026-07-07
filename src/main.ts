@@ -214,6 +214,76 @@ let debugOverlayInterval: ReturnType<typeof setInterval> | null = null;
 let debugTraceLines: string[] = [];
 let notificationAttentionListenersBound = false;
 let runtimeRunHadError = new Map<string, boolean>();
+
+// ---- Auto-reconnect for SSH connections ----
+const MAX_AUTO_RECONNECT_ATTEMPTS = 5;
+const autoReconnectUnsubs = new Map<string, () => void>();
+const autoReconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const autoReconnectAttempts = new Map<string, number>();
+
+function autoReconnectKey(workspaceId: string, tabId: string): string {
+	return `${workspaceId}/${tabId}`;
+}
+
+function clearAutoReconnect(workspaceId: string, tabId: string): void {
+	const key = autoReconnectKey(workspaceId, tabId);
+	const unsub = autoReconnectUnsubs.get(key);
+	if (unsub) { unsub(); autoReconnectUnsubs.delete(key); }
+	const timer = autoReconnectTimers.get(key);
+	if (timer) { clearTimeout(timer); autoReconnectTimers.delete(key); }
+	autoReconnectAttempts.delete(key);
+}
+
+function scheduleAutoReconnect(workspaceId: string, tabId: string): void {
+	const key = autoReconnectKey(workspaceId, tabId);
+	const attempts = (autoReconnectAttempts.get(key) ?? 0) + 1;
+
+	if (attempts > MAX_AUTO_RECONNECT_ATTEMPTS) {
+		chatView?.notify(
+			"Auto-reconnect failed after several attempts. Use /reload to reconnect.",
+			"error",
+		);
+		clearAutoReconnect(workspaceId, tabId);
+		return;
+	}
+
+	autoReconnectAttempts.set(key, attempts);
+	const delay = Math.min(1000 * Math.pow(2, attempts - 1), 30000);
+
+	autoReconnectTimers.set(
+		key,
+		setTimeout(async () => {
+			const ws = workspaces.find((w) => w.id === workspaceId);
+			const tab = ws?.sessionTabs.find((t) => t.id === tabId);
+			if (!ws || !tab || tab.connectionMode !== "ssh") {
+				clearAutoReconnect(workspaceId, tabId);
+				return;
+			}
+
+			// Only auto-reconnect the *active* tab.
+			const activeWs = getActiveWorkspace();
+			if (activeWs?.id !== workspaceId || activeWs.activeSessionTabId !== tabId) {
+				clearAutoReconnect(workspaceId, tabId);
+				return;
+			}
+
+			chatView?.notify(
+				`Reconnecting to remote pi (attempt ${attempts}/${MAX_AUTO_RECONNECT_ATTEMPTS})…`,
+				"info",
+			);
+			const ok = await reloadActiveWorkspaceRuntime();
+			if (!ok) {
+				// Retry — the listener on the old bridge will fire again if
+				// reloadActiveWorkspaceRuntime failed to start a new bridge,
+				// but we explicitly schedule the next attempt here to cover
+				// the case where the bridge starts but fails to connect.
+				scheduleAutoReconnect(workspaceId, tabId);
+			}
+			// On success, clearAutoReconnect is called by ensureRuntimeForSessionTab
+			// when it starts the new bridge.
+		}, delay),
+	);
+}
 let runtimeRunNotifyObserved = new Map<string, boolean>();
 let syntheticRuntimeNotifyCounter = 0;
 
@@ -1395,9 +1465,15 @@ function createAndActivateEmptySessionTab(
 	const tab = createSessionTab(title, null, projectId, projectPath);
 	tab.messageCount = 0;
 	tab.ephemeral = true;
-	// Brand-new blank tabs inherit the default connection (from Settings).
-	tab.connectionMode = defaultConnectionMode;
-	tab.sshConfig = defaultSshConfig;
+	// Brand-new blank tabs inherit the project's connection preference (falls back to Settings default).
+	const projectPref = projectId ? sidebar?.getProjectById(projectId) : null;
+	if (projectPref && projectPref.preferredConnectionMode === "ssh" && projectPref.preferredSshConfigName) {
+		tab.connectionMode = "ssh";
+		tab.sshConfig = sidebar?.findSshConfigByNameSync(projectPref.preferredSshConfigName) ?? defaultSshConfig;
+	} else {
+		tab.connectionMode = defaultConnectionMode;
+		tab.sshConfig = defaultSshConfig;
+	}
 	workspace.sessionTabs.push(tab);
 	workspace.activeSessionTabId = tab.id;
 	workspace.sessionTitle = tab.title;
@@ -1822,6 +1898,7 @@ async function reloadActiveWorkspaceRuntime(): Promise<boolean> {
 			assertProjectTaskCurrent(version);
 			const runtime = getRuntimeForTab(workspace.id, activeSession.id);
 			if (runtime?.bridge.isConnected) {
+				clearAutoReconnect(workspace.id, activeSession.id);
 				runtime.phase = "starting";
 				await runtime.bridge.stop().catch(() => {
 					/* ignore */
@@ -2957,6 +3034,7 @@ async function ensureRuntimeForSessionTab(
 
 	try {
 		if ((projectChanged || connectionChanged) && bridge.isConnected) {
+			clearAutoReconnect(workspace.id, sessionTab.id);
 			runtime.phase = "starting";
 			await bridge.stop().catch(() => {
 				/* ignore */
@@ -2975,6 +3053,17 @@ async function ensureRuntimeForSessionTab(
 			await bridge.start(buildRpcStartOptions(projectPath, sessionTab.connectionMode, sessionTab.sshConfig));
 			runtime.connectionMode = sessionTab.connectionMode;
 			runtime.sshConfig = sessionTab.sshConfig;
+			// Set up auto-reconnect for active SSH tabs.
+			if (sessionTab.connectionMode === "ssh" && makeActive) {
+				clearAutoReconnect(workspace.id, sessionTab.id);
+				const key = autoReconnectKey(workspace.id, sessionTab.id);
+				const unsub = bridge.onEvent((event) => {
+					if (event.type === "rpc_disconnected") {
+						scheduleAutoReconnect(workspace.id, sessionTab.id);
+					}
+				});
+				autoReconnectUnsubs.set(key, unsub);
+			}
 			recordDebugTrace(`ensureRuntime:bridge-started instance=${runtime.instanceId} discovery=${bridge.discoveryInfo ?? "-"}`);
 			if (typeof taskVersion === "number") {
 				assertProjectTaskCurrent(taskVersion);
@@ -3697,13 +3786,18 @@ function mountSettingsPanel(): SettingsPanel {
 	});
 	panel.setOnQuickReconnect(async (ssh) => {
 		// Quick-reconnect stamps the ACTIVE tab with the saved config and reconnects
-		// its runtime to the remote host.
+		// its runtime to the remote host. Also stamps the tab's project so the
+		// connection preference is remembered per-project.
 		const ws = getActiveWorkspace();
 		const tab = ws ? getActiveSessionTab(ws) : null;
+		const configName = sidebar?.findMatchingSshConfigName(ssh);
 		if (tab) {
 			tab.connectionMode = "ssh";
 			tab.sshConfig = ssh;
 			persistWorkspaces();
+			if (tab.projectId) {
+				sidebar?.setProjectConnectionPreference(tab.projectId, "ssh", configName);
+			}
 		}
 		syncActiveConnectionState();
 		await reloadActiveWorkspaceRuntime();
@@ -4824,6 +4918,18 @@ function renderApp(): void {
 			const sessionTab = openOrActivateSessionTab(workspace, preferredSession.path, project.id, project.path, preferredSession.name, {
 				allowCreateTab: canAutoCreateTab,
 			});
+			// Sync the tab's connection to the project's preference (per-project connection mode).
+			const projectConnPref = sidebar?.getProjectById(project.id);
+			if (projectConnPref?.preferredConnectionMode === "ssh" && sessionTab.connectionMode !== "ssh") {
+				const sshCfg = sidebar?.findSshConfigByNameSync(projectConnPref.preferredSshConfigName ?? "") ?? defaultSshConfig;
+				if (sshCfg) {
+					sessionTab.connectionMode = "ssh";
+					sessionTab.sshConfig = sshCfg;
+				}
+			} else if (projectConnPref?.preferredConnectionMode === "local" && sessionTab.connectionMode !== "local") {
+				sessionTab.connectionMode = "local";
+				sessionTab.sshConfig = null;
+			}
 			pruneInactiveEphemeralSessionTabs(workspace, [sessionTab.id]);
 			persistWorkspaces();
 			syncWorkspaceTabsBar();
@@ -5004,6 +5110,10 @@ function renderApp(): void {
 		});
 		sessionTab.connectionMode = "ssh";
 		sessionTab.sshConfig = config;
+		if (sessionTab.projectId) {
+			const configName = sidebar?.findMatchingSshConfigName(config);
+			sidebar?.setProjectConnectionPreference(sessionTab.projectId, "ssh", configName);
+		}
 		pruneInactiveEphemeralSessionTabs(workspace, [sessionTab.id]);
 		persistWorkspaces();
 		syncWorkspaceTabsBar();
@@ -5042,6 +5152,10 @@ function renderApp(): void {
 		const sessionTab = createSessionTab(NEW_SESSION_TAB_TITLE, null, projectId, projectPath);
 		sessionTab.connectionMode = "ssh";
 		sessionTab.sshConfig = config;
+		if (sessionTab.projectId) {
+			const configName = sidebar?.findMatchingSshConfigName(config);
+			sidebar?.setProjectConnectionPreference(sessionTab.projectId, "ssh", configName);
+		}
 		workspace.sessionTabs.push(sessionTab);
 		workspace.activeSessionTabId = sessionTab.id;
 		persistWorkspaces();
