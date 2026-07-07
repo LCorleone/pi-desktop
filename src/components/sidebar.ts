@@ -1687,83 +1687,8 @@ export class Sidebar {
 			const project = this.projects.find((p) => p.id === projectId);
 			if (!project) return;
 			const isStale = () => !this.isWorkspaceHydrationCurrent(hydrationToken) || !this.projects.includes(project);
-			// In SSH (remote) mode the session list is scanned from the REMOTE
-			// host via the list_remote_sessions Tauri command (a Node scanner over
-			// SSH that mirrors the local parse_session_info). Filter by the
-			// connection's remote_cwd instead of the local project.path.
-			if (getConnectionMode() === "ssh") {
-				const silent = options?.silent === true;
-				const now = Date.now();
-				if (silent && !options?.force && project.sessionsLoaded && now - project.lastSessionsLoadedAt < 2200) {
-					return;
-				}
-				const loadingBefore = project.loadingSessions;
-				const hadLoadedSessions = project.sessionsLoaded;
-				if (!silent) {
-					project.loadingSessions = true;
-					if (!isStale()) {
-						this.render();
-					}
-				}
-				try {
-					const ssh = getSshConfig();
-					if (!ssh) {
-						project.sessions = [];
-						project.sessionsLoaded = true;
-						project.lastSessionsLoadedAt = Date.now();
-						return;
-					}
-					const { invoke } = await import("@tauri-apps/api/core");
-					const all = await invoke<Array<{
-						id: string;
-						name: string | null;
-						path: string;
-						cwd: string | null;
-						created_at: number;
-						modified_at: number;
-						tokens: number;
-						cost: number;
-					}>>("list_remote_sessions", { ssh });
-					if (isStale()) return;
-					const target = normalizePath(ssh.remote_cwd ?? "");
-					const byProject = all.filter((s) => {
-						const cwdPath = normalizePath(s.cwd);
-						if (cwdPath && cwdPath === target) return true;
-						const sessionPath = normalizePath(s.path);
-						return Boolean(target) && sessionPath.includes(target);
-					});
-					const visibleProjectSessions = byProject.filter((session) => !this.suppressedSessionPaths.has(normalizePath(session.path)));
-					const scannedSessions = visibleProjectSessions.slice(0, 40).map((s) => ({
-						id: s.id,
-						name: s.name || "Untitled session",
-						path: s.path,
-						createdAt: s.created_at ?? s.modified_at,
-						modifiedAt: s.modified_at,
-						tokens: s.tokens ?? 0,
-						cost: s.cost ?? 0,
-						optimistic: false,
-					} satisfies SidebarSession));
-					if (isStale()) return;
-					project.sessions = scannedSessions;
-					project.sessionsLoaded = true;
-					project.lastSessionsLoadedAt = Date.now();
-				} catch (err) {
-					if (isStale()) return;
-					console.error("Failed to load remote sessions:", err);
-					if (!silent) {
-						project.sessions = [];
-					}
-					if (!hadLoadedSessions) {
-						project.sessionsLoaded = false;
-						project.lastSessionsLoadedAt = 0;
-					}
-				} finally {
-					if (isStale()) return;
-					project.loadingSessions = silent ? loadingBefore : false;
-					this.render();
-				}
-				return;
-			}
+			// Remote sessions are now browsed in the Remote tab
+			// (sidebar Local | Remote toggle).
 			const silent = options?.silent === true;
 			const now = Date.now();
 			if (silent && !options?.force && project.sessionsLoaded && now - project.lastSessionsLoadedAt < 2200) {
@@ -3859,7 +3784,7 @@ export class Sidebar {
 			if (this.query.trim()) {
 				return html`<div class="sidebar-empty">No sessions match your filter.</div>`;
 			}
-			return html`<div class="sidebar-empty">${getConnectionMode() === "ssh" ? "No remote sessions yet." : this.sessionShow === "relevant" ? "No relevant sessions yet." : "No sessions yet."}</div>`;
+			return html`<div class="sidebar-empty">${this.sessionShow === "relevant" ? "No relevant sessions yet." : "No sessions yet."}</div>`;
 		}
 
 		return html`
@@ -4001,7 +3926,7 @@ export class Sidebar {
 										${showBlockingSessionLoad
 											? html`<div class="sidebar-empty">Loading sessions…</div>`
 											: sessions.length === 0
-												? html`<div class="sidebar-empty">${getConnectionMode() === "ssh" ? "No remote sessions." : this.sessionShow === "relevant" ? "No relevant sessions." : "No sessions yet."}</div>`
+												? html`<div class="sidebar-empty">${this.sessionShow === "relevant" ? "No relevant sessions." : "No sessions yet."}</div>`
 												: sessions.map(
                                                     (session, index) => {
                                                         const normalizedSessionPath = normalizePath(session.path);
