@@ -1170,6 +1170,11 @@ function setActiveSessionTab(workspace: WorkspaceState, tabId: string): Workspac
 	workspace.sessionTitle = tab.title;
 	setWorkspaceActiveProject(workspace, { id: tab.projectId, path: tab.projectPath });
 	workspace.pane = "chat";
+	// Sync the sidebar's active project to the new tab BEFORE flipping the connection:
+	// the connection-state listener force-refreshes the active project's sessions,
+	// so it must already point at the new tab's project (not the previously-active
+	// tab's), otherwise switching local<->remote tabs shows the stale list.
+	syncSidebarSelectionFromWorkspace(workspace);
 	syncActiveConnectionState();
 	return tab;
 }
