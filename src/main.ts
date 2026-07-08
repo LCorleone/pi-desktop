@@ -5203,7 +5203,8 @@ function renderApp(): void {
 	});
 
 	sidebar.setOnSessionSelect((projectId, sessionPath, sessionName) => {
-		// Local sidebar always lists local sessions — stamp the tab as local.
+		// Local sidebar always lists local sessions — stamp the tab AND the project as local.
+		sidebar?.setProjectConnectionPreference(projectId, "local", null);
 		activateSidebarSession(projectId, sessionPath, sessionName, { label: "sidebar-session-select", connectionMode: "local" });
 	});
 

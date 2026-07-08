@@ -741,7 +741,7 @@ fn build_ssh_remote_command(ssh: &SshConnectionConfig, remote_command: &str) -> 
             // settings.json can't use extra_options as a local command-execution
             // vector. (BatchMode/StrictHostKeyChecking above are already pushed
             // first and so cannot be overridden here.)
-            let lower = key.to_lowercase();
+            let lower = key.trim().to_lowercase();
             if matches!(
                 lower.as_str(),
                 "proxycommand" | "localcommand" | "remotecommand" | "permitlocalcommand"
@@ -756,6 +756,7 @@ fn build_ssh_remote_command(ssh: &SshConnectionConfig, remote_command: &str) -> 
         .as_deref()
         .map(|u| format!("{}@", u))
         .unwrap_or_default();
+    cmd.arg("--");
     cmd.arg(format!("{}{}", user_prefix, ssh.host));
     cmd.arg(remote_command);
 
@@ -2984,7 +2985,7 @@ async fn list_remote_sessions(ssh: SshConnectionConfig) -> Result<Vec<SessionInf
     let scanner = r#"const fs=require('fs'),path=require('path');
 function agentDir(){const e=(process.env.PI_CODING_AGENT_DIR||'').trim();const home=process.env.HOME||process.env.USERPROFILE||'.';if(e){if(e==='~')return home;if(e.slice(0,2)==='~/'||e.slice(0,2)==='~\\')return path.join(home,e.slice(2));return e;}return path.join(home,'.pi','agent');}
 function walk(d,o){let en;try{en=fs.readdirSync(d,{withFileTypes:true});}catch(_){return;}for(const f of en){const p=path.join(d,f.name);try{if(f.isDirectory())walk(p,o);else if(f.isFile()&&/\.jsonl$/i.test(f.name))o.push(p);}catch(_){}}}
-function info(file){let c;try{c=fs.readFileSync(file,'utf8');}catch(_){return null;}let id=path.basename(file).replace(/\.[^.]+$/,'');let name=null,cwd=null,tokens=0,cost=0;for(const line of c.split(/\r?\n/)){const tl=line.trim();if(!tl)continue;let v;try{v=JSON.parse(tl);}catch(_){continue;}if(!v||typeof v!=='object')continue;const t=v.type;if(t==='session'){if(typeof v.id==='string')id=v.id;const cw=typeof v.cwd==='string'?v.cwd.trim():'';if(cw)cwd=cw;}else if(t==='session_info'){const nm=typeof v.name==='string'?v.name.trim():'';if(nm)name=nm;}else if(t==='message'){const m=v.message;if(m&&m.role==='assistant'){const u=m.usage||{};tokens+=Number(u.totalTokens)||0;cost+=Number(u.cost&&u.cost.total)||0;}}}let st;try{st=fs.statSync(file);}catch(_){return null;}const mtime=Math.floor(st.mtimeMs)||0;const created=Math.floor(st.birthtimeMs)||mtime;return{id:id,name:name,path:file,cwd:cwd,created_at:created,modified_at:mtime,tokens:tokens,cost:cost};}
+function info(file){let c;try{c=fs.readFileSync(file,'utf8');}catch(_){return null;}let id=path.basename(file).replace(/\.[^.]+$/,'');let name=null,cwd=null,tokens=0,cost=0;for(const line of c.split(/\r?\n/)){const tl=line.trim();if(!tl)continue;let v;try{v=JSON.parse(tl);}catch(_){continue;}if(!v||typeof v!=='object')continue;const t=v.type;if(t==='session'){if(typeof v.id==='string')id=v.id;const cw=typeof v.cwd==='string'?v.cwd.trim():'';if(cw)cwd=cw;}else if(t==='session_info'){const nm=typeof v.name==='string'?v.name.trim():'';if(nm)name=nm;}else if(t==='message'){const m=v.message;if(m&&m.role==='assistant'){const u=m.usage||{};tokens+=Math.floor(Number(u.totalTokens)||0);cost+=Number(u.cost&&u.cost.total)||0;}}}let st;try{st=fs.statSync(file);}catch(_){return null;}const mtime=Math.floor(st.mtimeMs)||0;const created=Math.floor(st.birthtimeMs)||mtime;return{id:id,name:name,path:file,cwd:cwd,created_at:created,modified_at:mtime,tokens:tokens,cost:cost};}
 const files=[];walk(path.join(agentDir(),'sessions'),files);
 const out=[];for(const f of files){const inf=info(f);if(inf)out.push(inf);}
 out.sort(function(a,b){return b.modified_at-a.modified_at;});
