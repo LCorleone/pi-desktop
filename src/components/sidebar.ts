@@ -4546,16 +4546,6 @@ export class Sidebar {
 									</button>
 								`
 								: nothing}
-							<div class="sidebar-top-actions sidebar-top-actions-primary">
-								<button
-									class="sidebar-top-action-btn"
-									title=${this.mode === "files" ? "New file" : "New session"}
-									?disabled=${!hasActiveProject}
-									@click=${() => void this.triggerPrimaryTopAction()}
-								>
-									<span>${this.mode === "files" ? "New file" : "New session"}</span>
-								</button>
-							</div>
 						`}
 				</div>
 
@@ -4572,6 +4562,12 @@ export class Sidebar {
 								</div>
 							</div>
 							<div class="sidebar-mode-actions">
+								<button class="sidebar-mode-create-btn" title=${this.mode === "files" ? "New file" : "New session"} ?disabled=${!hasActiveProject} @click=${() => void this.triggerPrimaryTopAction()}>
+									<svg class="sidebar-icon-svg" viewBox="0 0 16 16" aria-hidden="true">
+										<path d="M8 4v8"/>
+										<path d="M4 8h8"/>
+									</svg>
+								</button>
 								<button class="sidebar-mode-create-btn" title="Add project" @click=${() => void this.handleModeCreateAction()}>
 									<svg class="sidebar-icon-svg" viewBox="0 0 16 16" aria-hidden="true">
 										<path d="M2.5 4.5h4l1.3 1.5h5.7v5a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z" />

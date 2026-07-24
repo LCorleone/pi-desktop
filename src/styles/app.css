@@ -3366,7 +3366,6 @@ body.file-split-resizing #file-split-resize-handle::after {
 	color: var(--text);
 }
 
-.sidebar-top-action-btn:hover,
 .sidebar-mode-create-btn:hover,
 .sidebar-mode-filter-btn:hover,
 .sidebar-footer-btn:hover {
@@ -3501,33 +3500,6 @@ body.file-split-resizing #file-split-resize-handle::after {
 .sidebar-top-actions {
 	display: grid;
 	gap: 4px;
-}
-
-.sidebar-top-action-btn {
-	height: 30px;
-	width: 100%;
-	display: inline-flex;
-	align-items: center;
-	justify-content: flex-start;
-	gap: 6px;
-	padding: 0 9px;
-	border-radius: 8px;
-	border: none;
-	background: transparent;
-	color: var(--muted);
-	font-size: 12px;
-	cursor: pointer;
-	white-space: nowrap;
-}
-
-.sidebar-top-action-btn:disabled {
-	opacity: 0.45;
-	cursor: not-allowed;
-}
-
-.sidebar-top-action-btn:disabled:hover {
-	background: transparent;
-	color: var(--muted);
 }
 
 .sidebar-icon-svg {
