@@ -465,11 +465,6 @@ export class Sidebar {
 		this.onOpenSettings = cb;
 	}
 
-	/** Open the create-workspace dialog (rail entry point). */
-	createWorkspace(): void {
-		this.openWorkspaceCreateDialog();
-	}
-
 	setOnWorkspaceSelect(cb: (workspaceId: string) => void): void {
 		this.onWorkspaceSelect = cb;
 	}
@@ -3328,19 +3323,6 @@ export class Sidebar {
 								<span class="sidebar-workspace-chevron" aria-hidden="true">${this.workspaceMenuOpen ? "▴" : "▾"}</span>
 							</div>
 							<div class="sidebar-right-controls">
-								<button
-									class="workspace-sidebar-toggle"
-									title="Collapse sidebar"
-									@click=${(e: Event) => {
-										e.stopPropagation();
-										this.toggleCollapsed();
-									}}
-								>
-									<svg viewBox="0 0 16 16" aria-hidden="true">
-										<path d="M3 3.5h10v9H3z" />
-										<path d="M6 3.5v9" />
-									</svg>
-								</button>
 								${this.renderWindowControls()}
 							</div>
 						`
@@ -3369,19 +3351,6 @@ export class Sidebar {
 								</button>
 								<span class="sidebar-workspace-chevron" aria-hidden="true">${this.workspaceMenuOpen ? "▴" : "▾"}</span>
 							</div>
-							<button
-								class="workspace-sidebar-toggle"
-								title="Collapse sidebar"
-								@click=${(e: Event) => {
-									e.stopPropagation();
-									this.toggleCollapsed();
-								}}
-							>
-								<svg viewBox="0 0 16 16" aria-hidden="true">
-									<path d="M3 3.5h10v9H3z" />
-									<path d="M6 3.5v9" />
-								</svg>
-							</button>
 						`
 					}
 				</div>
@@ -3590,6 +3559,13 @@ export class Sidebar {
 						`;
 					})}
 				</div>
+				<button
+					class="sidebar-workspace-dock-add"
+					title="Create workspace"
+					@click=${(e: Event) => { e.stopPropagation(); this.openWorkspaceCreateDialog(); }}
+				>
+					<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 4v8"/><path d="M4 8h8"/></svg>
+				</button>
 			</div>
 		`;
 	}
