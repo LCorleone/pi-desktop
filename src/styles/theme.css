@@ -13,7 +13,7 @@
 	--color-bg-elevated: #16161a;
 	--color-bg-muted: #1e1e24;
 	--color-bg-soft: #252530;
-	--color-bg-sidebar: #0c0c0e;
+	--color-bg-sidebar: color-mix(in srgb, var(--color-bg-soft) 45%, var(--color-bg-app));
 	--color-bg-workspace-chrome: #131318;
 	--color-bg-workspace-chrome-soft: #1a1b24;
 

@@ -973,18 +973,12 @@ samp {
 	width: var(--sidebar-width, 320px);
 	min-width: var(--sidebar-width, 320px);
 	max-width: var(--sidebar-width, 320px);
-	background: color-mix(
-		in srgb,
-		var(--sidebar) var(--desktop-sidebar-opacity),
-		var(--desktop-sidebar-tint-color) var(--desktop-sidebar-tint-strength)
-	);
-	backdrop-filter: blur(var(--desktop-sidebar-blur));
+	background: var(--sidebar);
 	overflow-x: visible;
 	overflow-y: hidden;
 	position: relative;
 	transition: width var(--duration-base) var(--ease-standard), min-width var(--duration-base) var(--ease-standard), max-width var(--duration-base) var(--ease-standard);
 	box-shadow: none;
-	border-bottom-left-radius: 14px;
 }
 
 #sidebar-container.collapsed {
@@ -1050,7 +1044,7 @@ body.file-split-resizing {
 	align-items: center;
 	gap: 4px;
 	padding: 8px 0 12px;
-	background: color-mix(in srgb, var(--bg-soft) 45%, var(--bg));
+	background: var(--sidebar);
 	border-right: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
 }
 .rail-btn {
@@ -1156,7 +1150,7 @@ body.file-split-resizing {
 	height: var(--top-chrome-height);
 	padding-top: 0;
 	box-sizing: border-box;
-	background: var(--bg);
+	background: var(--sidebar);
 	border-top-right-radius: 10px;
 }
 
