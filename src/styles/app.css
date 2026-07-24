@@ -539,6 +539,7 @@ samp {
 .sidebar-workspace-dock,
 .sidebar-workspace-dock-list,
 .sidebar-workspace-pill,
+.sidebar-workspace-dock-add,
 .sidebar-space-dialog,
 .sidebar-space-dialog *,
 .content-tab,
@@ -546,11 +547,6 @@ samp {
 .content-tab-context-menu *,
 .content-tabs-add-btn {
 	-webkit-app-region: no-drag;
-}
-
-.workspace-sidebar-toggle.collapsed {
-	color: var(--accent);
-	background: color-mix(in srgb, var(--accent) 14%, var(--bg));
 }
 
 .workspace-tabs-scroll {
@@ -2967,14 +2963,6 @@ body.file-split-resizing #file-split-resize-handle::after {
 	max-width: 100%;
 }
 
-.sidebar-workspace-switcher-row .workspace-sidebar-toggle {
-	width: 28px;
-	height: 28px;
-	border-radius: 8px;
-	flex-shrink: 0;
-	margin-left: auto;
-}
-
 .sidebar-workspace-trigger-title {
 	font-size: 12px;
 	font-weight: 500;
@@ -3141,10 +3129,6 @@ body.file-split-resizing #file-split-resize-handle::after {
 	justify-content: space-between;
 	padding: 6px 8px 2px;
 	min-height: 32px;
-}
-
-.sidebar-window-row .workspace-sidebar-toggle {
-	margin-left: auto;
 }
 
 .sidebar-workspace-header {
@@ -3615,6 +3599,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 .sidebar-workspace-dock-add {
 	width: 24px;
 	height: 24px;
+	-webkit-app-region: no-drag;
 	border: none;
 	border-radius: var(--radius-md);
 	display: inline-grid;
@@ -9321,10 +9306,6 @@ button:active:not(:disabled),
 	flex-shrink: 0;
 }
 
-/* Collapsed row: toggle stays left, win-controls pushed right */
-.sidebar-window-row:has(.win-controls) .workspace-sidebar-toggle {
-	margin-left: 0;
-}
 .sidebar-window-row .sidebar-window-controls.win-controls {
 	margin-left: auto;
 }

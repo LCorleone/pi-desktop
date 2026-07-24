@@ -3455,19 +3455,6 @@ export class Sidebar {
 		if (this.isWindowsPlatform()) {
 			return html`
 				<div class="sidebar-window-row" data-tauri-drag-region>
-					<button
-						class="workspace-sidebar-toggle"
-						title="Collapse sidebar"
-						@click=${(e: Event) => {
-							e.stopPropagation();
-							this.toggleCollapsed();
-						}}
-					>
-						<svg viewBox="0 0 16 16" aria-hidden="true">
-							<path d="M3 3.5h10v9H3z" />
-							<path d="M6 3.5v9" />
-						</svg>
-					</button>
 					${this.renderWindowControls()}
 				</div>
 			`;
@@ -3475,19 +3462,6 @@ export class Sidebar {
 		return html`
 			<div class="sidebar-window-row" data-tauri-drag-region>
 				${this.renderWindowControls()}
-				<button
-					class="workspace-sidebar-toggle"
-					title="Collapse sidebar"
-					@click=${(e: Event) => {
-						e.stopPropagation();
-						this.toggleCollapsed();
-					}}
-				>
-					<svg viewBox="0 0 16 16" aria-hidden="true">
-						<path d="M3 3.5h10v9H3z" />
-						<path d="M6 3.5v9" />
-					</svg>
-				</button>
 			</div>
 		`;
 	}
