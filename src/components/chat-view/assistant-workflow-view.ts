@@ -475,6 +475,20 @@ export function renderAssistantWorkflowView({
 	const lastWorkflowMessageId = workflow.messages[workflow.messages.length - 1]?.id ?? workflow.id;
 	const turnStats = getTurnStats?.(lastWorkflowMessageId);
 
+	// Thinking-phase duration: time from workflow start to first tool call start
+	// (or whole duration if no tools). Shown on the first thinking entry only.
+	const firstToolStart = workflow.toolCalls
+		.map((c) => c.startedAt)
+		.filter((v): v is number => typeof v === "number" && v > 0)
+		.sort((a, b) => a - b)[0] ?? 0;
+	const thinkingPhaseMs = workflow.startedAt > 0
+		? Math.max(0, (firstToolStart || workflow.endedAt || Date.now()) - workflow.startedAt)
+		: 0;
+	const thinkingDurationLabel = thinkingPhaseMs > 0 ? formatDuration(thinkingPhaseMs) : "";
+	// Precompute the id of the first thinking detail entry so we can render the
+	// thinking-duration badge on it without impure state inside the map.
+	const firstThinkingId = detailEntries.find((e) => e.kind === "thinking")?.id ?? null;
+
 	return html`
 		<div class="chat-row assistant-row assistant-workflow-row" data-message-id=${workflow.id}>
 			<div class="message-shell assistant-message-shell">
@@ -500,12 +514,14 @@ export function renderAssistantWorkflowView({
 									if (entry.kind === "thinking") {
 										const thinkingExpanded = isWorkflowThinkingExpanded(entry.id);
 										const thinkingAnimating = running === 0 && entry.animating;
-										const thinkingLabel = thinkingAnimating ? "Thinking…" : "Thought";
+										const showThinkingDuration = Boolean(thinkingDurationLabel) && entry.id === firstThinkingId;
 										return html`
-											<div class="tool-workflow-thinking">
+											<div class="tool-workflow-thinking ${thinkingExpanded ? "expanded" : ""}">
 												<button class="tool-workflow-thinking-toggle ${thinkingAnimating ? "animating" : "done"}" @click=${() => toggleWorkflowThinkingExpanded(entry.id)}>
 													${thinkingAnimating ? html`<span class="tool-workflow-inline-pi" aria-hidden="true">${piGlyphIcon()}</span>` : nothing}
-													<span class="tool-workflow-thinking-text">${thinkingLabel}</span>
+													<span class="tool-workflow-thinking-text">Thinking</span>
+													${showThinkingDuration ? html`<span class="tool-workflow-thinking-duration">${thinkingDurationLabel}</span>` : nothing}
+													<span class="tool-workflow-chevron">${thinkingExpanded ? "▾" : "▸"}</span>
 												</button>
 												${thinkingExpanded ? html`<div class="tool-workflow-thinking-content">${entry.text}</div>` : nothing}
 											</div>
@@ -524,28 +540,44 @@ export function renderAssistantWorkflowView({
 												.find((value) => value.length > 0) ?? "",
 										);
 									const output = group.category === "agent" ? trimAgentOutput(rawOutput, groupRunning) : rawOutput;
-									const statusLabel = groupRunning ? "running" : groupFailed ? "failed" : "success";
 									const terminalCommand = group.category === "terminal" && group.calls.length > 0
 										? pickToolArg(group.calls[0].args, ["command", "cmd", "shell", "script"])
 										: "";
 									const tooltipText = terminalCommand ? terminalCommand.slice(0, 500) : (output ? output.slice(0, 300) : undefined);
+									// Per-group duration from calls' startedAt/endedAt
+									const groupStarts = group.calls.map((c) => c.startedAt).filter((v): v is number => typeof v === "number" && v > 0);
+									const groupEnds = group.calls.map((c) => c.endedAt).filter((v): v is number => typeof v === "number" && v > 0);
+									const nowMs = groupRunning ? Date.now() : 0;
+									const groupStart = groupStarts.length ? Math.min(...groupStarts) : 0;
+									const groupEnd = groupEnds.length ? Math.max(...groupEnds) : nowMs;
+									const groupDurationMs = groupStart > 0 && groupEnd > groupStart ? groupEnd - groupStart : 0;
+									const groupDurationLabel = groupDurationMs > 0 ? formatDuration(groupDurationMs) : "";
+									// Pretty-printed args from the first call in the group
+									const argsJson = (() => {
+										const args = group.calls[0]?.args;
+										if (!args || typeof args !== "object" || Object.keys(args).length === 0) return "";
+										try { return JSON.stringify(args, null, 2); } catch { return ""; }
+									})();
 									return html`
-										<div class="tool-workflow-item ${groupRunning ? "running" : groupFailed ? "failed" : "done"}">
+										<div class="tool-workflow-item ${groupRunning ? "running" : groupFailed ? "failed" : "done"} ${groupExpanded ? "expanded" : ""}">
 											<button
-												class="tool-workflow-line ${groupRunning ? "running" : groupFailed ? "failed" : "done"}"
+												class="tool-workflow-line"
 												@click=${() => toggleToolGroupExpanded(workflow.id, group.id)}
 												title=${tooltipText || nothing}
 											>
 												${groupRunning
 													? html`<span class="tool-workflow-inline-pi" aria-hidden="true">${piGlyphIcon()}</span>`
-													: html`<span class="tool-workflow-category-icon" aria-hidden="true">${toolCategorySvg(group.category)}</span>`}
-												<span class="tool-workflow-label">${group.label}</span>
-									<span class="tool-workflow-line-text ${groupRunning ? "running" : ""}">${renderToolPreview(group.preview)}</span>
+													: nothing}
+												<span class="tool-workflow-toolname">${group.toolName}</span>
+												<span class="tool-workflow-preview">${renderToolPreview(group.preview)}</span>
 												${count > 1 ? html`<span class="tool-workflow-count">×${count}</span>` : nothing}
+												${groupDurationLabel ? html`<span class="tool-workflow-duration">${groupDurationLabel}</span>` : nothing}
+												<span class="tool-workflow-chevron">${groupExpanded ? "▾" : "▸"}</span>
 											</button>
 											${groupExpanded
 												? html`
-													<div class="tool-workflow-details">
+													<div class="tool-workflow-body">
+														${argsJson ? html`<pre class="tool-workflow-args">${argsJson}</pre>` : nothing}
 														${group.category === "agent"
 															? (() => {
 																	const notif = parseSubagentNotification(rawOutput);
@@ -567,16 +599,12 @@ export function renderAssistantWorkflowView({
 																			</div>
 																		`;
 																	}
-																	// No task-notification XML — fall back to cleaned text
 																	return html`<pre class="tool-workflow-output">${groupRunning ? "working…" : (output || "No output reported.")}${groupRunning ? html`<span class="streaming-inline"></span>` : nothing}</pre>`;
 															})()
-															: html`
-																${terminalCommand ? html`<pre class="tool-workflow-command">${terminalCommand}</pre>` : nothing}
-																<pre class="tool-workflow-output">${output || "No output reported."}${groupRunning ? html`<span class="streaming-inline"></span>` : nothing}</pre>`}
-														<div class="tool-workflow-detail-meta"><span class="tool-workflow-detail-status ${groupRunning ? "running" : groupFailed ? "error" : "done"}"><span class="tool-status-dot"></span>${statusLabel}</span></div>
+															: html`<pre class="tool-workflow-output">${output || "No output reported."}${groupRunning ? html`<span class="streaming-inline"></span>` : nothing}</pre>`}
 													</div>
 												`
-												: nothing}
+											: nothing}
 										</div>
 									`;
 								})}
