@@ -467,6 +467,11 @@ export class Sidebar {
 		this.onOpenSettings = cb;
 	}
 
+	/** Open the create-workspace dialog (rail entry point). */
+	createWorkspace(): void {
+		this.openWorkspaceCreateDialog();
+	}
+
 	setOnTogglePackages(cb: () => void): void {
 		this.onTogglePackages = cb;
 	}
@@ -3576,20 +3581,6 @@ export class Sidebar {
 	private renderWorkspaceDock(): TemplateResult {
 		return html`
 			<div class="sidebar-workspace-dock" data-tauri-drag-region>
-				<button
-					class="sidebar-settings-icon-btn"
-					title="Settings"
-					@click=${(e: Event) => {
-						e.preventDefault();
-						e.stopPropagation();
-						this.onOpenSettings?.();
-					}}
-				>
-					<svg class="sidebar-icon-svg" viewBox="0 0 16 16" aria-hidden="true">
-						<path d="M6.6 1.9h2.8l.3 1.5c.4.1.7.3 1 .5l1.4-.6 1.4 2.4-1.1 1c.1.4.1.8 0 1.2l1.1 1-1.4 2.4-1.4-.6c-.3.2-.6.4-1 .5l-.3 1.5H6.6l-.3-1.5c-.4-.1-.7-.3-1-.5l-1.4.6-1.4-2.4 1.1-1a3.8 3.8 0 0 1 0-1.2l-1.1-1 1.4-2.4 1.4.6c.3-.2.6-.4 1-.5z" />
-						<circle cx="8" cy="8" r="2.1" />
-					</svg>
-				</button>
 				<div class="sidebar-workspace-dock-list" @click=${(e: Event) => e.stopPropagation()}>
 					${this.workspaces.map((workspace) => {
 						const active = workspace.id === this.activeWorkspaceId;
@@ -3611,16 +3602,6 @@ export class Sidebar {
 						`;
 					})}
 				</div>
-				<button
-					class="sidebar-workspace-dock-add"
-					title="Create space"
-					@click=${(e: Event) => {
-						e.stopPropagation();
-						this.openWorkspaceCreateDialog();
-					}}
-				>
-					＋
-				</button>
 			</div>
 		`;
 	}
@@ -4610,9 +4591,6 @@ export class Sidebar {
 									@click=${() => void this.triggerPrimaryTopAction()}
 								>
 									<span>${this.mode === "files" ? "New file" : "New session"}</span>
-								</button>
-								<button class="sidebar-top-action-btn ${this.packagesOpen ? "active" : ""}" title="Packages" @click=${() => this.onTogglePackages?.()}>
-									<span>Packages</span>
 								</button>
 							</div>
 						`}

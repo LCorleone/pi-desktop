@@ -569,19 +569,6 @@ export class ContentTabs {
 						: nothing}
 				</div>
 
-				<div class="content-tabs-trailing" data-tauri-drag-region>
-					<button
-						class="content-tabs-terminal-btn ${this.terminalActive ? "active" : ""}"
-						title="Open terminal"
-						@click=${(event: Event) => {
-							event.stopPropagation();
-							this.onOpenTerminal?.();
-						}}
-					>
-						<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.2h10v9.6H3z"></path><path d="M5.1 6.2l1.9 1.8-1.9 1.8"></path><path d="M8.6 9.8h2.6"></path></svg>
-					</button>
-				</div>
-
 				${this.contextTabKey
 					? html`
 						<div class="content-tab-context-menu" style=${`left:${this.contextX}px;top:${this.contextY}px`} @click=${(e: Event) => e.stopPropagation()}>

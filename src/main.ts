@@ -4248,9 +4248,13 @@ function setupKeyboardShortcuts(): void {
 				if (e.key === "1") { w.pane = "chat"; void applyWorkspacePane(w); renderApp(); }
 				else if (e.key === "2") { toggleTerminalDock(); renderApp(); }
 				else if (e.key === "3") {
-					if (getActiveFileTab(w)) { w.activeFileTabId = null; }
-					else { w.activeFileTabId = w.fileTabs[0]?.id ?? null; w.pane = "chat"; }
-					void applyWorkspacePane(w); renderApp();
+					if (sidebar?.getMode() === "files") {
+						sidebar.setMode("projects");
+					} else {
+						if (isSidebarCollapsedState()) sidebar?.toggleCollapsed();
+						sidebar?.setMode("files");
+					}
+					renderApp();
 				}
 				else if (e.key === "4") { w.pane = w.pane === "packages" ? "chat" : "packages"; void applyWorkspacePane(w); renderApp(); }
 				else { sidebar?.toggleCollapsed(); }
@@ -4495,14 +4499,16 @@ function renderApp(): void {
 							<span class="rail-label">Terminal</span>
 						</button>
 						<button
-							class="rail-btn ${getActiveWorkspace()?.pane === "chat" && Boolean(getActiveWorkspace()?.activeFileTabId) ? "active" : ""}"
+							class="rail-btn ${sidebar?.getMode() === "files" ? "active" : ""}"
 							title="Files"
 							@click=${() => {
-								const w = getActiveWorkspace();
-								if (!w) return;
-								if (getActiveFileTab(w)) { w.activeFileTabId = null; }
-								else { w.activeFileTabId = w.fileTabs[0]?.id ?? null; w.pane = "chat"; }
-								void applyWorkspacePane(w); renderApp();
+								if (sidebar?.getMode() === "files") {
+									sidebar.setMode("projects");
+								} else {
+									if (isSidebarCollapsedState()) sidebar?.toggleCollapsed();
+									sidebar?.setMode("files");
+								}
+								renderApp();
 							}}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
@@ -4517,6 +4523,14 @@ function renderApp(): void {
 							<span class="rail-label">Packages</span>
 						</button>
 						<div class="rail-spacer"></div>
+						<button
+							class="rail-btn"
+							title="Create workspace"
+							@click=${() => { sidebar?.createWorkspace(); }}
+						>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10v6"/><path d="M9 13h6"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+							<span class="rail-label">New workspace</span>
+						</button>
 						<button
 							class="rail-btn"
 							title="Toggle theme"
@@ -4574,7 +4588,7 @@ function renderApp(): void {
 	setupFileSplitResize();
 
 	const contentTabsContainer = document.getElementById("content-tabs-container");
-	if (contentTabsContainer) {
+	if (contentTabsContainer && !contentTabsBar) {
 		contentTabsBar = new ContentTabs(contentTabsContainer);
 		contentTabsBar.setOnSelect((tabId) => {
 			const workspace = getActiveWorkspace();
@@ -4738,7 +4752,7 @@ function renderApp(): void {
 	}
 
 	const filePane = document.getElementById("file-pane");
-	if (filePane) {
+	if (filePane && !fileViewer) {
 		fileViewer = new FileViewer(filePane);
 		fileViewer.setProjectPath(null);
 		fileViewer.setOnClose(() => {
@@ -4786,7 +4800,7 @@ function renderApp(): void {
 	}
 
 	const terminalPane = document.getElementById("terminal-pane");
-	if (terminalPane) {
+	if (terminalPane && !terminalPanel) {
 		setupTerminalDockResize(terminalPane);
 		terminalPanel = new TerminalPanel(terminalPane);
 		terminalPanel.setProjectPath(null);
@@ -4813,7 +4827,7 @@ function renderApp(): void {
 	}
 
 	const packagesPane = document.getElementById("packages-pane");
-	if (packagesPane) {
+	if (packagesPane && !packagesView) {
 		packagesView = new PackagesView(packagesPane);
 		packagesView.setProjectPath(null);
 		packagesView.setOnBack(() => {
@@ -4838,7 +4852,7 @@ function renderApp(): void {
 
 	const sidebarContainer = document.getElementById("sidebar-container");
 	if (!sidebarContainer) return;
-	sidebar = new Sidebar(sidebarContainer);
+	if (!sidebar) sidebar = new Sidebar(sidebarContainer);
 	packagesView?.setProjectOptionsProvider(() => sidebar?.listProjects() ?? []);
 	sidebar.setOnCollapsedChange(() => {
 		renderApp();
