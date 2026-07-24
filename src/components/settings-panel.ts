@@ -2197,12 +2197,6 @@ export class SettingsPanel {
 				description: "Theme mode and desktop appearance profiles.",
 			},
 			{
-				id: "account",
-				label: "Account",
-				description: "Provider auth status and package config notes.",
-				runtimeRequired: true,
-			},
-			{
 				id: "providers",
 				label: "Providers",
 				description: "Configure OpenAI-compatible API providers and models.",
