@@ -35,6 +35,7 @@ import { syncDesktopThemeWithPiTheme } from "./theme/pi-theme-bridge.js";
 import {
 	getConnectionMode as getConnectionModeImpl,
 	getSshConfig,
+	isSshEnabled,
 	setConnectionState,
 	setSshEnabled,
 	type ConnectionMode,
@@ -1055,7 +1056,7 @@ function ensureWorkspaceContentState(workspace: WorkspaceState): void {
 					typeof attentionMessageRaw === "string" && attentionMessageRaw.trim().length > 0
 						? attentionMessageRaw.trim()
 						: null,
-				connectionMode: (tab as Partial<WorkspaceSessionTab>).connectionMode === "ssh" ? "ssh" : "local",
+				connectionMode: (tab as Partial<WorkspaceSessionTab>).connectionMode === "ssh" && isSshEnabled() ? "ssh" : "local",
 				sshConfig: (tab as Partial<WorkspaceSessionTab>).sshConfig ?? null,
 			};
 		});
@@ -1460,7 +1461,7 @@ function createAndActivateEmptySessionTab(
 		setSessionTabProject(activeSessionTab, projectId, projectPath);
 		// Also adopt the project's connection preference (same as the create path below).
 		const projPref = projectId ? sidebar?.getProjectById(projectId) : null;
-		if (projPref && projPref.preferredConnectionMode === "ssh" && projPref.preferredSshConfigName) {
+		if (projPref && isSshEnabled() && projPref.preferredConnectionMode === "ssh" && projPref.preferredSshConfigName) {
 			activeSessionTab.connectionMode = "ssh";
 			activeSessionTab.sshConfig = sidebar?.findSshConfigByNameSync(projPref.preferredSshConfigName) ?? defaultSshConfig;
 		} else {
@@ -1478,7 +1479,7 @@ function createAndActivateEmptySessionTab(
 	tab.ephemeral = true;
 	// Brand-new blank tabs inherit the project's connection preference (falls back to Settings default).
 	const projectPref = projectId ? sidebar?.getProjectById(projectId) : null;
-	if (projectPref && projectPref.preferredConnectionMode === "ssh" && projectPref.preferredSshConfigName) {
+	if (projectPref && isSshEnabled() && projectPref.preferredConnectionMode === "ssh" && projectPref.preferredSshConfigName) {
 		tab.connectionMode = "ssh";
 		tab.sshConfig = sidebar?.findSshConfigByNameSync(projectPref.preferredSshConfigName) ?? defaultSshConfig;
 	} else {
@@ -2273,7 +2274,7 @@ async function loadConnectionConfigFromSettings(): Promise<void> {
 			ssh?: SshConnectionConfig | null;
 			ssh_enabled?: boolean | null;
 		};
-		const mode: ConnectionMode = saved?.connection_mode === "ssh" ? "ssh" : "local";
+		const mode: ConnectionMode = saved?.connection_mode === "ssh" && saved?.ssh_enabled === true ? "ssh" : "local";
 		const ssh = saved?.ssh ?? null;
 		defaultConnectionMode = mode;
 		defaultSshConfig = ssh;
@@ -4106,8 +4107,6 @@ function normalizeSettingsSectionId(sectionId: string | null | undefined): Setti
 			return "general";
 		case "appearance":
 			return "appearance";
-		case "account":
-			return "account";
 		case "updates":
 			return "updates";
 		default:
@@ -4933,7 +4932,7 @@ function renderApp(): void {
 			});
 			// Sync the tab's connection to the project's preference (per-project connection mode).
 			const projectConnPref = sidebar?.getProjectById(project.id);
-			if (projectConnPref?.preferredConnectionMode === "ssh" && sessionTab.connectionMode !== "ssh") {
+			if (isSshEnabled() && projectConnPref?.preferredConnectionMode === "ssh" && sessionTab.connectionMode !== "ssh") {
 				const sshCfg = sidebar?.findSshConfigByNameSync(projectConnPref.preferredSshConfigName ?? "") ?? defaultSshConfig;
 				if (sshCfg) {
 					sessionTab.connectionMode = "ssh";

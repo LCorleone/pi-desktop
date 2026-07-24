@@ -42,7 +42,6 @@ export interface WorkflowToolCallGroup {
 	toolName: string;
 	preview: string;
 	category: ToolCategory;
-	label: string;
 	calls: WorkflowToolCall[];
 }
 
@@ -206,18 +205,6 @@ export function deriveWorkflowIntent(workflow: AssistantWorkflow): string | null
 	return phrase || null;
 }
 
-export function getToolLabel(category: ToolCategory, name: string): string {
-	switch (category) {
-		case "terminal": return "bash";
-		case "file-read": return "read";
-		case "file-write": return "write";
-		case "edit": return "edit";
-		case "search": return "search";
-		case "agent": return "agent";
-		default: return name;
-	}
-}
-
 function buildToolCallGroups(
 	toolCalls: WorkflowToolCall[],
 	truncateText: (value: string, len: number) => string,
@@ -235,7 +222,6 @@ function buildToolCallGroups(
 			toolName: toolCall.name,
 			preview,
 			category: getToolCategory(toolCall.name),
-			label: getToolLabel(getToolCategory(toolCall.name), toolCall.name),
 			calls: [toolCall],
 		});
 	}

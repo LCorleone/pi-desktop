@@ -1,6 +1,6 @@
 import { html, nothing, type TemplateResult } from "lit";
 import type { AssistantWorkflow, ToolCategory, WorkflowToolCall, WorkflowToolCallGroup } from "./workflow-utils.js";
-import { deriveWorkflowIntent, getToolCategory, getToolLabel, pickToolArg } from "./workflow-utils.js";
+import { deriveWorkflowIntent, getToolCategory, pickToolArg } from "./workflow-utils.js";
 import { renderTurnStatsFooter, type TurnStats } from "./turn-stats-utils.js";
 
 /**
@@ -461,7 +461,6 @@ export function renderAssistantWorkflowView({
 					toolName: toolCall.name,
 					preview,
 					category: getToolCategory(toolCall.name),
-					label: getToolLabel(getToolCategory(toolCall.name), toolCall.name),
 					calls: [toolCall],
 				},
 			});

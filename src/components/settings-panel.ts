@@ -80,7 +80,7 @@ interface ScopedModelOption {
 	name: string;
 }
 
-export type SettingsSectionId = "general" | "appearance" | "account" | "providers" | "updates" | "connection";
+export type SettingsSectionId = "general" | "appearance" | "providers" | "updates" | "connection";
 
 export interface SettingsSectionNavItem {
 	id: SettingsSectionId;
@@ -2943,8 +2943,6 @@ export class SettingsPanel {
 				return this.renderProvidersSection();
 			case "appearance":
 				return this.renderAppearanceSection();
-			case "account":
-				return this.renderAccountSection(runtimeControlsEnabled, hasProjectContext, authProviders);
 			case "updates":
 				return this.renderUpdatesSection(runtimeControlsEnabled, compatibilityChecks);
 			case "connection":
