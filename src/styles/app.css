@@ -3555,11 +3555,6 @@ body.file-split-resizing #file-split-resize-handle::after {
 	white-space: nowrap;
 }
 
-.sidebar-top-action-btn.active {
-	background: var(--bg-soft);
-	color: var(--text);
-}
-
 .sidebar-top-action-btn:disabled {
 	opacity: 0.45;
 	cursor: not-allowed;

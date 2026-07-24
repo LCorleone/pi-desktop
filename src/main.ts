@@ -4241,7 +4241,7 @@ function setupKeyboardShortcuts(): void {
 			e.preventDefault();
 			const w = getActiveWorkspace();
 			if (w) {
-				if (e.key === "1") { w.pane = "chat"; void applyWorkspacePane(w); renderApp(); }
+				if (e.key === "1") { w.pane = "chat"; persistWorkspaces(); void applyWorkspacePane(w); renderApp(); }
 				else if (e.key === "2") { toggleTerminalDock(); renderApp(); }
 				else if (e.key === "3") {
 					if (sidebar?.getMode() === "files") {
@@ -4252,7 +4252,7 @@ function setupKeyboardShortcuts(): void {
 					}
 					renderApp();
 				}
-				else if (e.key === "4") { w.pane = w.pane === "packages" ? "chat" : "packages"; void applyWorkspacePane(w); renderApp(); }
+				else if (e.key === "4") { w.pane = w.pane === "packages" ? "chat" : "packages"; persistWorkspaces(); void applyWorkspacePane(w); renderApp(); }
 				else { sidebar?.toggleCollapsed(); }
 			}
 			return;
@@ -4480,7 +4480,7 @@ function renderApp(): void {
 						<button
 							class="rail-btn ${getActiveWorkspace()?.pane === "chat" && !getActiveWorkspace()?.terminalOpen ? "active" : ""}"
 							title="Chat"
-							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = "chat"; void applyWorkspacePane(w); renderApp(); }}
+							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = "chat"; persistWorkspaces(); void applyWorkspacePane(w); renderApp(); }}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
 							${getActiveRuntime()?.running ? html`<span class="rail-status-dot"></span>` : nothing}
@@ -4513,7 +4513,7 @@ function renderApp(): void {
 						<button
 							class="rail-btn ${getActiveWorkspace()?.pane === "packages" ? "active" : ""}"
 							title="Packages"
-							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = w.pane === "packages" ? "chat" : "packages"; void applyWorkspacePane(w); renderApp(); }}
+							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = w.pane === "packages" ? "chat" : "packages"; persistWorkspaces(); void applyWorkspacePane(w); renderApp(); }}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" x2="12" y1="22" y2="12"/></svg>
 							<span class="rail-label">Packages</span>
