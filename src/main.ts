@@ -1612,13 +1612,6 @@ function applyWorkspaceTopbarOffset(): void {
 	root.style.setProperty("--workspace-topbar-offset", `${offset}px`);
 }
 
-function syncSidebarCollapseToggleButton(): void {
-	const button = document.getElementById("sidebar-collapse-toggle");
-	if (!button) return;
-	const collapsed = isSidebarCollapsedState();
-	button.classList.toggle("hidden", !collapsed);
-	button.classList.toggle("collapsed", collapsed);
-}
 
 function applySidebarWidth(): void {
 	const root = document.documentElement;
@@ -4456,23 +4449,48 @@ function renderApp(): void {
 			<div class="app-shell">
 				<pre id="runtime-debug-overlay" class="runtime-debug-overlay ${shouldShowDebugOverlay() ? "" : "hidden"}"></pre>
 				<div class="content-shell">
+					<div id="activity-rail" aria-label="Activity">
+						<button
+							class="rail-btn ${isSidebarCollapsedState() ? "" : "active"}"
+							title="Toggle sidebar"
+							@click=${() => { sidebar?.toggleCollapsed(); }}
+						>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
+						</button>
+						<div class="rail-divider"></div>
+						<button
+							class="rail-btn ${getActiveWorkspace()?.pane === "chat" && !getActiveWorkspace()?.terminalOpen ? "active" : ""}"
+							title="Chat"
+							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = "chat"; void applyWorkspacePane(w); }}
+						>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+						</button>
+						<button
+							class="rail-btn ${getActiveWorkspace()?.terminalOpen ? "active" : ""}"
+							title="Terminal"
+							@click=${() => toggleTerminalDock()}
+						>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
+						</button>
+						<button
+							class="rail-btn ${getActiveWorkspace()?.pane === "file" ? "active" : ""}"
+							title="Files"
+							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = w.pane === "file" ? "chat" : "file"; void applyWorkspacePane(w); }}
+						>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
+						</button>
+						<button
+							class="rail-btn ${getActiveWorkspace()?.pane === "packages" ? "active" : ""}"
+							title="Packages"
+							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = w.pane === "packages" ? "chat" : "packages"; void applyWorkspacePane(w); }}
+						>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" x2="12" y1="22" y2="12"/></svg>
+						</button>
+						<div class="rail-spacer"></div>
+					</div>
 					<div id="sidebar-container"></div>
 					<div id="sidebar-resize-handle" title="Resize sidebar"></div>
 					<div id="main-pane">
-						<button
-							id="sidebar-collapse-toggle"
-							class="workspace-sidebar-toggle ${isSidebarCollapsedState() ? "collapsed" : "hidden"}"
-							title="Toggle sidebar"
-							@click=${() => {
-								sidebar?.toggleCollapsed();
-								syncSidebarCollapseToggleButton();
-							}}
-						>
-							<svg viewBox="0 0 16 16" aria-hidden="true">
-								<path d="M3 3.5h10v9H3z" />
-								<path d="M6 3.5v9" />
-							</svg>
-						</button>
 						<div id="content-tabs-container" data-tauri-drag-region></div>
 						<div id="chat-file-layout">
 							<div id="session-pane">
@@ -4506,7 +4524,6 @@ function renderApp(): void {
 	setupSidebarResize();
 	applyFileSplitWidth();
 	setupFileSplitResize();
-	syncSidebarCollapseToggleButton();
 
 	const contentTabsContainer = document.getElementById("content-tabs-container");
 	if (contentTabsContainer) {
@@ -4776,10 +4793,8 @@ function renderApp(): void {
 	sidebar = new Sidebar(sidebarContainer);
 	packagesView?.setProjectOptionsProvider(() => sidebar?.listProjects() ?? []);
 	sidebar.setOnCollapsedChange(() => {
-		applyWorkspaceTopbarOffset();
-		syncSidebarCollapseToggleButton();
+		renderApp();
 	});
-	syncSidebarCollapseToggleButton();
 	syncCliUpdateUiHint();
 	syncDesktopUpdateUiHint();
 

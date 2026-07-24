@@ -1044,6 +1044,56 @@ body.file-split-resizing {
 	cursor: col-resize;
 }
 
+/* ── Activity rail (far-left icon strip) ── */
+#activity-rail {
+	width: 44px;
+	min-width: 44px;
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	padding: 8px 0 12px;
+	background: color-mix(in srgb, var(--bg-soft) 45%, var(--bg));
+	border-right: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+.rail-btn {
+	width: 32px;
+	height: 32px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	background: transparent;
+	border-radius: 8px;
+	color: color-mix(in srgb, var(--muted) 78%, var(--text));
+	cursor: pointer;
+	transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+.rail-btn:hover,
+.rail-btn:focus-visible {
+	background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
+	color: var(--text);
+}
+.rail-btn svg {
+	width: 18px;
+	height: 18px;
+	display: block;
+}
+.rail-btn.active {
+	background: color-mix(in srgb, var(--accent) 16%, transparent);
+	color: var(--accent);
+}
+.rail-divider {
+	width: 20px;
+	height: 1px;
+	background: color-mix(in srgb, var(--border) 60%, transparent);
+	margin: 4px 0;
+}
+.rail-spacer {
+	flex: 1;
+}
+
 #main-pane {
 	position: relative;
 	flex: 1;
