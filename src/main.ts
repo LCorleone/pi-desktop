@@ -818,6 +818,7 @@ function setRuntimeRunning(runtime: SessionRuntime | null, running: boolean, _op
 	}
 	syncRunningSessionIndicators();
 	ensureRunningSessionPoller();
+	renderApp();
 }
 
 function syncRunningSessionIndicators(): void {
@@ -4244,10 +4245,14 @@ function setupKeyboardShortcuts(): void {
 			e.preventDefault();
 			const w = getActiveWorkspace();
 			if (w) {
-				if (e.key === "1") { w.pane = "chat"; void applyWorkspacePane(w); }
-				else if (e.key === "2") { toggleTerminalDock(); }
-				else if (e.key === "3") { w.pane = w.pane === "file" ? "chat" : "file"; void applyWorkspacePane(w); }
-				else if (e.key === "4") { w.pane = w.pane === "packages" ? "chat" : "packages"; void applyWorkspacePane(w); }
+				if (e.key === "1") { w.pane = "chat"; void applyWorkspacePane(w); renderApp(); }
+				else if (e.key === "2") { toggleTerminalDock(); renderApp(); }
+				else if (e.key === "3") {
+					if (getActiveFileTab(w)) { w.activeFileTabId = null; }
+					else { w.activeFileTabId = w.fileTabs[0]?.id ?? null; w.pane = "chat"; }
+					void applyWorkspacePane(w); renderApp();
+				}
+				else if (e.key === "4") { w.pane = w.pane === "packages" ? "chat" : "packages"; void applyWorkspacePane(w); renderApp(); }
 				else { sidebar?.toggleCollapsed(); }
 			}
 			return;
@@ -4475,7 +4480,7 @@ function renderApp(): void {
 						<button
 							class="rail-btn ${getActiveWorkspace()?.pane === "chat" && !getActiveWorkspace()?.terminalOpen ? "active" : ""}"
 							title="Chat"
-							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = "chat"; void applyWorkspacePane(w); }}
+							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = "chat"; void applyWorkspacePane(w); renderApp(); }}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
 							${getActiveRuntime()?.running ? html`<span class="rail-status-dot"></span>` : nothing}
@@ -4490,9 +4495,15 @@ function renderApp(): void {
 							<span class="rail-label">Terminal</span>
 						</button>
 						<button
-							class="rail-btn ${getActiveWorkspace()?.pane === "file" ? "active" : ""}"
+							class="rail-btn ${getActiveWorkspace()?.pane === "chat" && Boolean(getActiveWorkspace()?.activeFileTabId) ? "active" : ""}"
 							title="Files"
-							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = w.pane === "file" ? "chat" : "file"; void applyWorkspacePane(w); }}
+							@click=${() => {
+								const w = getActiveWorkspace();
+								if (!w) return;
+								if (getActiveFileTab(w)) { w.activeFileTabId = null; }
+								else { w.activeFileTabId = w.fileTabs[0]?.id ?? null; w.pane = "chat"; }
+								void applyWorkspacePane(w); renderApp();
+							}}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
 							<span class="rail-label">Files</span>
@@ -4500,7 +4511,7 @@ function renderApp(): void {
 						<button
 							class="rail-btn ${getActiveWorkspace()?.pane === "packages" ? "active" : ""}"
 							title="Packages"
-							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = w.pane === "packages" ? "chat" : "packages"; void applyWorkspacePane(w); }}
+							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = w.pane === "packages" ? "chat" : "packages"; void applyWorkspacePane(w); renderApp(); }}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" x2="12" y1="22" y2="12"/></svg>
 							<span class="rail-label">Packages</span>
@@ -4509,7 +4520,7 @@ function renderApp(): void {
 						<button
 							class="rail-btn"
 							title="Toggle theme"
-							@click=${() => toggleDesktopTheme()}
+							@click=${() => { toggleDesktopTheme(); renderApp(); }}
 						>
 							${getResolvedDesktopTheme() === "dark"
 								? html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`
@@ -4519,7 +4530,7 @@ function renderApp(): void {
 						<button
 							class="rail-btn ${getActiveWorkspace()?.pane === "settings" ? "active" : ""}"
 							title="Settings"
-							@click=${() => requestOpenSettingsPanel()}
+							@click=${() => { requestOpenSettingsPanel(); renderApp(); }}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
 							<span class="rail-label">Settings</span>
