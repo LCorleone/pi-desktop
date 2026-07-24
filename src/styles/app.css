@@ -539,16 +539,12 @@ samp {
 .sidebar-workspace-title-input,
 .sidebar-workspace-dock,
 .sidebar-workspace-dock-list,
-.sidebar-settings-icon-btn,
 .sidebar-workspace-pill,
-.sidebar-workspace-dock-add,
 .sidebar-space-dialog,
 .sidebar-space-dialog *,
 .content-tab,
 .content-tab-context-menu,
 .content-tab-context-menu *,
-.content-tabs-trailing,
-.content-tabs-terminal-btn,
 .content-tabs-add-btn {
 	-webkit-app-region: no-drag;
 }
@@ -1199,21 +1195,8 @@ body.file-split-resizing {
 	cursor: grabbing;
 }
 
-.content-tabs-trailing {
-	width: 44px;
-	min-width: 44px;
-	height: 100%;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	background: var(--bg);
-	flex-shrink: 0;
-	position: relative;
-}
 
-
-.content-tabs-add-btn,
-.content-tabs-terminal-btn {
+.content-tabs-add-btn {
 	width: 28px;
 	height: 28px;
 	border: none;
@@ -1241,23 +1224,8 @@ body.file-split-resizing {
 	margin: 0 3px;
 }
 
-.content-tabs-terminal-btn svg {
-	width: 15px;
-	height: 15px;
-	fill: none;
-	stroke: currentColor;
-	stroke-width: 1.3;
-	stroke-linecap: round;
-	stroke-linejoin: round;
-}
-
-.content-tabs-add-btn:hover,
-.content-tabs-terminal-btn:hover {
+.content-tabs-add-btn:hover {
 	background: color-mix(in srgb, var(--bg-soft) 76%, var(--bg));
-	color: var(--text);
-}
-
-.content-tabs-terminal-btn.active {
 	color: var(--text);
 }
 
@@ -3669,32 +3637,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 	display: none;
 }
 
-.sidebar-settings-icon-btn {
-	width: 24px;
-	height: 24px;
-	border: none;
-	background: transparent;
-	padding: 0;
-	cursor: pointer;
-	color: var(--muted);
-	display: inline-grid;
-	place-items: center;
-	flex-shrink: 0;
-}
-
-.sidebar-settings-icon-btn .sidebar-icon-svg {
-	width: 14px;
-	height: 14px;
-	stroke-width: 1.4;
-}
-
-.sidebar-settings-icon-btn:hover {
-	color: var(--text);
-	background: color-mix(in srgb, var(--bg-soft) 50%, transparent);
-}
-
-.sidebar-workspace-pill,
-.sidebar-workspace-dock-add {
+.sidebar-workspace-pill {
 	width: 24px;
 	height: 24px;
 	border-radius: var(--radius-md);
@@ -3735,17 +3678,6 @@ body.file-split-resizing #file-split-resize-handle::after {
 	filter: none;
 	opacity: 1;
 	transform: translateY(-0.5px);
-}
-
-.sidebar-workspace-dock-add {
-	font-size: 20px;
-	line-height: 1;
-	color: var(--muted-2);
-}
-
-.sidebar-workspace-dock-add:hover {
-	color: var(--text);
-	background: transparent;
 }
 
 .sidebar-workspace-pill.drag-over {

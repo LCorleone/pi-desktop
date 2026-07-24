@@ -302,7 +302,6 @@ export class Sidebar {
 	private loadingFileTreeForProject = new Set<string>();
 	private sessionLoadsInFlight = new Map<string, Promise<void>>();
 	private sessionReloadQueued = new Set<string>();
-	private packagesOpen = false;
 	private openProjectMenuId: string | null = null;
 	private modeFilterMenuOpen = false;
 	private desktopUpdateAvailable = false;
@@ -322,7 +321,6 @@ export class Sidebar {
 	private pinnedSessionPaths = new Set<string>();
 
 	private onOpenSettings: (() => void) | null = null;
-	private onTogglePackages: (() => void) | null = null;
 	private onWorkspaceSelect: ((workspaceId: string) => void) | null = null;
 	private onWorkspaceCreate: ((workspace?: { title?: string; emoji?: string | null }) => void) | null = null;
 	private onWorkspaceEmoji: ((workspaceId: string, emoji: string | null) => void) | null = null;
@@ -472,10 +470,6 @@ export class Sidebar {
 		this.openWorkspaceCreateDialog();
 	}
 
-	setOnTogglePackages(cb: () => void): void {
-		this.onTogglePackages = cb;
-	}
-
 	setOnWorkspaceSelect(cb: (workspaceId: string) => void): void {
 		this.onWorkspaceSelect = cb;
 	}
@@ -551,12 +545,6 @@ export class Sidebar {
 		if (this.workspaceRenameDraft && this.workspaceRenameDraft.workspaceId === this.activeWorkspaceId) {
 			this.focusWorkspaceRenameInput(this.workspaceRenameDraft.workspaceId);
 		}
-	}
-
-	setPackagesOpen(open: boolean): void {
-		if (this.packagesOpen === open) return;
-		this.packagesOpen = open;
-		this.render();
 	}
 
 	setDesktopUpdateStatus(updateAvailable: boolean, latestVersion: string | null = null): void {
@@ -4503,8 +4491,7 @@ export class Sidebar {
 
 					if (
 						this.workspaceCreateDialogOpen &&
-						!target?.closest(".sidebar-space-dialog") &&
-						!target?.closest(".sidebar-workspace-dock-add")
+						!target?.closest(".sidebar-space-dialog")
 					) {
 						this.closeWorkspaceCreateDialog(false);
 						changed = true;

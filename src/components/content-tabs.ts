@@ -42,9 +42,7 @@ export class ContentTabs {
 	private onSelect: ((id: string) => void) | null = null;
 	private onClose: ((id: string) => void) | null = null;
 	private onRename: ((id: string, title: string) => void) | null = null;
-	private onOpenTerminal: (() => void) | null = null;
 	private onCreateTab: (() => void) | null = null;
-	private terminalActive = false;
 
 	private globalDismissListenerActive = false;
 
@@ -128,18 +126,8 @@ export class ContentTabs {
 		this.onRename = cb;
 	}
 
-	setOnOpenTerminal(cb: () => void): void {
-		this.onOpenTerminal = cb;
-	}
-
 	setOnCreateTab(cb: () => void): void {
 		this.onCreateTab = cb;
-	}
-
-	setTerminalActive(active: boolean): void {
-		if (this.terminalActive === active) return;
-		this.terminalActive = active;
-		this.render();
 	}
 
 	private syncGlobalDismissListener(): void {

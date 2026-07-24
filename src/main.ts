@@ -2633,9 +2633,7 @@ function syncSidebarSettingsNavigation(): void {
 }
 
 function syncWorkspaceContextChrome(workspace: WorkspaceState | null = getActiveWorkspace()): void {
-	const packagesOpen = workspace?.pane === "packages";
 	const settingsOpen = workspace?.pane === "settings";
-	sidebar?.setPackagesOpen(packagesOpen);
 	sidebar?.setSettingsShellActive(Boolean(settingsOpen));
 	if (settingsOpen) syncSidebarSettingsNavigation();
 }
@@ -2824,7 +2822,6 @@ function syncContentTabsBar(workspace: WorkspaceState | null = getActiveWorkspac
 	}
 
 	if (!contentTabsBar || !workspace || workspace.pane === "packages" || workspace.pane === "settings" || !hasProject) {
-		contentTabsBar?.setTerminalActive(false);
 		contentTabsBar?.setTabs([], null);
 		return;
 	}
@@ -2843,7 +2840,6 @@ function syncContentTabsBar(workspace: WorkspaceState | null = getActiveWorkspac
 
 	const activeTabId = workspace.activeSessionTabId;
 
-	contentTabsBar.setTerminalActive(workspace.pane === "chat" && workspace.terminalOpen);
 	contentTabsBar.setTabs(tabs, activeTabId);
 }
 
@@ -4637,9 +4633,6 @@ function renderApp(): void {
 				},
 			);
 		});
-		contentTabsBar.setOnOpenTerminal(() => {
-			toggleTerminalDock();
-		});
 		contentTabsBar.setOnCreateTab(() => {
 			void startFreshSessionTab({ forceNewTab: true, title: NEW_GENERIC_TAB_TITLE });
 		});
@@ -4925,15 +4918,6 @@ function renderApp(): void {
 
 	sidebar.setOnOpenSettings(() => {
 		requestOpenSettingsPanel();
-	});
-
-	sidebar.setOnTogglePackages(() => {
-		const workspace = getActiveWorkspace();
-		if (!workspace) return;
-		workspace.pane = workspace.pane === "packages" ? "chat" : "packages";
-		persistWorkspaces();
-		syncWorkspaceTabsBar();
-		void applyWorkspacePane(workspace);
 	});
 
 	sidebar.setOnModeChange((mode) => {
