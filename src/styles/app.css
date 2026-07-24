@@ -1063,6 +1063,7 @@ body.file-split-resizing {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	position: relative;
 	border: none;
 	background: transparent;
 	border-radius: 8px;
@@ -1092,6 +1093,44 @@ body.file-split-resizing {
 }
 .rail-spacer {
 	flex: 1;
+}
+
+/* hover popover label */
+.rail-label {
+	position: absolute;
+	left: calc(100% + 8px);
+	top: 50%;
+	transform: translateY(-50%);
+	background: var(--bg-elev, var(--bg));
+	color: var(--text);
+	border: 1px solid var(--border);
+	padding: 3px 8px;
+	border-radius: 6px;
+	font-size: 11px;
+	line-height: 1.4;
+	white-space: nowrap;
+	pointer-events: none;
+	opacity: 0;
+	z-index: 50;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+	transition: opacity var(--duration-fast) var(--ease-standard);
+}
+.rail-btn:hover .rail-label,
+.rail-btn:focus-visible .rail-label {
+	opacity: 1;
+}
+
+/* running-session status dot on the chat icon */
+.rail-status-dot {
+	position: absolute;
+	top: 5px;
+	right: 5px;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--success);
+	box-shadow: 0 0 0 2px var(--bg);
+	animation: pi-running-breath 3.6s ease-in-out infinite;
 }
 
 #main-pane {

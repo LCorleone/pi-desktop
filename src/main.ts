@@ -4240,6 +4240,19 @@ function setupKeyboardShortcuts(): void {
 			return;
 		}
 
+		if (isCtrlOrMeta && !isShift && (e.key === "1" || e.key === "2" || e.key === "3" || e.key === "4" || e.key === "5")) {
+			e.preventDefault();
+			const w = getActiveWorkspace();
+			if (w) {
+				if (e.key === "1") { w.pane = "chat"; void applyWorkspacePane(w); }
+				else if (e.key === "2") { toggleTerminalDock(); }
+				else if (e.key === "3") { w.pane = w.pane === "file" ? "chat" : "file"; void applyWorkspacePane(w); }
+				else if (e.key === "4") { w.pane = w.pane === "packages" ? "chat" : "packages"; void applyWorkspacePane(w); }
+				else { sidebar?.toggleCollapsed(); }
+			}
+			return;
+		}
+
 		const terminalHotkey =
 			(isCtrlOrMeta && (e.code === "Backquote" || e.key === "`" || e.key === "Dead" || e.key === "´")) ||
 			(e.metaKey && e.altKey && e.key.toLowerCase() === "t");
@@ -4456,6 +4469,7 @@ function renderApp(): void {
 							@click=${() => { sidebar?.toggleCollapsed(); }}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
+							<span class="rail-label">Sidebar</span>
 						</button>
 						<div class="rail-divider"></div>
 						<button
@@ -4464,6 +4478,8 @@ function renderApp(): void {
 							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = "chat"; void applyWorkspacePane(w); }}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+							${getActiveRuntime()?.running ? html`<span class="rail-status-dot"></span>` : nothing}
+							<span class="rail-label">Chat</span>
 						</button>
 						<button
 							class="rail-btn ${getActiveWorkspace()?.terminalOpen ? "active" : ""}"
@@ -4471,6 +4487,7 @@ function renderApp(): void {
 							@click=${() => toggleTerminalDock()}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
+							<span class="rail-label">Terminal</span>
 						</button>
 						<button
 							class="rail-btn ${getActiveWorkspace()?.pane === "file" ? "active" : ""}"
@@ -4478,6 +4495,7 @@ function renderApp(): void {
 							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = w.pane === "file" ? "chat" : "file"; void applyWorkspacePane(w); }}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>
+							<span class="rail-label">Files</span>
 						</button>
 						<button
 							class="rail-btn ${getActiveWorkspace()?.pane === "packages" ? "active" : ""}"
@@ -4485,8 +4503,27 @@ function renderApp(): void {
 							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = w.pane === "packages" ? "chat" : "packages"; void applyWorkspacePane(w); }}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" x2="12" y1="22" y2="12"/></svg>
+							<span class="rail-label">Packages</span>
 						</button>
 						<div class="rail-spacer"></div>
+						<button
+							class="rail-btn"
+							title="Toggle theme"
+							@click=${() => toggleDesktopTheme()}
+						>
+							${getResolvedDesktopTheme() === "dark"
+								? html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`
+								: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>`}
+							<span class="rail-label">Theme</span>
+						</button>
+						<button
+							class="rail-btn ${getActiveWorkspace()?.pane === "settings" ? "active" : ""}"
+							title="Settings"
+							@click=${() => requestOpenSettingsPanel()}
+						>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+							<span class="rail-label">Settings</span>
+						</button>
 					</div>
 					<div id="sidebar-container"></div>
 					<div id="sidebar-resize-handle" title="Resize sidebar"></div>
