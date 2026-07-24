@@ -4,6 +4,7 @@
 
 import { html, nothing, render, type TemplateResult } from "lit";
 import { fetchDesktopUpdateStatus, openDesktopUpdate, type DesktopUpdateStatus } from "../desktop-updates.js";
+import { setSshEnabled } from "../connection-state.js";
 import {
 	applyDesktopAppearanceProfileToRoot,
 	DEFAULT_APPEARANCE_PROFILES,
@@ -69,6 +70,7 @@ interface SettingsState {
 	sshEnvPairs: Array<{ key: string; value: string }>;
 	sshSavedConfigs: Array<SshSavedConfig>;
 	sshSaveAsName: string;
+	sshEnabled: boolean;
 }
 
 interface ScopedModelOption {
@@ -119,6 +121,7 @@ export class SettingsPanel {
 		sshEnvPairs: [],
 		sshSavedConfigs: [],
 		sshSaveAsName: "",
+		sshEnabled: false,
 	};
 	private onClose: (() => void) | null = null;
 	private onRequestAddProject: (() => void) | null = null;
@@ -275,6 +278,10 @@ export class SettingsPanel {
 
 	private normalizeActiveSection(runtimeControlsEnabled = this.isRuntimeControlsEnabled()): SettingsSectionId {
 		const navItems = this.getSettingsNavItems();
+		// If the active section is no longer in the nav (e.g. SSH disabled hides Connection), fall back.
+		if (!navItems.some((item) => item.id === this.activeSection)) {
+			this.activeSection = "general";
+		}
 		const requested = navItems.find((item) => item.id === this.activeSection) ?? navItems[0];
 		if (requested?.runtimeRequired && !runtimeControlsEnabled) {
 			this.activeSection = "appearance";
@@ -1286,6 +1293,7 @@ export class SettingsPanel {
 				connection_mode?: string | null;
 				ssh?: SshConnectionConfig | null;
 				ssh_configs?: SshSavedConfig[] | null;
+				ssh_enabled?: boolean | null;
 			};
 			if (saved.theme === "dark" || saved.theme === "light" || saved.theme === "system") {
 				this.state.theme = saved.theme;
@@ -1310,6 +1318,8 @@ export class SettingsPanel {
 			this.state.sshNoProxy = ssh?.proxy?.no_proxy ?? "";
 			this.state.sshEnvPairs = Object.entries(ssh?.env ?? {}).map(([key, value]) => ({ key, value }));
 			this.state.sshSavedConfigs = Array.isArray(saved.ssh_configs) ? saved.ssh_configs : [];
+			this.state.sshEnabled = saved.ssh_enabled === true;
+			setSshEnabled(this.state.sshEnabled);
 		} catch {
 			// ignore missing persisted settings
 		}
@@ -1949,6 +1959,7 @@ export class SettingsPanel {
 					connection_mode: this.state.connectionMode,
 					ssh: activeSshOverride !== undefined ? activeSshOverride : (this.state.connectionMode === "ssh" ? this.buildSshConfigFromState() : null),
 					ssh_configs: this.state.sshSavedConfigs,
+					ssh_enabled: this.state.sshEnabled,
 				},
 			});
 		} catch (err) {
@@ -2173,7 +2184,7 @@ export class SettingsPanel {
 	}
 
 	private getSettingsNavItems(): SettingsSectionNavItem[] {
-		return [
+		const items: SettingsSectionNavItem[] = [
 			{
 				id: "general",
 				label: "General",
@@ -2197,16 +2208,20 @@ export class SettingsPanel {
 				description: "Configure OpenAI-compatible API providers and models.",
 			},
 			{
-				id: "connection",
-				label: "Connection",
-				description: "Local or remote SSH connection settings and saved configs.",
-			},
-			{
 				id: "updates",
 				label: "Updates",
 				description: "Desktop releases, CLI version, and runtime diagnostics.",
 			},
 		];
+		// SSH Connection section only appears when the feature is enabled.
+		if (this.state.sshEnabled) {
+			items.splice(4, 0, {
+				id: "connection",
+				label: "Connection",
+				description: "Local or remote SSH connection settings and saved configs.",
+			});
+		}
+		return items;
 	}
 
 	private renderAppearanceSection(): TemplateResult {
@@ -2259,6 +2274,7 @@ export class SettingsPanel {
 								: nothing}
 						</div>
 					</section>
+					${this.renderSshFeatureToggle()}
 				</div>
 			`;
 		}
@@ -2312,7 +2328,31 @@ export class SettingsPanel {
 				<section class="settings-group settings-group-full">
 					${this.renderScopedModelsSection()}
 				</section>
+				${this.renderSshFeatureToggle()}
 			</div>
+		`;
+	}
+
+
+	private renderSshFeatureToggle(): TemplateResult {
+		return html`
+			<section class="settings-group settings-group-full">
+				<div class="settings-section">
+					<div class="settings-section-title">Remote connections</div>
+					<label class="settings-row" style="gap:8px;align-items:flex-start;">
+						<input type="checkbox" .checked=${this.state.sshEnabled} @change=${(e: Event) => {
+							this.state.sshEnabled = (e.target as HTMLInputElement).checked;
+							setSshEnabled(this.state.sshEnabled);
+							this.saveSettings();
+							this.render();
+						}} />
+						<div>
+							<div class="settings-label">Enable remote SSH connections</div>
+							<div class="settings-desc">Show the remote connection browser and SSH settings. Off by default.</div>
+						</div>
+					</label>
+				</div>
+			</section>
 		`;
 	}
 

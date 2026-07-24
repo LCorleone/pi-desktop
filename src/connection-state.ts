@@ -17,10 +17,21 @@ export type ConnectionMode = "local" | "ssh";
 
 let connectionMode: ConnectionMode = "local";
 let sshConfig: SshConnectionConfig | null = null;
+let sshEnabled = false;
 
 /** The active connection mode (local or ssh). */
 export function getConnectionMode(): ConnectionMode {
 	return connectionMode;
+}
+
+/** Whether the SSH remote feature is enabled (off by default). Gates all SSH UI. */
+export function isSshEnabled(): boolean {
+	return sshEnabled;
+}
+
+/** Set whether the SSH remote feature is enabled. Called at startup + on Settings change. */
+export function setSshEnabled(enabled: boolean): void {
+	sshEnabled = enabled;
 }
 
 type ConnectionChangeListener = (mode: ConnectionMode, ssh: SshConnectionConfig | null) => void;

@@ -6,7 +6,7 @@ import { html, nothing, render, type TemplateResult } from "lit";
 import { clearActiveDraggedFilePaths, setActiveDraggedFilePaths } from "./file-drag-transfer.js";
 	import { captionIconSvg, getMaximized, subscribeMaximized } from "./window-chrome.js";
 import { EMOJI_CATALOG } from "./emoji-catalog.js";
-import { getConnectionMode, getSshConfig, onConnectionChange } from "../connection-state.js";
+import { getConnectionMode, getSshConfig, isSshEnabled, onConnectionChange } from "../connection-state.js";
 import { fetchAndCacheSessionList, getCachedSessionList, invalidateSessionListCache } from "../rpc/session-cache.js";
 import type { SshConnectionConfig, SshSavedConfig } from "../rpc/bridge.js";
 
@@ -3959,7 +3959,7 @@ export class Sidebar {
 											${unreadCount > 0
 												? html`<span class="sidebar-project-unread-count" title=${`${unreadCount} unread session${unreadCount === 1 ? "" : "s"}`}>${unreadCount}</span>`
 												: nothing}
-											${project.preferredConnectionMode === "ssh" ? html`<span class="sidebar-project-ssh-badge" title="Remote: ${project.preferredSshConfigName ?? ""}">↗</span>` : nothing}
+											${isSshEnabled() && project.preferredConnectionMode === "ssh" ? html`<span class="sidebar-project-ssh-badge" title="Remote: ${project.preferredSshConfigName ?? ""}">↗</span>` : nothing}
 										</span>
 									</button>
 								</div>
@@ -4136,7 +4136,7 @@ export class Sidebar {
 											${unreadCount > 0
 												? html`<span class="sidebar-project-unread-count" title=${`${unreadCount} unread session${unreadCount === 1 ? "" : "s"}`}>${unreadCount}</span>`
 												: nothing}
-											${project.preferredConnectionMode === "ssh" ? html`<span class="sidebar-project-ssh-badge" title="Remote: ${project.preferredSshConfigName ?? ""}">↗</span>` : nothing}
+											${isSshEnabled() && project.preferredConnectionMode === "ssh" ? html`<span class="sidebar-project-ssh-badge" title="Remote: ${project.preferredSshConfigName ?? ""}">↗</span>` : nothing}
 										</span>
 									</button>
 								</div>
@@ -4430,7 +4430,7 @@ export class Sidebar {
 
 	private renderModeBody(): TemplateResult {
 		if (this.settingsShellActive) return this.renderSettingsShellBody();
-		if (this.remoteView) return this.renderRemoteBrowser();
+		if (this.remoteView && isSshEnabled()) return this.renderRemoteBrowser();
 		if (this.mode === "files") return this.renderFilesMode();
 		return this.renderProjectsMode();
 	}
@@ -4564,10 +4564,12 @@ export class Sidebar {
 					if (changed) this.render();
 				}}
 			>
-				<div class="sidebar-mode-toggle">
-					<button class=${this.remoteView ? "" : "active"} @click=${() => this.toggleRemoteView(false)}>Local</button>
-					<button class=${this.remoteView ? "active" : ""} @click=${() => this.toggleRemoteView(true)}>Remote</button>
-				</div>
+				${isSshEnabled() ? html`
+					<div class="sidebar-mode-toggle">
+						<button class=${this.remoteView ? "" : "active"} @click=${() => this.toggleRemoteView(false)}>Local</button>
+						<button class=${this.remoteView ? "active" : ""} @click=${() => this.toggleRemoteView(true)}>Remote</button>
+					</div>
+				` : nothing}
 				${this.renderWorkspaceWindowRow()}
 
 				<div class="sidebar-topbar" data-tauri-drag-region>

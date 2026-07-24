@@ -1872,6 +1872,9 @@ pub struct AppSettings {
     /// Catalog of named, saved SSH connection targets (independent of the active one).
     #[serde(default)]
     pub ssh_configs: Option<Vec<SshSavedConfig>>,
+    /// Feature flag: enable the remote SSH connection UI (off by default).
+    #[serde(default)]
+    pub ssh_enabled: Option<bool>,
 }
 
 impl Default for AppSettings {
@@ -1889,6 +1892,7 @@ impl Default for AppSettings {
             connection_mode: None,
             ssh: None,
             ssh_configs: None,
+            ssh_enabled: None,
         }
     }
 }

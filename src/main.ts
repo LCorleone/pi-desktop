@@ -36,6 +36,7 @@ import {
 	getConnectionMode as getConnectionModeImpl,
 	getSshConfig,
 	setConnectionState,
+	setSshEnabled,
 	type ConnectionMode,
 } from "./connection-state.js";
 import { installColorMixPolyfill } from "./theme/color-mix-polyfill.js";
@@ -2270,11 +2271,13 @@ async function loadConnectionConfigFromSettings(): Promise<void> {
 		const saved = (await invoke("load_settings")) as {
 			connection_mode?: string | null;
 			ssh?: SshConnectionConfig | null;
+			ssh_enabled?: boolean | null;
 		};
 		const mode: ConnectionMode = saved?.connection_mode === "ssh" ? "ssh" : "local";
 		const ssh = saved?.ssh ?? null;
 		defaultConnectionMode = mode;
 		defaultSshConfig = ssh;
+		setSshEnabled(saved?.ssh_enabled === true);
 		// Seed connection-state with the default; syncActiveConnectionState()
 		// refines it to the active tab once workspaces are loaded.
 		setConnectionState(mode, ssh);
