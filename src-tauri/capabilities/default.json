@@ -96,46 +96,46 @@
 		{
 			"identifier": "fs:allow-write-text-file",
 			"allow": [
-				"$HOME/.pi",
-				"$HOME/.pi/**",
-				"$HOME/.pi/**/.*",
-				"$HOME/.pi/**/.*/**"
+				"$HOME",
+				"$HOME/**",
+				"$HOME/**/.*",
+				"$HOME/**/.*/**"
 			]
 		},
 		{
 			"identifier": "fs:allow-write-file",
 			"allow": [
-				"$HOME/.pi",
-				"$HOME/.pi/**",
-				"$HOME/.pi/**/.*",
-				"$HOME/.pi/**/.*/**"
+				"$HOME",
+				"$HOME/**",
+				"$HOME/**/.*",
+				"$HOME/**/.*/**"
 			]
 		},
 		{
 			"identifier": "fs:allow-mkdir",
 			"allow": [
-				"$HOME/.pi",
-				"$HOME/.pi/**",
-				"$HOME/.pi/**/.*",
-				"$HOME/.pi/**/.*/**"
+				"$HOME",
+				"$HOME/**",
+				"$HOME/**/.*",
+				"$HOME/**/.*/**"
 			]
 		},
 		{
 			"identifier": "fs:allow-remove",
 			"allow": [
-				"$HOME/.pi",
-				"$HOME/.pi/**",
-				"$HOME/.pi/**/.*",
-				"$HOME/.pi/**/.*/**"
+				"$HOME",
+				"$HOME/**",
+				"$HOME/**/.*",
+				"$HOME/**/.*/**"
 			]
 		},
 		{
 			"identifier": "fs:allow-rename",
 			"allow": [
-				"$HOME/.pi",
-				"$HOME/.pi/**",
-				"$HOME/.pi/**/.*",
-				"$HOME/.pi/**/.*/**"
+				"$HOME",
+				"$HOME/**",
+				"$HOME/**/.*",
+				"$HOME/**/.*/**"
 			]
 		},
 		"dialog:default",
