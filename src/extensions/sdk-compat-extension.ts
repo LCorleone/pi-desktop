@@ -1,3 +1,5 @@
+import { joinFsPath } from "../utils/fs-paths.js";
+
 const DESKTOP_COMPAT_EXTENSION_FILE = "pi-desktop-sdk-compat.ts";
 const DESKTOP_COMPAT_EXTENSION_MARKER = "pi-desktop-sdk-compat-extension/v1";
 
@@ -40,12 +42,6 @@ export default function (pi) {
 \tpi.on("agent_start", ensureModelRegistryGetApiKeyCompat);
 }
 `;
-
-function joinFsPath(base: string, child: string): string {
-	const b = base.replace(/\\/g, "/").replace(/\/+$/, "");
-	const c = child.replace(/\\/g, "/").replace(/^\/+/, "");
-	return b ? `${b}/${c}` : c;
-}
 
 async function resolveGlobalExtensionsRoot(): Promise<string | null> {
 	const { homeDir } = await import("@tauri-apps/api/path");

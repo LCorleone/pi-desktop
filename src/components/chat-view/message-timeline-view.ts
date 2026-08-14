@@ -1,4 +1,5 @@
 import { html, nothing, type TemplateResult } from "lit";
+import "../safe-markdown.js";
 import type { AssistantWorkflow, AssistantWorkflowCandidate, WorkflowRole } from "./workflow-utils.js";
 import { renderTurnStatsFooter, type TurnStats } from "./turn-stats-utils.js";
 
@@ -87,7 +88,7 @@ export function renderAssistantMessageRow<Message extends TimelineMessage>({
 					${message.text
 						? html`
 							<div class="assistant-content">
-								<markdown-block .content=${message.text}></markdown-block>
+								<safe-markdown-block .content=${message.text}></safe-markdown-block>
 							</div>
 						`
 						: nothing}
@@ -111,7 +112,7 @@ export function renderSystemMessageRow<Message extends TimelineMessage>({ messag
 			<div class="system-message ${isInline ? "system-message-inline" : ""}">
 				${message.label ? html`<div class="system-label ${isInline ? "system-label-inline" : ""}">${message.label}</div>` : nothing}
 				<div class="system-text ${isInline ? "system-text-inline" : ""}">
-					${message.renderAsMarkdown ? html`<markdown-block .content=${message.text}></markdown-block>` : message.text}
+					${message.renderAsMarkdown ? html`<safe-markdown-block .content=${message.text}></safe-markdown-block>` : message.text}
 				</div>
 			</div>
 		</div>
@@ -142,7 +143,7 @@ export function renderChangelogMessageRow<Message extends TimelineMessage>({
 							? html`
 								<div class="tool-workflow-details changelog-inline-details">
 									<div class="tool-workflow-output changelog-inline-output">
-										<markdown-block .content=${message.text}></markdown-block>
+										<safe-markdown-block .content=${message.text}></safe-markdown-block>
 									</div>
 								</div>
 							`

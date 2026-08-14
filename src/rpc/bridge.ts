@@ -412,19 +412,23 @@ export class RpcBridge {
 	// -------------------------------------------------------------------------
 
 	async prompt(message: string, options: RpcPromptOptions = {}): Promise<void> {
-		await this.send({ type: "prompt", message, images: options.images, streamingBehavior: options.streamingBehavior });
+		const response = await this.send({ type: "prompt", message, images: options.images, streamingBehavior: options.streamingBehavior });
+		this.getData(response);
 	}
 
 	async steer(message: string, images?: RpcImageInput[]): Promise<void> {
-		await this.send({ type: "steer", message, images });
+		const response = await this.send({ type: "steer", message, images });
+		this.getData(response);
 	}
 
 	async followUp(message: string, images?: RpcImageInput[]): Promise<void> {
-		await this.send({ type: "follow_up", message, images });
+		const response = await this.send({ type: "follow_up", message, images });
+		this.getData(response);
 	}
 
 	async abort(): Promise<void> {
-		await this.send({ type: "abort" });
+		const response = await this.send({ type: "abort" });
+		this.getData(response);
 	}
 
 	async newSession(parentSession?: string): Promise<{ cancelled: boolean }> {
@@ -454,7 +458,8 @@ export class RpcBridge {
 	}
 
 	async setThinkingLevel(level: ThinkingLevel): Promise<void> {
-		await this.send({ type: "set_thinking_level", level });
+		const response = await this.send({ type: "set_thinking_level", level });
+		this.getData(response);
 	}
 
 	async cycleThinkingLevel(): Promise<{ level: ThinkingLevel } | null> {
@@ -463,11 +468,13 @@ export class RpcBridge {
 	}
 
 	async setSteeringMode(mode: QueueMode): Promise<void> {
-		await this.send({ type: "set_steering_mode", mode });
+		const response = await this.send({ type: "set_steering_mode", mode });
+		this.getData(response);
 	}
 
 	async setFollowUpMode(mode: QueueMode): Promise<void> {
-		await this.send({ type: "set_follow_up_mode", mode });
+		const response = await this.send({ type: "set_follow_up_mode", mode });
+		this.getData(response);
 	}
 
 	async compact(customInstructions?: string): Promise<Record<string, unknown>> {
@@ -476,15 +483,18 @@ export class RpcBridge {
 	}
 
 	async setAutoCompaction(enabled: boolean): Promise<void> {
-		await this.send({ type: "set_auto_compaction", enabled });
+		const response = await this.send({ type: "set_auto_compaction", enabled });
+		this.getData(response);
 	}
 
 	async setAutoRetry(enabled: boolean): Promise<void> {
-		await this.send({ type: "set_auto_retry", enabled });
+		const response = await this.send({ type: "set_auto_retry", enabled });
+		this.getData(response);
 	}
 
 	async abortRetry(): Promise<void> {
-		await this.send({ type: "abort_retry" });
+		const response = await this.send({ type: "abort_retry" });
+		this.getData(response);
 	}
 
 	async bash(command: string): Promise<Record<string, unknown>> {
@@ -493,7 +503,8 @@ export class RpcBridge {
 	}
 
 	async abortBash(): Promise<void> {
-		await this.send({ type: "abort_bash" });
+		const response = await this.send({ type: "abort_bash" });
+		this.getData(response);
 	}
 
 	async getMessages(): Promise<Array<Record<string, unknown>>> {
@@ -519,7 +530,8 @@ export class RpcBridge {
 	}
 
 	async setSessionName(name: string): Promise<void> {
-		await this.send({ type: "set_session_name", name });
+		const response = await this.send({ type: "set_session_name", name });
+		this.getData(response);
 	}
 
 	async exportHtml(outputPath?: string): Promise<{ path: string }> {

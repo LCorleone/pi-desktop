@@ -1,6 +1,7 @@
 import { getAppearanceProfileForResolvedTheme, loadDesktopAppearanceProfiles } from "./appearance-profiles.js";
 import { deriveSemanticTokens } from "./semantic-tokens.js";
 import type { DesktopThemeResolved } from "./theme-manager.js";
+import { joinFsPath } from "../utils/fs-paths.js";
 
 interface PiThemeFile {
 	name?: string;
@@ -38,12 +39,6 @@ let lastSyncAt = 0;
 function normalizeFsPath(path: string | null | undefined): string {
 	if (!path) return "";
 	return path.replace(/\\/g, "/").replace(/\/+$/, "");
-}
-
-function joinFsPath(base: string, child: string): string {
-	const b = base.replace(/\\/g, "/").replace(/\/+$/, "");
-	const c = child.replace(/\\/g, "/").replace(/^\/+/, "");
-	return b ? `${b}/${c}` : c;
 }
 
 function expandHomePath(path: string, home: string): string {

@@ -85,7 +85,7 @@ export async function switchGitBranchAction({
 			return;
 		}
 
-		let result = await runGit(["switch", branch]);
+		let result = await runGit(["switch", "--", branch]);
 		if (result.exitCode !== 0) {
 			result = await runGit(["checkout", branch]);
 		}
@@ -129,7 +129,7 @@ export async function switchRemoteTrackingBranchAction({
 	setSwitchingGitBranch(true);
 	render();
 	try {
-		let result = await runGit(["switch", "--track", "-c", localBranch, remoteRef]);
+		let result = await runGit(["switch", "--track", "-c", localBranch, "--", remoteRef]);
 		if (result.exitCode !== 0) {
 			result = await runGit(["checkout", "--track", "-b", localBranch, remoteRef]);
 		}
@@ -139,7 +139,7 @@ export async function switchRemoteTrackingBranchAction({
 				await switchGitBranch(localBranch);
 				return;
 			}
-			let fallback = await runGit(["switch", "--track", remoteRef]);
+			let fallback = await runGit(["switch", "--track", "--", remoteRef]);
 			if (fallback.exitCode !== 0) {
 				fallback = await runGit(["checkout", "--track", remoteRef]);
 			}
@@ -260,7 +260,7 @@ export async function createAndCheckoutBranchAction({
 		if (result.exitCode !== 0) {
 			const message = `${result.stderr}\n${result.stdout}`.toLowerCase();
 			if (message.includes("already exists")) {
-				let switchExisting = await runGit(["switch", proposed]);
+				let switchExisting = await runGit(["switch", "--", proposed]);
 				if (switchExisting.exitCode !== 0) {
 					switchExisting = await runGit(["checkout", proposed]);
 				}
@@ -272,9 +272,9 @@ export async function createAndCheckoutBranchAction({
 				}
 			}
 
-			const branchOnly = await runGit(["branch", proposed]);
+			const branchOnly = await runGit(["branch", "--", proposed]);
 			if (branchOnly.exitCode === 0) {
-				let switchToCreated = await runGit(["switch", proposed]);
+				let switchToCreated = await runGit(["switch", "--", proposed]);
 				if (switchToCreated.exitCode !== 0) {
 					switchToCreated = await runGit(["checkout", proposed]);
 				}

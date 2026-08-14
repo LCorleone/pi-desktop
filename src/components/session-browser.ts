@@ -230,7 +230,7 @@ export class SessionBrowser {
 
 	render(): void {
 		if (!this.isOpen) {
-			this.container.innerHTML = "";
+			render(nothing, this.container);
 			return;
 		}
 
@@ -320,6 +320,6 @@ export class SessionBrowser {
 	}
 
 	destroy(): void {
-		this.container.innerHTML = "";
+		render(nothing, this.container);
 	}
 }

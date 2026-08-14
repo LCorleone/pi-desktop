@@ -13,6 +13,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { type Options as DesktopNotificationOptions, isPermissionGranted, onAction, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { html, nothing, render, type TemplateResult } from "lit";
 import { rpcBridge } from "../rpc/bridge.js";
+import { joinFsPath } from "../utils/fs-paths.js";
 
 /**
  * Explicit desktop capability contract for extension UI requests.
@@ -123,12 +124,6 @@ function shouldSuppressUiStatusKey(key: string): boolean {
 	return false;
 }
 
-function joinFsPath(base: string, child: string): string {
-	const normalizedBase = base.replace(/\\/g, "/").replace(/\/+$/, "");
-	const normalizedChild = child.replace(/\\/g, "/").replace(/^\/+/, "");
-	return normalizedBase ? `${normalizedBase}/${normalizedChild}` : normalizedChild;
-}
-
 function toFileUrl(path: string): string {
 	const normalizedPath = path.replace(/\\/g, "/");
 	if (/^[a-zA-Z]+:\/\//.test(normalizedPath)) return normalizedPath;
@@ -190,6 +185,8 @@ export interface NotificationActionTarget {
 
 export class ExtensionUiHandler {
 	private overlayContainer: HTMLElement | null = null;
+	/** Pending dialog using the shared overlay; released when superseded or destroyed. */
+	private activeDialog: { id: string; release: () => void } | null = null;
 	private statusContainer: HTMLElement | null = null;
 	private widgetAboveContainer: HTMLElement | null = null;
 	private widgetBelowContainer: HTMLElement | null = null;
@@ -578,117 +575,105 @@ export class ExtensionUiHandler {
 
 	private async showSelectDialog(request: ExtensionUiRequest): Promise<void> {
 		if (!this.overlayContainer) return;
+		this.supersedeActiveDialog();
 
 		return new Promise((resolve) => {
 			const options = request.options || [];
-			let selectedIndex = -1;
+			let timeoutId: ReturnType<typeof setTimeout> | undefined;
+			let finished = false;
+			const finish = (data: Record<string, unknown>): void => {
+				if (finished) return;
+				finished = true;
+				if (timeoutId) clearTimeout(timeoutId);
+				if (this.activeDialog?.id === request.id) this.activeDialog = null;
+				this.closeOverlay();
+				void this.sendResponse(request.id, data);
+				resolve();
+			};
 
 			const template = html`
 				<div class="ext-ui-dialog">
 					<h3 class="ext-ui-title">${request.title || "Select"}</h3>
 					<div class="ext-ui-options">
 						${options.map(
-							(opt, i) => html`
-								<button
-									class="ext-ui-option"
-									@click=${() => {
-										selectedIndex = i;
-										this.closeOverlay();
-										this.sendResponse(request.id, { value: opt });
-										resolve();
-									}}
-								>
+							(opt) => html`
+								<button class="ext-ui-option" @click=${() => finish({ value: opt })}>
 									${opt}
 								</button>
 							`,
 						)}
 					</div>
-					<button
-						class="ext-ui-btn ext-ui-btn-block"
-						@click=${() => {
-							this.closeOverlay();
-							this.sendResponse(request.id, { cancelled: true });
-							resolve();
-						}}
-					>
+					<button class="ext-ui-btn ext-ui-btn-block" @click=${() => finish({ cancelled: true })}>
 						Cancel
 					</button>
 				</div>
 			`;
 
+			this.activeDialog = { id: request.id, release: () => finish({ cancelled: true }) };
 			this.showOverlay(template);
 
-			// Handle timeout
+			// Handle timeout — finish() is a no-op if a response was already sent
 			if (request.timeout) {
-				setTimeout(() => {
-					if (selectedIndex === -1) {
-						this.closeOverlay();
-						this.sendResponse(request.id, { cancelled: true });
-						resolve();
-					}
-				}, request.timeout);
+				timeoutId = setTimeout(() => finish({ cancelled: true }), request.timeout);
 			}
 		});
 	}
 
 	private async showConfirmDialog(request: ExtensionUiRequest): Promise<void> {
 		if (!this.overlayContainer) return;
+		this.supersedeActiveDialog();
 
 		return new Promise((resolve) => {
-			let resolved = false;
 			let timeoutId: ReturnType<typeof setTimeout> | undefined;
+			let finished = false;
+			const finish = (data: Record<string, unknown>): void => {
+				if (finished) return;
+				finished = true;
+				if (timeoutId) clearTimeout(timeoutId);
+				if (this.activeDialog?.id === request.id) this.activeDialog = null;
+				this.closeOverlay();
+				void this.sendResponse(request.id, data);
+				resolve();
+			};
+
 			const template = html`
 				<div class="ext-ui-dialog">
 					<h3 class="ext-ui-title">${request.title || "Confirm Action"}</h3>
 					<p class="ext-ui-message">${request.message || "Are you sure?"}</p>
 					<div class="ext-ui-actions">
-						<button
-							class="ext-ui-btn"
-							@click=${() => {
-								resolved = true;
-								if (timeoutId) clearTimeout(timeoutId);
-								this.closeOverlay();
-								this.sendResponse(request.id, { confirmed: false });
-								resolve();
-							}}
-						>
-							Cancel
-						</button>
-						<button
-							class="ext-ui-btn ext-ui-btn-primary"
-							@click=${() => {
-								resolved = true;
-								if (timeoutId) clearTimeout(timeoutId);
-								this.closeOverlay();
-								this.sendResponse(request.id, { confirmed: true });
-								resolve();
-							}}
-						>
+						<button class="ext-ui-btn" @click=${() => finish({ confirmed: false })}>Cancel</button>
+						<button class="ext-ui-btn ext-ui-btn-primary" @click=${() => finish({ confirmed: true })}>
 							${request.title || "Confirm Action"}
 						</button>
 					</div>
 				</div>
 			`;
 
+			this.activeDialog = { id: request.id, release: () => finish({ cancelled: true }) };
 			this.showOverlay(template);
 
-			// Handle timeout — guard against a response already sent (mirrors showSelectDialog)
+			// Handle timeout — finish() is a no-op if a response was already sent
 			if (request.timeout) {
-				timeoutId = setTimeout(() => {
-					if (resolved) return;
-					this.closeOverlay();
-					this.sendResponse(request.id, { cancelled: true });
-					resolve();
-				}, request.timeout);
+				timeoutId = setTimeout(() => finish({ cancelled: true }), request.timeout);
 			}
 		});
 	}
 
 	private async showInputDialog(request: ExtensionUiRequest): Promise<void> {
 		if (!this.overlayContainer) return;
+		this.supersedeActiveDialog();
 
 		return new Promise((resolve) => {
 			let inputValue = "";
+			let finished = false;
+			const finish = (data: Record<string, unknown>): void => {
+				if (finished) return;
+				finished = true;
+				if (this.activeDialog?.id === request.id) this.activeDialog = null;
+				this.closeOverlay();
+				void this.sendResponse(request.id, data);
+				resolve();
+			};
 
 			const template = html`
 				<div class="ext-ui-dialog">
@@ -702,37 +687,20 @@ export class ExtensionUiHandler {
 						}}
 						@keydown=${(e: KeyboardEvent) => {
 							if (e.key === "Enter") {
-								this.closeOverlay();
-								this.sendResponse(request.id, { value: inputValue });
-								resolve();
+								finish({ value: inputValue });
 							}
 						}}
 					/>
 					<div class="ext-ui-actions">
-						<button
-							class="ext-ui-btn"
-							@click=${() => {
-								this.closeOverlay();
-								this.sendResponse(request.id, { cancelled: true });
-								resolve();
-							}}
-						>
-							Cancel
-						</button>
-						<button
-							class="ext-ui-btn ext-ui-btn-primary"
-							@click=${() => {
-								this.closeOverlay();
-								this.sendResponse(request.id, { value: inputValue });
-								resolve();
-							}}
-						>
+						<button class="ext-ui-btn" @click=${() => finish({ cancelled: true })}>Cancel</button>
+						<button class="ext-ui-btn ext-ui-btn-primary" @click=${() => finish({ value: inputValue })}>
 							Submit
 						</button>
 					</div>
 				</div>
 			`;
 
+			this.activeDialog = { id: request.id, release: () => finish({ cancelled: true }) };
 			this.showOverlay(template);
 
 			// Focus input after render
@@ -742,12 +710,21 @@ export class ExtensionUiHandler {
 			}, 50);
 		});
 	}
-
 	private async showEditorDialog(request: ExtensionUiRequest): Promise<void> {
 		if (!this.overlayContainer) return;
+		this.supersedeActiveDialog();
 
 		return new Promise((resolve) => {
 			let editorValue = request.prefill || "";
+			let finished = false;
+			const finish = (data: Record<string, unknown>): void => {
+				if (finished) return;
+				finished = true;
+				if (this.activeDialog?.id === request.id) this.activeDialog = null;
+				this.closeOverlay();
+				void this.sendResponse(request.id, data);
+				resolve();
+			};
 
 			const template = html`
 				<div class="ext-ui-dialog ext-ui-dialog-wide">
@@ -759,30 +736,15 @@ export class ExtensionUiHandler {
 						}}
 					>${request.prefill || ""}</textarea>
 					<div class="ext-ui-actions">
-						<button
-							class="ext-ui-btn"
-							@click=${() => {
-								this.closeOverlay();
-								this.sendResponse(request.id, { cancelled: true });
-								resolve();
-							}}
-						>
-							Cancel
-						</button>
-						<button
-							class="ext-ui-btn ext-ui-btn-primary"
-							@click=${() => {
-								this.closeOverlay();
-								this.sendResponse(request.id, { value: editorValue });
-								resolve();
-							}}
-						>
+						<button class="ext-ui-btn" @click=${() => finish({ cancelled: true })}>Cancel</button>
+						<button class="ext-ui-btn ext-ui-btn-primary" @click=${() => finish({ value: editorValue })}>
 							Save
 						</button>
 					</div>
 				</div>
 			`;
 
+			this.activeDialog = { id: request.id, release: () => finish({ cancelled: true }) };
 			this.showOverlay(template);
 
 			// Focus textarea after render
@@ -885,19 +847,19 @@ export class ExtensionUiHandler {
 		const statusKey = typeof request.statusKey === "string" ? request.statusKey.trim() : "";
 		if (statusKey && shouldSuppressUiStatusKey(statusKey)) {
 			this.statusContainer.classList.add("hidden");
-			this.statusContainer.innerHTML = "";
+			render(nothing, this.statusContainer);
 			return;
 		}
 
 		if (request.statusText === undefined) {
 			// Clear status
 			this.statusContainer.classList.add("hidden");
-			this.statusContainer.innerHTML = "";
+			render(nothing, this.statusContainer);
 		} else {
 			const text = sanitizeUiStatusText(request.statusText);
 			if (!text || shouldSuppressUiStatusText(text)) {
 				this.statusContainer.classList.add("hidden");
-				this.statusContainer.innerHTML = "";
+				render(nothing, this.statusContainer);
 				return;
 			}
 			this.statusContainer.classList.remove("hidden");
@@ -918,7 +880,7 @@ export class ExtensionUiHandler {
 			.filter((line) => Boolean(line) && !shouldSuppressUiStatusText(line));
 		if (lines.length === 0) {
 			container.classList.add("hidden");
-			container.innerHTML = "";
+			render(nothing, container);
 		} else {
 			container.classList.remove("hidden");
 			render(
@@ -949,6 +911,18 @@ export class ExtensionUiHandler {
 		this.onSetEditorText?.(request.text);
 	}
 
+	/**
+	 * Settle any pending dialog before a new request takes over the shared
+	 * overlay. Without this, superseding a dialog leaves the extension's
+	 * ui.select()/ui.input() promise pending forever, and its outstanding
+	 * timeout could later close the overlay out from under the new dialog.
+	 */
+	private supersedeActiveDialog(): void {
+		const active = this.activeDialog;
+		this.activeDialog = null;
+		active?.release();
+	}
+
 	private showOverlay(template: TemplateResult): void {
 		if (!this.overlayContainer) return;
 		this.overlayContainer.classList.remove("hidden");
@@ -969,6 +943,7 @@ export class ExtensionUiHandler {
 	}
 
 	destroy(): void {
+		this.supersedeActiveDialog();
 		this.releaseFocusTrackerSubscription?.();
 		this.releaseFocusTrackerSubscription = null;
 		this.releasePermissionBootstrapListeners?.();

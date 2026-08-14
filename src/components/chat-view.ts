@@ -5,6 +5,7 @@
 import "@mariozechner/mini-lit/dist/CodeBlock.js";
 import "@mariozechner/mini-lit/dist/MarkdownBlock.js";
 import { html, nothing, render, type TemplateResult } from "lit";
+import { invoke } from "@tauri-apps/api/core";
 import {
 	type PiAuthProviderStatus,
 	type RpcImageInput,
@@ -2743,6 +2744,7 @@ export class ChatView {
 				},
 				cancelStreamingUiReconcile: this.cancelStreamingUiReconcile.bind(this),
 				scheduleStreamingUiReconcile: this.scheduleStreamingUiReconcile.bind(this),
+				clearStreamingUiState: this.clearStreamingUiState.bind(this),
 				setPendingDeliveryMode: (mode) => {
 					this.pendingDeliveryMode = mode;
 				},
@@ -3602,8 +3604,7 @@ export class ChatView {
 		try {
 			const { path } = await rpcBridge.exportHtml();
 			this.pushNotice(`Exported session to ${truncate(path, 70)}`, "success");
-			const { open } = await import("@tauri-apps/plugin-shell");
-			await open(path);
+			await invoke("open_path_in_default_app", { path });
 		} catch (err) {
 			console.error("Failed to export HTML:", err);
 			this.pushNotice("Failed to export session", "error");

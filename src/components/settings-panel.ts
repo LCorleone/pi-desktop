@@ -26,6 +26,8 @@ import {
 	rpcBridge,
 } from "../rpc/bridge.js";
 import { applyDesktopTheme, getResolvedDesktopTheme, readStoredDesktopTheme, type DesktopThemeMode } from "../theme/theme-manager.js";
+import { inferThemeVariant } from "../theme/theme-variant.js";
+import { joinFsPath } from "../utils/fs-paths.js";
 import { buildPiThemeDocument } from "../theme/pi-theme-document.js";
 import { PROVIDER_PRESETS, getProviderPresetByKey, type ProviderPreset } from "../models/provider-presets.js";
 import { isBundledThemeId } from "../theme/bundled-themes.js";
@@ -126,6 +128,7 @@ export class SettingsPanel {
 	private onClose: (() => void) | null = null;
 	private onRequestAddProject: (() => void) | null = null;
 	private saving = false;
+	private settingsSaveError = "";
 	private authStatus: PiAuthStatus | null = null;
 	private authLoading = false;
 	private desktopStatus: DesktopUpdateStatus | null = null;
@@ -448,7 +451,7 @@ export class SettingsPanel {
 					const parsed = JSON.parse(raw) as Record<string, unknown>;
 					const label = id;
 					const preview = this.extractThemePreview(parsed);
-					const variant = this.extractThemeVariant(parsed, id, preview.background);
+					const variant = inferThemeVariant(parsed, id, preview.background);
 					const defaults = this.extractThemeDesktopDefaults(parsed);
 					list.push({
 						id,
@@ -560,80 +563,6 @@ export class SettingsPanel {
 			this.resolveThemeValue(theme, colors.userMessageText) ??
 			(this.getCurrentResolvedTheme() === "light" ? "#37352f" : "#efefef");
 		return { accent, background, foreground };
-	}
-
-	private parseColorRgb(color: string): { r: number; g: number; b: number } | null {
-		const trimmed = color.trim();
-		const short = trimmed.match(/^#([0-9a-f]{3})$/i);
-		if (short) {
-			const [r, g, b] = short[1].split("");
-			return {
-				r: parseInt(`${r}${r}`, 16),
-				g: parseInt(`${g}${g}`, 16),
-				b: parseInt(`${b}${b}`, 16),
-			};
-		}
-		const full = trimmed.match(/^#([0-9a-f]{6})$/i);
-		if (full) {
-			return {
-				r: parseInt(full[1].slice(0, 2), 16),
-				g: parseInt(full[1].slice(2, 4), 16),
-				b: parseInt(full[1].slice(4, 6), 16),
-			};
-		}
-		const rgb = trimmed.match(/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i);
-		if (rgb) {
-			return {
-				r: Math.max(0, Math.min(255, Number(rgb[1]))),
-				g: Math.max(0, Math.min(255, Number(rgb[2]))),
-				b: Math.max(0, Math.min(255, Number(rgb[3]))),
-			};
-		}
-		return null;
-	}
-
-	private colorLuminance(color: string): number | null {
-		const rgb = this.parseColorRgb(color);
-		if (!rgb) return null;
-		const toLinear = (channel: number): number => {
-			const s = channel / 255;
-			return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-		};
-		const r = toLinear(rgb.r);
-		const g = toLinear(rgb.g);
-		const b = toLinear(rgb.b);
-		return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-	}
-
-	private inferVariantFromBackground(background: string): ThemeVariant | null {
-		const luminance = this.colorLuminance(background);
-		if (luminance === null) return null;
-		return luminance >= 0.42 ? "light" : "dark";
-	}
-
-	private extractThemeVariant(theme: Record<string, unknown>, id: string, background: string): ThemeVariant {
-		const colors = (theme.colors as Record<string, unknown> | undefined) ?? {};
-		const directBackground =
-			this.resolveThemeValue(theme, colors.selectedBg) ??
-			this.resolveThemeValue(theme, colors.userMessageBg) ??
-			this.resolveThemeValue(theme, colors.customMessageBg) ??
-			null;
-		if (directBackground) {
-			const byDirectBackground = this.inferVariantFromBackground(directBackground);
-			if (byDirectBackground) return byDirectBackground;
-		}
-
-		const meta = theme.piDesktop;
-		if (meta && typeof meta === "object" && !Array.isArray(meta)) {
-			const variant = (meta as Record<string, unknown>).variant;
-			if (variant === "light" || variant === "dark") return variant;
-		}
-		const normalizedId = id.toLowerCase();
-		if (normalizedId.includes("-light")) return "light";
-		if (normalizedId.includes("-dark")) return "dark";
-		const fromBackground = this.inferVariantFromBackground(background);
-		if (fromBackground) return fromBackground;
-		return normalizedId.includes("light") ? "light" : "dark";
 	}
 
 	private extractThemeDesktopDefaults(theme: Record<string, unknown>): {
@@ -816,12 +745,6 @@ export class SettingsPanel {
 		this.render();
 	}
 
-	private joinFsPath(base: string, child: string): string {
-		const b = base.replace(/\\/g, "/").replace(/\/+$/, "");
-		const c = child.replace(/\\/g, "/").replace(/^\/+/, "");
-		return b ? `${b}/${c}` : c;
-	}
-
 	private async createThemeFromProfile(theme: ThemeVariant): Promise<void> {
 		if (!this.hasThemeDraftChanges(theme)) return;
 		this.createThemeDialogOpen = true;
@@ -893,15 +816,15 @@ export class SettingsPanel {
 		const { homeDir } = await import("@tauri-apps/api/path");
 		const { exists, mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
 		const home = (await homeDir()).replace(/\\/g, "/").replace(/\/+$/, "");
-		const themesRoot = this.joinFsPath(this.joinFsPath(this.joinFsPath(home, ".pi"), "agent"), "themes");
+		const themesRoot = joinFsPath(joinFsPath(joinFsPath(home, ".pi"), "agent"), "themes");
 		await mkdir(themesRoot, { recursive: true });
 
 		let fileStem = safeBase;
-		let targetPath = this.joinFsPath(themesRoot, `${fileStem}.json`);
+		let targetPath = joinFsPath(themesRoot, `${fileStem}.json`);
 		let index = 2;
 		while (await exists(targetPath)) {
 			fileStem = `${safeBase}-${index}`;
-			targetPath = this.joinFsPath(themesRoot, `${fileStem}.json`);
+			targetPath = joinFsPath(themesRoot, `${fileStem}.json`);
 			index += 1;
 		}
 
@@ -949,10 +872,10 @@ export class SettingsPanel {
 			const { homeDir } = await import("@tauri-apps/api/path");
 			const { mkdir, writeTextFile } = await import("@tauri-apps/plugin-fs");
 			const home = (await homeDir()).replace(/\\/g, "/").replace(/\/+$/, "");
-			const themesRoot = this.joinFsPath(this.joinFsPath(this.joinFsPath(home, ".pi"), "agent"), "themes");
+			const themesRoot = joinFsPath(joinFsPath(joinFsPath(home, ".pi"), "agent"), "themes");
 			await mkdir(themesRoot, { recursive: true });
 
-			const targetPath = this.joinFsPath(themesRoot, `${fileStem}.json`);
+			const targetPath = joinFsPath(themesRoot, `${fileStem}.json`);
 			await writeTextFile(targetPath, `${JSON.stringify(doc, null, 2)}\n`);
 			profile.accent = "";
 			profile.background = "";
@@ -1079,7 +1002,7 @@ export class SettingsPanel {
 			await this.onQuickReconnect?.(config, entry.name);
 			this.sshActionMessage = `Connected to “${entry.name}”.`;
 		} catch (err) {
-			this.sshActionMessage = err instanceof Error ? err.message : `Failed to connect to “${entry.name}”.`;
+			this.sshActionMessage = err instanceof Error ? err.message : `Failed to save or connect to “${entry.name}”.`;
 		}
 		this.render();
 	}
@@ -1482,7 +1405,13 @@ export class SettingsPanel {
 		this.applyTheme(theme);
 		this.applyAppearanceProfileForCurrentResolvedTheme(false);
 		this.render();
-		await this.saveSettings();
+		try {
+			await this.saveSettings();
+		} catch (err) {
+			console.error("Failed to save theme setting:", err);
+			this.settingsSaveError = err instanceof Error ? err.message : String(err);
+			this.render();
+		}
 	}
 
 	private async setAutoCompaction(enabled: boolean): Promise<void> {
@@ -1493,6 +1422,8 @@ export class SettingsPanel {
 			await this.saveSettings();
 		} catch (err) {
 			console.error("Failed to set auto-compaction:", err);
+			this.settingsSaveError = err instanceof Error ? err.message : String(err);
+			this.render();
 		}
 	}
 
@@ -1504,6 +1435,8 @@ export class SettingsPanel {
 			await this.saveSettings();
 		} catch (err) {
 			console.error("Failed to set auto-retry:", err);
+			this.settingsSaveError = err instanceof Error ? err.message : String(err);
+			this.render();
 		}
 	}
 
@@ -1515,6 +1448,8 @@ export class SettingsPanel {
 			await this.saveSettings();
 		} catch (err) {
 			console.error("Failed to set steering mode:", err);
+			this.settingsSaveError = err instanceof Error ? err.message : String(err);
+			this.render();
 		}
 	}
 
@@ -1526,6 +1461,8 @@ export class SettingsPanel {
 			await this.saveSettings();
 		} catch (err) {
 			console.error("Failed to set follow-up mode:", err);
+			this.settingsSaveError = err instanceof Error ? err.message : String(err);
+			this.render();
 		}
 	}
 
@@ -1584,9 +1521,9 @@ export class SettingsPanel {
 		if (!agentDir) {
 			const { homeDir } = await import("@tauri-apps/api/path");
 			const home = (await homeDir()).replace(/\\/g, "/").replace(/\/+$/, "");
-			agentDir = this.joinFsPath(this.joinFsPath(home, ".pi"), "agent");
+			agentDir = joinFsPath(joinFsPath(home, ".pi"), "agent");
 		}
-		return this.joinFsPath(agentDir, "settings.json");
+		return joinFsPath(agentDir, "settings.json");
 	}
 
 	private async readPiGlobalSettingsDoc(): Promise<{ path: string; doc: Record<string, unknown> }> {
@@ -1941,7 +1878,9 @@ export class SettingsPanel {
 	}
 
 	private async saveSettings(activeSshOverride?: SshConnectionConfig): Promise<void> {
-		if (this.saving) return;
+		// Skipping would silently drop the caller's changes while it reports
+		// success, so treat an in-flight save as a failure the caller can surface.
+		if (this.saving) throw new Error("Another settings save is already in progress.");
 		this.saving = true;
 		try {
 			const { invoke } = await import("@tauri-apps/api/core");
@@ -1962,8 +1901,15 @@ export class SettingsPanel {
 					ssh_enabled: this.state.sshEnabled,
 				},
 			});
+			if (this.settingsSaveError) {
+				this.settingsSaveError = "";
+				this.render();
+			}
 		} catch (err) {
 			console.error("Failed to save settings:", err);
+			// Rethrow so callers only report success (and take follow-up actions)
+			// when the settings were actually persisted.
+			throw err;
 		} finally {
 			this.saving = false;
 		}
@@ -2337,7 +2283,10 @@ export class SettingsPanel {
 						<input type="checkbox" .checked=${this.state.sshEnabled} @change=${(e: Event) => {
 							this.state.sshEnabled = (e.target as HTMLInputElement).checked;
 							setSshEnabled(this.state.sshEnabled);
-							this.saveSettings();
+							this.saveSettings().catch((err: unknown) => {
+								this.settingsSaveError = err instanceof Error ? err.message : String(err);
+								this.render();
+							});
 							this.render();
 						}} />
 						<div>
@@ -3014,6 +2963,7 @@ export class SettingsPanel {
 					<div class="settings-view-body settings-view-body-flat">
 						<section class="settings-main" aria-live="polite">
 							<div class="settings-main-content settings-main-content-flat">
+								${this.settingsSaveError ? html`<div class="settings-message-error" style="margin-bottom:8px;">${this.settingsSaveError}</div>` : nothing}
 								${this.renderActiveSectionSafe(activeSection, runtimeControlsEnabled, hasProjectContext, authProviders, compatibilityChecks)}
 							</div>
 						</section>

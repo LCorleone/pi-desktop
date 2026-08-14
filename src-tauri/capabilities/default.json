@@ -29,19 +29,113 @@
 		"shell:allow-kill",
 		"fs:default",
 		{
-			"identifier": "fs:allow-home-read-recursive",
+			"identifier": "fs:allow-read-dir",
 			"allow": [
+				"$HOME",
 				"$HOME/**",
 				"$HOME/**/.*",
 				"$HOME/**/.*/**"
 			]
 		},
 		{
-			"identifier": "fs:allow-home-write-recursive",
+			"identifier": "fs:allow-read-file",
 			"allow": [
+				"$HOME",
 				"$HOME/**",
 				"$HOME/**/.*",
 				"$HOME/**/.*/**"
+			]
+		},
+		{
+			"identifier": "fs:allow-read-text-file",
+			"allow": [
+				"$HOME",
+				"$HOME/**",
+				"$HOME/**/.*",
+				"$HOME/**/.*/**"
+			]
+		},
+		{
+			"identifier": "fs:allow-stat",
+			"allow": [
+				"$HOME",
+				"$HOME/**",
+				"$HOME/**/.*",
+				"$HOME/**/.*/**"
+			]
+		},
+		{
+			"identifier": "fs:allow-exists",
+			"allow": [
+				"$HOME",
+				"$HOME/**",
+				"$HOME/**/.*",
+				"$HOME/**/.*/**",
+				"$RESOURCE",
+				"$RESOURCE/**"
+			]
+		},
+		{
+			"identifier": "fs:allow-watch",
+			"allow": [
+				"$HOME",
+				"$HOME/**",
+				"$HOME/**/.*",
+				"$HOME/**/.*/**"
+			]
+		},
+		{
+			"identifier": "fs:allow-unwatch",
+			"allow": [
+				"$HOME",
+				"$HOME/**",
+				"$HOME/**/.*",
+				"$HOME/**/.*/**"
+			]
+		},
+		{
+			"identifier": "fs:allow-write-text-file",
+			"allow": [
+				"$HOME/.pi",
+				"$HOME/.pi/**",
+				"$HOME/.pi/**/.*",
+				"$HOME/.pi/**/.*/**"
+			]
+		},
+		{
+			"identifier": "fs:allow-write-file",
+			"allow": [
+				"$HOME/.pi",
+				"$HOME/.pi/**",
+				"$HOME/.pi/**/.*",
+				"$HOME/.pi/**/.*/**"
+			]
+		},
+		{
+			"identifier": "fs:allow-mkdir",
+			"allow": [
+				"$HOME/.pi",
+				"$HOME/.pi/**",
+				"$HOME/.pi/**/.*",
+				"$HOME/.pi/**/.*/**"
+			]
+		},
+		{
+			"identifier": "fs:allow-remove",
+			"allow": [
+				"$HOME/.pi",
+				"$HOME/.pi/**",
+				"$HOME/.pi/**/.*",
+				"$HOME/.pi/**/.*/**"
+			]
+		},
+		{
+			"identifier": "fs:allow-rename",
+			"allow": [
+				"$HOME/.pi",
+				"$HOME/.pi/**",
+				"$HOME/.pi/**/.*",
+				"$HOME/.pi/**/.*/**"
 			]
 		},
 		"dialog:default",

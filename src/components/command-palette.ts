@@ -204,7 +204,7 @@ export class CommandPalette {
 
 	render(): void {
 		if (!this.isOpen) {
-			this.container.innerHTML = "";
+			render(nothing, this.container);
 			return;
 		}
 
@@ -262,6 +262,6 @@ export class CommandPalette {
 	}
 
 	destroy(): void {
-		this.container.innerHTML = "";
+		render(nothing, this.container);
 	}
 }

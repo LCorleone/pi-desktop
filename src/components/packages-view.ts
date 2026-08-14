@@ -2,8 +2,11 @@
  * PackagesView - package/config/resource management surface shown in main pane
  */
 
+import { invoke } from "@tauri-apps/api/core";
 import { html, nothing, render, type TemplateResult } from "lit";
 import { normalizeRecommendedSource, RECOMMENDED_PACKAGES, type RecommendedPackageDefinition } from "../recommended-packages.js";
+import { joinFsPath, pathBaseName, pathDirName } from "../utils/fs-paths.js";
+import { inferThemeVariant } from "../theme/theme-variant.js";
 import { RECOMMENDED_SKILLS, type RecommendedSkillDefinition } from "../recommended-skills.js";
 import { rpcBridge } from "../rpc/bridge.js";
 import { collectBuiltInOAuthProviderIds } from "../auth/provider-auth.js";
@@ -524,30 +527,11 @@ function readCommandSourceInfo(raw: Record<string, unknown>): {
 	return { path, source, scope, origin, baseDir };
 }
 
-function joinFsPath(base: string, child: string): string {
-	const sep = base.includes("\\") ? "\\" : "/";
-	const normalizedBase = base.replace(/[\\/]+$/, "");
-	return `${normalizedBase}${sep}${child}`;
-}
-
-function pathBaseName(path: string): string {
-	const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
-	const parts = normalized.split("/");
-	return parts[parts.length - 1] || normalized;
-}
-
 function fileStem(path: string): string {
 	const base = pathBaseName(path);
 	const idx = base.lastIndexOf(".");
 	if (idx <= 0) return base;
 	return base.slice(0, idx);
-}
-
-function pathDirName(path: string): string {
-	const normalized = path.replace(/[\\/]+$/, "");
-	const slashIdx = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
-	if (slashIdx <= 0) return normalized;
-	return normalized.slice(0, slashIdx);
 }
 
 function toTitleFromSlug(value: string): string {
@@ -2766,39 +2750,6 @@ export class PackagesView {
 		});
 	}
 
-	private parseThemeRgb(color: string): { r: number; g: number; b: number } | null {
-		const trimmed = color.trim();
-		const short = trimmed.match(/^#([0-9a-f]{3})$/i);
-		if (short) {
-			const [r, g, b] = short[1].split("");
-			return {
-				r: parseInt(`${r}${r}`, 16),
-				g: parseInt(`${g}${g}`, 16),
-				b: parseInt(`${b}${b}`, 16),
-			};
-		}
-		const full = trimmed.match(/^#([0-9a-f]{6})$/i);
-		if (full) {
-			return {
-				r: parseInt(full[1].slice(0, 2), 16),
-				g: parseInt(full[1].slice(2, 4), 16),
-				b: parseInt(full[1].slice(4, 6), 16),
-			};
-		}
-		return null;
-	}
-
-	private inferThemeVariantFromBackground(background: string): "light" | "dark" {
-		const rgb = this.parseThemeRgb(background);
-		if (!rgb) return "dark";
-		const toLinear = (channel: number): number => {
-			const s = channel / 255;
-			return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-		};
-		const luminance = 0.2126 * toLinear(rgb.r) + 0.7152 * toLinear(rgb.g) + 0.0722 * toLinear(rgb.b);
-		return luminance >= 0.42 ? "light" : "dark";
-	}
-
 	private normalizeThemeColorLiteral(value: unknown): string | null {
 		if (typeof value === "string") {
 			const trimmed = value.trim();
@@ -2837,18 +2788,6 @@ export class PackagesView {
 		);
 	}
 
-	private inferThemeVariant(doc: Record<string, unknown>, fileName: string): "light" | "dark" {
-		const meta = doc.piDesktop;
-		if (meta && typeof meta === "object" && !Array.isArray(meta)) {
-			const variant = (meta as Record<string, unknown>).variant;
-			if (variant === "light" || variant === "dark") return variant;
-		}
-		const background = this.themeBackgroundColor(doc);
-		const byBackground = this.inferThemeVariantFromBackground(background);
-		if (byBackground) return byBackground;
-		return fileName.toLowerCase().includes("light") ? "light" : "dark";
-	}
-
 	private async scanThemeResources(): Promise<DiscoveredThemeItem[]> {
 		await this.ensureHomePath();
 		if (!this.homePath) return [];
@@ -2873,7 +2812,7 @@ export class PackagesView {
 				}
 				const fileId = entry.name.replace(/\.json$/i, "");
 				const name = typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : fileId;
-				const variant = this.inferThemeVariant(parsed, fileId);
+				const variant = inferThemeVariant(parsed, fileId);
 				const colors = (parsed.colors as Record<string, unknown> | undefined) ?? {};
 				const accent = this.resolveThemeColorValue(parsed, colors.accent) ?? "#7A818F";
 				const background = this.themeBackgroundColor(parsed);
@@ -4293,15 +4232,14 @@ Execute the required file creation/edits directly, then summarize exactly which 
 			}
 
 			const { exists } = await import("@tauri-apps/plugin-fs");
-			const { open } = await import("@tauri-apps/plugin-shell");
 			if (await exists(resolved)) {
-				await open(resolved);
+				await invoke("open_path_in_default_app", { path: resolved });
 				return;
 			}
 			// Try parent folder
 			const parent = pathDirName(resolved);
 			if (parent && await exists(parent)) {
-				await open(parent);
+				await invoke("open_path_in_default_app", { path: parent });
 				return;
 			}
 

@@ -1,3 +1,5 @@
+import { joinFsPath } from "../utils/fs-paths.js";
+
 const DESKTOP_NOTIFY_BRIDGE_EXTENSION_FILE = "pi-desktop-notify-bridge.ts";
 const DESKTOP_NOTIFY_BRIDGE_MARKER = "pi-desktop-notify-bridge-extension/v1";
 
@@ -52,12 +54,6 @@ export default function (pi) {
 \t});
 }
 `;
-
-function joinFsPath(base: string, child: string): string {
-	const b = base.replace(/\\/g, "/").replace(/\/+$/, "");
-	const c = child.replace(/\\/g, "/").replace(/^\/+/, "");
-	return b ? `${b}/${c}` : c;
-}
 
 async function resolveGlobalExtensionsRoot(): Promise<string | null> {
 	const { homeDir } = await import("@tauri-apps/api/path");

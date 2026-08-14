@@ -1,4 +1,5 @@
 import { html, nothing, type TemplateResult } from "lit";
+import "../safe-markdown.js";
 import type { AssistantWorkflow, ToolCategory, WorkflowToolCall, WorkflowToolCallGroup } from "./workflow-utils.js";
 import { deriveWorkflowIntent, getToolCategory, pickToolArg } from "./workflow-utils.js";
 import { renderTurnStatsFooter, type TurnStats } from "./turn-stats-utils.js";
@@ -415,9 +416,6 @@ export function renderAssistantWorkflowView({
 			}
 			lastThinkingFull = normalizedThinking;
 
-			// [thinking-diag] TEMP: log workflow thinking dedup result
-			console.debug("[thinking-diag] workflow-build", { msgId: message.id, fullLen: normalizedThinking.length, displayLen: displayThinking.length, hadPrevFull: (lastThinkingFull ?? "").length > 0 });
-
 			const previous = detailEntries[detailEntries.length - 1];
 			if (!displayThinking) {
 				if (previous && previous.kind === "thinking") {
@@ -610,7 +608,7 @@ export function renderAssistantWorkflowView({
 							</div>
 							${hasFinalContent ? html`<div class="assistant-final-divider"><span>Agent</span></div>` : nothing}
 							${workflow.finalText
-								? html`<div class="assistant-content"><markdown-block .content=${workflow.finalText}></markdown-block></div>`
+								? html`<div class="assistant-content"><safe-markdown-block .content=${workflow.finalText}></safe-markdown-block></div>`
 								: nothing}
 							${workflow.errorText ? html`<div class="assistant-error-line">${workflow.errorText}</div>` : nothing}
 							${renderModifiedFiles()}
@@ -618,7 +616,7 @@ export function renderAssistantWorkflowView({
 						`
 						: html`
 							${workflow.finalText
-								? html`<div class="assistant-content workflow-final-collapsed"><markdown-block .content=${workflow.finalText}></markdown-block></div>`
+								? html`<div class="assistant-content workflow-final-collapsed"><safe-markdown-block .content=${workflow.finalText}></safe-markdown-block></div>`
 								: nothing}
 							${workflow.errorText ? html`<div class="assistant-error-line">${workflow.errorText}</div>` : nothing}
 							${renderModifiedFiles()}

@@ -164,6 +164,12 @@ export function handleComposerKeyDownEvent({
 	onExecuteSlashCommandFromComposer,
 	onSendMessage,
 }: HandleComposerKeyDownEventParams): void {
+	// IME composition guard (CJK/Kana input): Enter while composing must commit
+	// the composition, not send the half-composed message or run a slash
+	// command. keyCode 229 covers browsers that report it for composition
+	// keydowns. Scoped to Enter only — other keys (e.g. palette navigation)
+	// keep their existing behavior during composition.
+	if (event.key === "Enter" && (event.isComposing || event.keyCode === 229)) return;
 	if (interactionLocked) return;
 	if (event.key === "Escape" && modelPickerOpen) {
 		event.preventDefault();

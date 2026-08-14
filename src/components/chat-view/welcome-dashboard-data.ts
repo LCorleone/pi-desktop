@@ -1,3 +1,5 @@
+import { joinFsPath } from "../../utils/fs-paths.js";
+
 interface CliUpdateStatus {
 	current_version?: string | null;
 	latest_version?: string | null;
@@ -18,12 +20,6 @@ export interface WelcomeDashboardInventory {
 	currentCliVersion: string | null;
 	latestCliVersion: string | null;
 	updateAvailable: boolean;
-}
-
-function joinFsPath(base: string, child: string): string {
-	const separator = base.includes("\\") ? "\\" : "/";
-	const normalizedBase = base.replace(/[\\/]+$/, "");
-	return `${normalizedBase}${separator}${child}`;
 }
 
 async function readDirSafe(path: string): Promise<DirEntry[]> {

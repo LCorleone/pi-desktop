@@ -25,3 +25,4 @@ which = "8"
 reqwest = { version = "0.12", features = ["json"] }
 portable-pty = "0.9"
 base64 = "0.22"
+tempfile = "3"

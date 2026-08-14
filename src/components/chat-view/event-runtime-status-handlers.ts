@@ -24,6 +24,7 @@ interface HandleRuntimeStatusEventContext {
 	bumpModelLoadRequestSeq: () => void;
 	cancelStreamingUiReconcile: () => void;
 	scheduleStreamingUiReconcile: (delayMs?: number) => void;
+	clearStreamingUiState: () => void;
 	setPendingDeliveryMode: (mode: "prompt" | "steer") => void;
 	setRunFlags: (flags: { hasAssistantText: boolean; sawToolActivity: boolean; keepWorkflowExpanded: boolean }) => void;
 	clearCollapsedAutoWorkflowIds: () => void;
@@ -171,7 +172,14 @@ export function handleRuntimeStatusEvent(
 
 		case "rpc_disconnected": {
 			context.setConnected(false);
-			context.cancelStreamingUiReconcile();
+			// The disconnected run is over from the UI's perspective — without this
+			// cleanup the spinner/stop button/steer mode stay stuck until a
+			// successful reconnect happens to refresh state. clearStreamingUiState
+			// mirrors agent_end's streaming cleanup and additionally sweeps
+			// running tool calls (spinners/streamingOutput) and aborts an
+			// in-flight compaction cycle.
+			context.clearStreamingUiState();
+			context.render();
 			context.setBindingStatusText(context.projectPath ? "Reconnecting session…" : null);
 			context.bumpModelLoadRequestSeq();
 			context.setLoadingModels(false);

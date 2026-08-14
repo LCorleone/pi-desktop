@@ -73,6 +73,7 @@ export class TerminalPanel {
 
 	private readonly ptyId: string;
 	private ptySpawned = false;
+	private disposed = false;
 	private currentGeneration = 0;
 	private spawnedCwd: string | null = null;
 	private spawnInFlight: Promise<void> | null = null;
@@ -108,6 +109,34 @@ export class TerminalPanel {
 
 	focusInput(): void {
 		this.xterm?.focus();
+	}
+
+	/** Tear down the panel: unlisten PTY events, kill the shell, dispose the
+	 * xterm instance/addon and the resize observer. Idempotent — safe to call
+	 * more than once or on a panel that never spawned a shell. */
+	dispose(): void {
+		if (this.disposed) return;
+		this.disposed = true;
+		this.unlistenData?.();
+		this.unlistenData = null;
+		this.unlistenExit?.();
+		this.unlistenExit = null;
+		this.resizeObserver?.disconnect();
+		this.resizeObserver = null;
+		// Kill the backing shell so a discarded panel leaves no orphan PTY.
+		// pty_kill is a no-op when no session exists for this id yet.
+		void invoke("pty_kill", { id: this.ptyId }).catch(() => {
+			// Ignore kill errors while tearing down.
+		});
+		this.fitAddon?.dispose();
+		this.fitAddon = null;
+		this.xterm?.dispose();
+		this.xterm = null;
+		this.ptySpawned = false;
+		this.spawnedCwd = null;
+		this.spawnInFlight = null;
+		this.onRequestClose = null;
+		this.onCommandComplete = null;
 	}
 
 	/** Run a command from an external trigger (e.g. command palette / chat).
@@ -197,7 +226,7 @@ export class TerminalPanel {
 	}
 
 	private async ensurePty(): Promise<void> {
-		if (getConnectionMode() === "ssh") return;
+		if (this.disposed || getConnectionMode() === "ssh") return;
 		if (this.ptySpawned) return;
 		if (this.spawnInFlight) return this.spawnInFlight;
 		const attempt = (async () => {
@@ -378,6 +407,7 @@ export class TerminalPanel {
 	}
 
 	render(): void {
+		if (this.disposed) return;
 		// Defense-in-depth: the terminal spawns a LOCAL PTY, which would run on
 		// the wrong machine in SSH mode. The dock launch is gated in main.ts; this
 		// guard ensures the panel never spawns a local shell if shown anyway.

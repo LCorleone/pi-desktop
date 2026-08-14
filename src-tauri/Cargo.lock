@@ -2675,6 +2675,7 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-notification",
  "tauri-plugin-shell",
+ "tempfile",
  "tokio",
  "which",
 ]

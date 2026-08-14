@@ -7,6 +7,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
+use tauri_plugin_fs::FsExt;
 
 mod pty;
 
@@ -64,6 +65,30 @@ fn stop_rpc_instance(handle: &mut RpcProcessHandle) {
     handle.stdin_writer = None;
     if let Some(mut child) = handle.process.take() {
         let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
+/// Reap an RPC child whose pipes have closed (called from whichever reader
+/// thread hits EOF first). Guarded by generation so a reader for a superseded
+/// process never touches the current one; taking the `Child` out of the map
+/// makes the reap exactly-once across the two reader threads, rpc_stop,
+/// rpc_is_running and a superseding rpc_start. wait() runs after the lock is
+/// released — it blocks, and must not stall the instances lock.
+fn try_reap_rpc_child(
+    instances: &Arc<Mutex<HashMap<String, RpcProcessHandle>>>,
+    instance_id: &str,
+    generation: u64,
+) {
+    let mut child_to_reap = None;
+    if let Ok(mut instances) = instances.lock() {
+        if let Some(handle) = instances.get_mut(instance_id) {
+            if handle.generation == generation {
+                child_to_reap = handle.process.take();
+            }
+        }
+    }
+    if let Some(mut child) = child_to_reap {
         let _ = child.wait();
     }
 }
@@ -860,18 +885,6 @@ async fn rpc_start(
 ) -> Result<RpcStartResult, String> {
     let instance_id = normalize_instance_id(instance_id);
 
-    let generation = if let Ok(mut instances) = state.instances.lock() {
-        if let Some(handle) = instances.get_mut(&instance_id) {
-            let next_generation = handle.generation.saturating_add(1).max(1);
-            stop_rpc_instance(handle);
-            next_generation
-        } else {
-            1
-        }
-    } else {
-        return Err("Failed to acquire RPC instances lock".to_string());
-    };
-
     let mode = options.connection_mode.as_deref().unwrap_or("local");
     let (mut cmd, discovery_label) = if mode == "ssh" {
         let ssh = options
@@ -921,8 +934,23 @@ async fn rpc_start(
     let stdout = child.stdout.take().ok_or("Failed to get stdout")?;
     let stderr = child.stderr.take().ok_or("Failed to get stderr")?;
 
-    // Store process + stdin handle for this instance
-    if let Ok(mut instances) = state.instances.lock() {
+    // Store process + stdin handle for this instance. Replacing a previous
+    // instance for this id (compute next generation, detach the old handle,
+    // insert the new one) happens in a single lock scope: with separate
+    // compute/insert scopes, two concurrent rpc_start calls for the same id
+    // could both compute the same generation and blindly overwrite each
+    // other's child — interleaving rpc-event streams and leaking the
+    // overwritten process un-killed.
+    let (generation, old_handle) = {
+        let mut instances = state
+            .instances
+            .lock()
+            .map_err(|_| "Failed to acquire RPC instances lock".to_string())?;
+        let old_handle = instances.remove(&instance_id);
+        let generation = match &old_handle {
+            Some(handle) => handle.generation.saturating_add(1).max(1),
+            None => 1,
+        };
         instances.insert(
             instance_id.clone(),
             RpcProcessHandle {
@@ -931,8 +959,13 @@ async fn rpc_start(
                 stdin_writer: Some(stdin),
             },
         );
-    } else {
-        return Err("Failed to acquire RPC instances lock".to_string());
+        (generation, old_handle)
+    };
+    // Stop + reap the superseded instance outside the instances lock:
+    // kill()/wait() block, and blocking under the global lock would stall
+    // every instance's rpc_send/rpc_stop/rpc_is_running.
+    if let Some(mut old_handle) = old_handle {
+        stop_rpc_instance(&mut old_handle);
     }
 
     // Shared ring buffer of recent stderr lines, used to surface legible failure reasons when
@@ -947,6 +980,7 @@ async fn rpc_start(
     let stdout_generation = generation;
     let stdout_buf = stderr_buf.clone();
     let stdout_start = start_time;
+    let stdout_instances = state.instances.clone();
     std::thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
@@ -965,6 +999,9 @@ async fn rpc_start(
                 Err(_) => break,
             }
         }
+        // EOF: the process has exited. Reap it so it doesn't linger as a
+        // zombie until the frontend happens to call rpc_is_running/rpc_stop.
+        try_reap_rpc_child(&stdout_instances, &stdout_instance_id, stdout_generation);
         // On early exit (< 8s), include recent stderr so auth/host-key/path failures
         // are legible instead of a bare "process exited". Otherwise keep the plain reason.
         let reason = if stdout_start.elapsed() < Duration::from_secs(8) {
@@ -999,6 +1036,7 @@ async fn rpc_start(
     let stderr_instance_id = instance_id.clone();
     let stderr_generation = generation;
     let stderr_buf_clone = stderr_buf.clone();
+    let stderr_instances = state.instances.clone();
     std::thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
@@ -1020,6 +1058,10 @@ async fn rpc_start(
                 Err(_) => break,
             }
         }
+        // If stderr EOFs before stdout (e.g. a grandchild keeps the stdout
+        // pipe open), this thread reaps the exited child instead — the take()
+        // inside try_reap_rpc_child makes the reap exactly-once.
+        try_reap_rpc_child(&stderr_instances, &stderr_instance_id, stderr_generation);
     });
 
     Ok(RpcStartResult {
@@ -1310,28 +1352,59 @@ fn parse_session_info(path: &Path) -> Option<SessionInfo> {
 async fn list_sessions(app: AppHandle) -> Result<Vec<SessionInfo>, String> {
     let sessions_dir = get_pi_sessions_dir(&app)?;
 
-    if !sessions_dir.exists() {
-        fs::create_dir_all(&sessions_dir)
-            .map_err(|e| format!("Failed to create sessions dir: {}", e))?;
-        return Ok(Vec::new());
-    }
+    // Walking the sessions tree and parsing every transcript is blocking
+    // file IO (transcripts can be large) — keep it off the async runtime
+    // thread (same pattern as test_ssh_connection).
+    let sessions = tokio::task::spawn_blocking(move || -> Result<Vec<SessionInfo>, String> {
+        if !sessions_dir.exists() {
+            fs::create_dir_all(&sessions_dir)
+                .map_err(|e| format!("Failed to create sessions dir: {}", e))?;
+            return Ok(Vec::new());
+        }
 
-    let mut files = Vec::new();
-    collect_session_files_recursive(&sessions_dir, &mut files);
+        let mut files = Vec::new();
+        collect_session_files_recursive(&sessions_dir, &mut files);
 
-    let mut sessions = files
-        .iter()
-        .filter_map(|path| parse_session_info(path))
-        .collect::<Vec<_>>();
+        let mut sessions = files
+            .iter()
+            .filter_map(|path| parse_session_info(path))
+            .collect::<Vec<_>>();
 
-    sessions.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+        sessions.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+        Ok(sessions)
+    })
+    .await
+    .map_err(|e| format!("Failed to list sessions: {}", e))??;
+
     Ok(sessions)
 }
 
-/// Get the content of a session file
+/// Get the content of a session file. The webview is untrusted, so only
+/// paths that resolve inside pi's sessions directory are allowed — anything
+/// else would turn this into an arbitrary file read.
 #[tauri::command]
-async fn get_session_content(session_path: String) -> Result<String, String> {
-    fs::read_to_string(&session_path).map_err(|e| format!("Failed to read session: {}", e))
+async fn get_session_content(app: AppHandle, session_path: String) -> Result<String, String> {
+    let sessions_dir = get_pi_sessions_dir(&app)?;
+    let path = PathBuf::from(session_path.trim());
+    // canonicalize resolves `..`, symlinks and relative segments before the
+    // containment check.
+    let canonical_path = path
+        .canonicalize()
+        .map_err(|e| format!("Failed to read session: {}", e))?;
+    let canonical_sessions_dir = sessions_dir
+        .canonicalize()
+        .map_err(|e| format!("Failed to read session: {}", e))?;
+    if !canonical_path.starts_with(&canonical_sessions_dir) {
+        return Err(format!(
+            "Session path is outside the pi sessions directory: {}",
+            session_path.trim()
+        ));
+    }
+    // Session transcripts can be large; read off the async runtime thread.
+    tokio::task::spawn_blocking(move || fs::read_to_string(&canonical_path))
+        .await
+        .map_err(|e| format!("Failed to read session: {}", e))?
+        .map_err(|e| format!("Failed to read session: {}", e))
 }
 
 #[derive(Debug, Serialize)]
@@ -1816,37 +1889,45 @@ async fn get_pi_oauth_providers(app: AppHandle) -> Result<Vec<PiOAuthProviderInf
         pi_path: None,
     };
 
-    let output = match build_plain_command(&pi, &list_opts).output() {
-        Ok(output) => output,
-        Err(_) => return Ok(providers),
-    };
+    // `pi list` is a subprocess and the package scans below do file IO —
+    // both block, so run them on the blocking thread pool.
+    let providers = tokio::task::spawn_blocking(move || {
+        let output = match build_plain_command(&pi, &list_opts).output() {
+            Ok(output) => output,
+            Err(_) => return providers,
+        };
 
-    if !output.status.success() {
-        return Ok(providers);
-    }
+        if !output.status.success() {
+            return providers;
+        }
 
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let package_paths = parse_package_paths_from_pi_list_output(&stdout);
-    let mut custom_providers: Vec<PiOAuthProviderInfo> = Vec::new();
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let package_paths = parse_package_paths_from_pi_list_output(&stdout);
+        let mut custom_providers: Vec<PiOAuthProviderInfo> = Vec::new();
 
-    for package_path in package_paths {
-        for provider in extract_oauth_providers_from_package(&package_path) {
-            if !seen.insert(provider.id.clone()) {
-                continue;
+        for package_path in package_paths {
+            for provider in extract_oauth_providers_from_package(&package_path) {
+                if !seen.insert(provider.id.clone()) {
+                    continue;
+                }
+                custom_providers.push(provider);
             }
-            custom_providers.push(provider);
         }
-    }
 
-    custom_providers.sort_by(|a, b| {
-        let name_cmp = a.name.to_lowercase().cmp(&b.name.to_lowercase());
-        if name_cmp != std::cmp::Ordering::Equal {
-            return name_cmp;
-        }
-        a.id.cmp(&b.id)
-    });
+        custom_providers.sort_by(|a, b| {
+            let name_cmp = a.name.to_lowercase().cmp(&b.name.to_lowercase());
+            if name_cmp != std::cmp::Ordering::Equal {
+                return name_cmp;
+            }
+            a.id.cmp(&b.id)
+        });
 
-    providers.extend(custom_providers);
+        providers.extend(custom_providers);
+        providers
+    })
+    .await
+    .map_err(|e| format!("Failed to list pi packages: {}", e))?;
+
     Ok(providers)
 }
 
@@ -2311,9 +2392,13 @@ async fn run_pi_cli_command(
     let pi = discover_pi(&app, &discovery_opts)?;
     let discovery_label = format!("{:?}", pi);
 
-    let output = build_plain_command(&pi, &options)
-        .output()
-        .map_err(|e| format!("Failed to run pi command ({:?}): {}", pi, e))?;
+    // pi CLI commands can run for a while (package installs etc.) — run on
+    // the blocking thread pool instead of the async runtime thread.
+    let mut cmd = build_plain_command(&pi, &options);
+    let output = tokio::task::spawn_blocking(move || cmd.output())
+        .await
+        .map_err(|e| format!("Failed to run pi command: {}", e))?
+        .map_err(|e| format!("Failed to run pi command ({}): {}", discovery_label, e))?;
 
     Ok(PiCliCommandResult {
         stdout: String::from_utf8_lossy(&output.stdout).to_string(),
@@ -2349,9 +2434,22 @@ async fn get_cli_update_status(
 
     let pi = discover_pi(&app, &discovery_opts)?;
     let discovery = format!("{:?}", pi);
-    let current_version = get_current_pi_version(&pi, &opts);
 
-    let (npm_available, latest_version, npm_note) = get_latest_npm_cli_version(Some(&pi));
+    // Both version checks shell out (pi --version, npm view) — blocking
+    // subprocesses, so run them on the blocking thread pool.
+    let pi_for_version = pi.clone();
+    let current_version = tokio::task::spawn_blocking(move || {
+        get_current_pi_version(&pi_for_version, &opts)
+    })
+    .await
+    .map_err(|e| format!("Failed to check current CLI version: {}", e))?;
+
+    let pi_for_npm = pi.clone();
+    let (npm_available, latest_version, npm_note) = tokio::task::spawn_blocking(move || {
+        get_latest_npm_cli_version(Some(&pi_for_npm))
+    })
+    .await
+    .map_err(|e| format!("Failed to check latest CLI version: {}", e))?;
 
     let can_update_in_app = matches!(pi, PiProcess::PathBinary { .. });
     let update_command = "npm install -g @earendil-works/pi-coding-agent@latest".to_string();
@@ -2411,35 +2509,42 @@ async fn get_pi_changelog(
     };
 
     let pi = discover_pi(&app, &discovery_opts)?;
-    let candidates = resolve_pi_changelog_candidates(&pi);
-    let mut seen = HashSet::new();
 
-    for candidate in candidates {
-        let raw = candidate.to_string_lossy().to_string();
-        if raw.trim().is_empty() || !seen.insert(raw.clone()) {
-            continue;
-        }
-        if !candidate.is_file() {
-            continue;
-        }
+    // Candidate resolution shells out to `npm root -g` and reads changelog
+    // files — blocking work, keep it off the async runtime thread.
+    tokio::task::spawn_blocking(move || -> Result<PiChangelogResult, String> {
+        let candidates = resolve_pi_changelog_candidates(&pi);
+        let mut seen = HashSet::new();
 
-        match fs::read_to_string(&candidate) {
-            Ok(content) => {
-                return Ok(PiChangelogResult {
-                    path: raw,
-                    content,
-                });
-            }
-            Err(_) => {
+        for candidate in candidates {
+            let raw = candidate.to_string_lossy().to_string();
+            if raw.trim().is_empty() || !seen.insert(raw.clone()) {
                 continue;
             }
-        }
-    }
+            if !candidate.is_file() {
+                continue;
+            }
 
-    Err(format!(
-        "Could not locate Pi Coding Agent changelog for discovery: {:?}",
-        pi
-    ))
+            match fs::read_to_string(&candidate) {
+                Ok(content) => {
+                    return Ok(PiChangelogResult {
+                        path: raw,
+                        content,
+                    });
+                }
+                Err(_) => {
+                    continue;
+                }
+            }
+        }
+
+        Err(format!(
+            "Could not locate Pi Coding Agent changelog for discovery: {:?}",
+            pi
+        ))
+    })
+    .await
+    .map_err(|e| format!("Failed to load changelog: {}", e))?
 }
 
 /// Update globally installed pi CLI via npm.
@@ -2466,8 +2571,11 @@ async fn update_cli_via_npm() -> Result<NpmCommandResult, String> {
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
 
-    let output = cmd
-        .output()
+    // npm install can run for tens of seconds — run it on the blocking
+    // thread pool instead of the async runtime thread.
+    let output = tokio::task::spawn_blocking(move || cmd.output())
+        .await
+        .map_err(|e| format!("Failed to run npm update command: {}", e))?
         .map_err(|e| format!("Failed to run npm update command: {}", e))?;
 
     Ok(NpmCommandResult {
@@ -2477,10 +2585,90 @@ async fn update_cli_via_npm() -> Result<NpmCommandResult, String> {
     })
 }
 
+/// Reject git arguments that would let the webview smuggle in arbitrary
+/// command execution or config/transport overrides:
+/// - `ext::<command>` remote URLs (e.g. `git clone ext::'sh -c ...'`)
+/// - global config injection (`-c k=v` or attached `-ck=v`)
+/// - transport program overrides (`--upload-pack[=x]`, `--receive-pack[=x]`,
+///   `--exec[=x]`, `--exec-path <x>`)
+/// The UI only issues read-only status/branch/diff style git commands, none
+/// of which use these forms.
+fn is_unsafe_git_arg(arg: &str) -> bool {
+    if arg.to_ascii_lowercase().contains("ext::") {
+        return true;
+    }
+    matches!(
+        arg,
+        "-c" | "--upload-pack" | "--receive-pack" | "--exec" | "--exec-path"
+    ) || arg.starts_with("--upload-pack=")
+        || arg.starts_with("--receive-pack=")
+        || arg.starts_with("--exec=")
+        || (arg.starts_with("-c") && arg.contains('='))
+}
+
+#[cfg(test)]
+mod git_guard_tests {
+    use super::is_unsafe_git_arg;
+
+    #[test]
+    fn allows_frontend_argument_shapes() {
+        let legit = [
+            vec!["rev-parse", "--verify", "HEAD"],
+            vec!["symbolic-ref", "HEAD", "refs/heads/main"],
+            vec!["checkout", "--orphan", "my-branch"],
+            vec!["rev-parse", "--is-inside-work-tree"],
+            vec!["symbolic-ref", "--short", "HEAD"],
+            vec!["for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes"],
+            vec!["status", "--porcelain"],
+            vec!["diff", "--numstat"],
+            vec!["diff", "--cached", "--numstat"],
+            vec!["rev-parse", "--abbrev-ref", "HEAD"],
+            vec!["init"],
+            vec!["branch", "-M", "main"],
+            vec!["push", "-u", "origin", "main"],
+        ];
+        for args in legit {
+            for arg in args {
+                assert!(!is_unsafe_git_arg(arg), "should allow {:?}", arg);
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_transport_and_config_injection() {
+        let unsafe_args = [
+            "ext::sh -c touch /tmp/pwned",
+            "EXT::sh -c x",
+            "--upload-pack",
+            "--upload-pack=sh -c x",
+            "--receive-pack",
+            "--receive-pack=/tmp/evil",
+            "--exec",
+            "--exec=git-shell",
+            "--exec-path",
+            "-c",
+            "-ccore.fsmonitor=sh -c x",
+            "-c", // separate-value form is caught by the exact match
+        ];
+        for arg in unsafe_args {
+            assert!(is_unsafe_git_arg(arg), "should reject {:?}", arg);
+        }
+        // Full exploit shapes from the webview:
+        assert!(is_unsafe_git_arg("ext::'sh -c id'"));
+        assert!(!is_unsafe_git_arg("--exec-path=/usr/lib/git-core")); // inline form: no separate value token
+    }
+}
+
 #[tauri::command]
 async fn run_git_command(options: GitCommandOptions) -> Result<GitCommandResult, String> {
     if options.args.is_empty() {
         return Err("No git command arguments provided".to_string());
+    }
+
+    for arg in &options.args {
+        if is_unsafe_git_arg(arg) {
+            return Err(format!("Refusing to run git with unsafe argument: {}", arg));
+        }
     }
 
     let git_path = which::which("git").map_err(|_| "git was not found on PATH".to_string())?;
@@ -2501,8 +2689,11 @@ async fn run_git_command(options: GitCommandOptions) -> Result<GitCommandResult,
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
 
-    let output = cmd
-        .output()
+    // git invocations can take a while on big repos — run on the blocking
+    // thread pool instead of the async runtime thread.
+    let output = tokio::task::spawn_blocking(move || cmd.output())
+        .await
+        .map_err(|e| format!("Failed to run git command: {}", e))?
         .map_err(|e| format!("Failed to run git command: {}", e))?;
 
     Ok(GitCommandResult {
@@ -2542,8 +2733,11 @@ async fn create_share_gist(options: ShareGistOptions) -> Result<ShareGistResult,
         auth_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
 
-    let auth_output = auth_cmd
-        .output()
+    // gh invocations are blocking subprocesses — run on the blocking thread
+    // pool instead of the async runtime thread.
+    let auth_output = tokio::task::spawn_blocking(move || auth_cmd.output())
+        .await
+        .map_err(|e| format!("Failed to run gh auth status: {}", e))?
         .map_err(|e| format!("Failed to run gh auth status: {}", e))?;
 
     if !auth_output.status.success() {
@@ -2570,8 +2764,9 @@ async fn create_share_gist(options: ShareGistOptions) -> Result<ShareGistResult,
         gist_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
 
-    let gist_output = gist_cmd
-        .output()
+    let gist_output = tokio::task::spawn_blocking(move || gist_cmd.output())
+        .await
+        .map_err(|e| format!("Failed to run gh gist create: {}", e))?
         .map_err(|e| format!("Failed to run gh gist create: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&gist_output.stdout).to_string();
@@ -2627,10 +2822,13 @@ async fn open_path_in_default_app(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "macos")]
     {
-        let primary = Command::new("open")
-            .arg(&target)
-            .output()
-            .map_err(|e| format!("Failed to launch open command: {}", e))?;
+        let open_target = target.clone();
+        let primary = tokio::task::spawn_blocking(move || {
+            Command::new("open").arg(&open_target).output()
+        })
+        .await
+        .map_err(|e| format!("Failed to launch open command: {}", e))?
+        .map_err(|e| format!("Failed to launch open command: {}", e))?;
 
         if primary.status.success() {
             return Ok(());
@@ -2638,12 +2836,17 @@ async fn open_path_in_default_app(path: String) -> Result<(), String> {
 
         // Some files (e.g. .sample hooks in .git) have no associated app.
         // Fall back to TextEdit so "Open in editor" still works.
-        let fallback = Command::new("open")
-            .arg("-a")
-            .arg("TextEdit")
-            .arg(&target)
-            .output()
-            .map_err(|e| format!("Failed to launch TextEdit fallback: {}", e))?;
+        let open_target = target.clone();
+        let fallback = tokio::task::spawn_blocking(move || {
+            Command::new("open")
+                .arg("-a")
+                .arg("TextEdit")
+                .arg(&open_target)
+                .output()
+        })
+        .await
+        .map_err(|e| format!("Failed to launch TextEdit fallback: {}", e))?
+        .map_err(|e| format!("Failed to launch TextEdit fallback: {}", e))?;
 
         if fallback.status.success() {
             return Ok(());
@@ -2668,10 +2871,14 @@ async fn open_path_in_default_app(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     {
-        let output = Command::new("xdg-open")
-            .arg(&target)
-            .output()
-            .map_err(|e| format!("Failed to launch xdg-open command: {}", e))?;
+        // xdg-open can block on desktop-environment handshakes — run it on
+        // the blocking thread pool instead of the async runtime thread.
+        let output = tokio::task::spawn_blocking(move || {
+            Command::new("xdg-open").arg(&target).output()
+        })
+        .await
+        .map_err(|e| format!("Failed to launch xdg-open command: {}", e))?
+        .map_err(|e| format!("Failed to launch xdg-open command: {}", e))?;
 
         if output.status.success() {
             return Ok(());
@@ -2687,13 +2894,18 @@ async fn open_path_in_default_app(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        let output = Command::new("cmd")
-            .arg("/C")
-            .arg("start")
-            .arg("")
-            .arg(target.as_os_str())
-            .output()
-            .map_err(|e| format!("Failed to launch start command: {}", e))?;
+        let open_target = target.clone();
+        let output = tokio::task::spawn_blocking(move || {
+            Command::new("cmd")
+                .arg("/C")
+                .arg("start")
+                .arg("")
+                .arg(open_target.as_os_str())
+                .output()
+        })
+        .await
+        .map_err(|e| format!("Failed to launch start command: {}", e))?
+        .map_err(|e| format!("Failed to launch start command: {}", e))?;
 
         if output.status.success() {
             return Ok(());
@@ -2709,6 +2921,151 @@ async fn open_path_in_default_app(path: String) -> Result<(), String> {
 
     #[allow(unreachable_code)]
     Err("Unsupported platform for open_path_in_default_app".to_string())
+}
+
+/// Filesystem roots that must never be granted project write access. These are
+/// checked against the canonical path (see `is_allowed_project_scope_path`) so
+/// a hostile webview cannot widen the fs scope to system directories.
+const BLOCKED_PROJECT_SCOPE_ROOTS: [&str; 11] = [
+    "/etc", "/usr", "/bin", "/sbin", "/lib", "/var", "/boot", "/dev", "/proc", "/sys",
+    "/root",
+];
+
+/// Pure validation for `allow_project_fs_scope`: is the (canonical) candidate
+/// path safe to grant recursive fs read/write access?
+/// Rejected: the filesystem root itself (subsumes every rule below), the home
+/// dir root, and `$HOME/.<anything>/**` — direct dot-children of home (.ssh,
+/// .config, .gnupg, .bashrc-style dotfiles) and everything under them. Deeper
+/// dot dirs such as `$HOME/code/.venv` stay allowed: only DIRECT children of
+/// $HOME are blocked. Also rejected: anything under BLOCKED_PROJECT_SCOPE_ROOTS.
+fn is_allowed_project_scope_path(candidate: &Path, home: &Path) -> bool {
+    // The filesystem root ("/" on unix, "C:\" on windows) would subsume every
+    // rule below — `parent().is_none()` is the canonical-path way to say root.
+    if candidate.parent().is_none() {
+        return false;
+    }
+    if candidate == home {
+        return false;
+    }
+    if let Ok(rest) = candidate.strip_prefix(home) {
+        if let Some(first) = rest.components().next() {
+            if first.as_os_str().to_string_lossy().starts_with('.') {
+                return false;
+            }
+        }
+    }
+    !BLOCKED_PROJECT_SCOPE_ROOTS
+        .iter()
+        .any(|root| candidate.starts_with(Path::new(root)))
+}
+
+/// Widen the fs plugin's runtime scope to a project directory the user
+/// explicitly opened/created, restoring read+write access (file-viewer save,
+/// sidebar create/rename/delete) outside `$HOME/.pi/**`. Defense-in-depth:
+/// only explicitly-opened project dirs get write access, never all of $HOME.
+#[tauri::command]
+async fn allow_project_fs_scope(app: AppHandle, path: String) -> Result<(), String> {
+    let raw = path.trim();
+    let candidate = Path::new(raw);
+    if raw.is_empty() || !candidate.is_absolute() {
+        return Err(format!("Project path must be absolute: {}", raw));
+    }
+    // canonicalize resolves `..`, symlinks and relative segments, and fails on
+    // paths that don't exist — the grant below must use the canonical form or a
+    // symlinked path could dodge the block checks.
+    let canonical = candidate
+        .canonicalize()
+        .map_err(|e| format!("Failed to resolve project path {}: {}", raw, e))?;
+    if !canonical.is_dir() {
+        return Err(format!("Project path is not a directory: {}", canonical.display()));
+    }
+
+    let home = home_dir().ok_or("Could not find home directory")?;
+    let canonical_home = fs::canonicalize(&home).unwrap_or(home);
+    if !is_allowed_project_scope_path(&canonical, &canonical_home) {
+        return Err(format!(
+            "Refusing to grant project fs scope to a blocked path: {}",
+            canonical.display()
+        ));
+    }
+    // Belt-and-braces: compare against canonicalized blocked roots too, so
+    // symlink aliases (macOS /etc -> /private/etc, merged-usr /bin -> /usr/bin)
+    // can't dodge the raw-path blocklist above.
+    if BLOCKED_PROJECT_SCOPE_ROOTS.iter().any(|root| {
+        let canonical_root = fs::canonicalize(root).unwrap_or_else(|_| PathBuf::from(root));
+        canonical.starts_with(&canonical_root)
+    }) {
+        return Err(format!(
+            "Refusing to grant project fs scope to a blocked path: {}",
+            canonical.display()
+        ));
+    }
+
+    // tauri-plugin-fs 2.x has a single runtime scope shared by read and write
+    // commands, so one recursive allow_directory grants both.
+    app.fs_scope()
+        .allow_directory(&canonical, true)
+        .map_err(|e| format!("Failed to allow project directory: {}", e))
+}
+
+#[cfg(test)]
+mod project_scope_tests {
+    use super::is_allowed_project_scope_path;
+    use std::path::Path;
+
+    #[test]
+    fn rejects_home_root_and_sensitive_dot_children() {
+        let home = Path::new("/home/user");
+        assert!(!is_allowed_project_scope_path(home, home));
+        assert!(!is_allowed_project_scope_path(&home.join(".ssh"), home));
+        assert!(!is_allowed_project_scope_path(&home.join(".config"), home));
+        // Under a direct dot-child of home is blocked too (.config et al.)
+        assert!(!is_allowed_project_scope_path(&home.join(".config").join("foo"), home));
+        assert!(!is_allowed_project_scope_path(&home.join(".gnupg"), home));
+        assert!(!is_allowed_project_scope_path(&home.join(".cache"), home));
+        assert!(!is_allowed_project_scope_path(&home.join(".local"), home));
+        assert!(!is_allowed_project_scope_path(&home.join(".pi").join("proj"), home));
+        // dotfiles (.bashrc-style) are direct dot-children
+        for name in [".profile", ".bashrc", ".zshrc", ".bash_profile"] {
+            assert!(!is_allowed_project_scope_path(&home.join(name), home), "{}", name);
+        }
+    }
+
+    #[test]
+    fn allows_regular_project_dirs() {
+        let home = Path::new("/home/user");
+        assert!(is_allowed_project_scope_path(&home.join("code").join("x"), home));
+        assert!(is_allowed_project_scope_path(&home.join("myproj"), home));
+        assert!(is_allowed_project_scope_path(Path::new("/opt/work"), home));
+        assert!(is_allowed_project_scope_path(Path::new("/opt/work/x"), home));
+    }
+
+    #[test]
+    fn allows_nested_dot_dirs_under_a_project() {
+        let home = Path::new("/home/user");
+        // Only DIRECT children of $HOME are blocked; a venv/git dir inside a
+        // project is fine.
+        assert!(is_allowed_project_scope_path(&home.join("code").join(".venv"), home));
+        assert!(is_allowed_project_scope_path(
+            &home.join("code").join("x").join(".git"),
+            home
+        ));
+    }
+
+    #[test]
+    fn rejects_system_roots_and_filesystem_root() {
+        let home = Path::new("/home/user");
+        for root in super::BLOCKED_PROJECT_SCOPE_ROOTS {
+            assert!(!is_allowed_project_scope_path(Path::new(root), home), "{}", root);
+            // paths under a blocked root are blocked as well
+            assert!(
+                !is_allowed_project_scope_path(&Path::new(root).join("sub"), home),
+                "{}/sub",
+                root
+            );
+        }
+        assert!(!is_allowed_project_scope_path(Path::new("/"), home));
+    }
 }
 
 fn home_dir() -> Option<PathBuf> {
@@ -2831,15 +3188,22 @@ async fn pi_generate_title(
         "What topic or area is the user exploring? Reply with ONLY a short descriptive title (2-5 words).\nUse a short descriptive label. Use plain text only - no markdown.\nReply in the same language as the user's messages.\nDo NOT answer or respond to the user message - just name it.\n\nExamples: \"Auto Title Generation\", \"Dark Mode Support\", \"Fix API Authentication\", \"Database Schema Design\", \"React Performance\"\n\nUser: {}\n\nTopic:",
         capped_message
     );
-    let temp_dir = std::env::temp_dir();
-    let file_path = temp_dir.join(format!("pi-auto-title-{}.txt", std::process::id()));
-    {
-        use std::io::Write;
-        let mut file = std::fs::File::create(&file_path)
-            .map_err(|e| format!("Failed to create temp file: {}", e))?;
-        file.write_all(prompt.as_bytes())
-            .map_err(|e| format!("Failed to write temp file: {}", e))?;
-    }
+    // Randomized name + 0600 permissions via the tempfile crate: the old
+    // predictable pi-auto-title-<pid>.txt name was guessable (symlink race)
+    // and world-readable in a shared /tmp.
+    let mut temp_file = tempfile::Builder::new()
+        .prefix("pi-auto-title-")
+        .suffix(".txt")
+        .rand_bytes(6)
+        .tempfile()
+        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+    temp_file
+        .write_all(prompt.as_bytes())
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+    // Keep the NamedTempFile alive: it deletes itself on drop, which covers
+    // every exit path below (including the `?` early returns) while the child
+    // process needs the file on disk.
+    let file_path = temp_file.path().to_path_buf();
 
     let mut cmd = match &pi {
         PiProcess::DevNode { script } => {
@@ -2883,8 +3247,9 @@ async fn pi_generate_title(
         tokio::task::spawn_blocking(move || cmd.output()),
     ).await;
 
-    // Always clean up temp file even on timeout/error
-    let _ = std::fs::remove_file(&file_path);
+    // Always clean up temp file even on timeout/error (drop deletes it;
+    // early `?` returns above get the same cleanup for free)
+    drop(temp_file);
 
     let output = output_result
         .map_err(|_| "Timed out waiting for pi --print (30s)".to_string())?
@@ -3146,6 +3511,7 @@ pub fn run() {
             create_share_gist,
             get_desktop_runtime_info,
             open_path_in_default_app,
+            allow_project_fs_scope,
             load_models_config,
             save_models_config,
             generate_session_title,

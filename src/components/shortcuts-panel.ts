@@ -64,7 +64,7 @@ export class ShortcutsPanel {
 
 	render(): void {
 		if (!this.isOpen) {
-			this.container.innerHTML = "";
+			render(nothing, this.container);
 			return;
 		}
 
@@ -115,6 +115,6 @@ export class ShortcutsPanel {
 	}
 
 	destroy(): void {
-		this.container.innerHTML = "";
+		render(nothing, this.container);
 	}
 }

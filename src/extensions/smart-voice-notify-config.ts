@@ -1,11 +1,7 @@
+import { joinFsPath } from "../utils/fs-paths.js";
+
 const SMART_VOICE_NOTIFY_DIR = "pi-smart-voice-notify";
 const SMART_VOICE_NOTIFY_CONFIG_FILE = "config.json";
-
-function joinFsPath(base: string, child: string): string {
-	const b = base.replace(/\\/g, "/").replace(/\/+$/, "");
-	const c = child.replace(/\\/g, "/").replace(/^\/+/, "");
-	return b ? `${b}/${c}` : c;
-}
 
 function isLikelyWindowsPlatform(): boolean {
 	if (typeof navigator === "undefined") return false;

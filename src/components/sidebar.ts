@@ -8,6 +8,7 @@ import { clearActiveDraggedFilePaths, setActiveDraggedFilePaths } from "./file-d
 import { EMOJI_CATALOG } from "./emoji-catalog.js";
 import { getConnectionMode, getSshConfig, isSshEnabled, onConnectionChange } from "../connection-state.js";
 import { fetchAndCacheSessionList, getCachedSessionList, invalidateSessionListCache } from "../rpc/session-cache.js";
+import { joinFsPath, pathBaseName } from "../utils/fs-paths.js";
 import type { SshConnectionConfig, SshSavedConfig } from "../rpc/bridge.js";
 
 export type SidebarMode = "projects" | "files";
@@ -17,7 +18,6 @@ export interface SidebarWorkspaceItem {
 	title: string;
 	emoji?: string | null;
 	color?: string | null;
-	pinned?: boolean;
 	closable?: boolean;
 }
 
@@ -139,18 +139,6 @@ function normalizeProjectEmoji(emoji: string | null | undefined): string {
 function normalizePath(path: string | null | undefined): string {
 	if (!path) return "";
 	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-}
-
-function pathBaseName(path: string): string {
-	const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
-	const parts = normalized.split("/");
-	return parts[parts.length - 1] || normalized || path;
-}
-
-function joinFsPath(base: string, name: string): string {
-	const sep = base.includes("\\") ? "\\" : "/";
-	const normalizedBase = base.replace(/[\\/]+$/, "");
-	return `${normalizedBase}${sep}${name}`;
 }
 
 function parentFsPath(path: string): string {
@@ -495,7 +483,6 @@ export class Sidebar {
 			title: workspace.title,
 			emoji: workspace.emoji ?? null,
 			color: workspace.color ?? null,
-			pinned: Boolean(workspace.pinned),
 			closable: Boolean(workspace.closable),
 		}));
 		const nextActive = activeWorkspaceId && next.some((workspace) => workspace.id === activeWorkspaceId)
@@ -511,7 +498,6 @@ export class Sidebar {
 					current.title === workspace.title &&
 					(current.emoji ?? null) === (workspace.emoji ?? null) &&
 					(current.color ?? null) === (workspace.color ?? null) &&
-					Boolean(current.pinned) === Boolean(workspace.pinned) &&
 					Boolean(current.closable) === Boolean(workspace.closable);
 			});
 
@@ -1804,9 +1790,7 @@ export class Sidebar {
 				const projectPath = normalizePath(project.path);
 				const byProject = sessions.filter((s) => {
 					const cwdPath = normalizePath(s.cwd);
-					if (cwdPath && cwdPath === projectPath) return true;
-					const sessionPath = normalizePath(s.path);
-					return sessionPath.includes(projectPath) || sessionPath.includes(normalizePath(project.name));
+					return Boolean(cwdPath) && cwdPath === projectPath;
 				});
 
 				const visibleProjectSessions = byProject.filter((session) => !this.suppressedSessionPaths.has(normalizePath(session.path)));
@@ -3361,10 +3345,7 @@ export class Sidebar {
 								${this.workspaces.map((workspace, index) => {
 									const active = workspace.id === this.activeWorkspaceId;
 									const dragOver = workspace.id === this.workspaceDragOverId && this.draggingWorkspaceId !== workspace.id;
-									const prevWorkspace = this.workspaces[index - 1] ?? null;
-									const showPinnedDivider = Boolean(prevWorkspace?.pinned) && !Boolean(workspace.pinned);
 									return html`
-										${showPinnedDivider ? html`<div class="sidebar-workspace-pin-divider" role="separator" aria-hidden="true"></div>` : nothing}
 										<div
 											class="sidebar-workspace-row ${active ? "active" : ""} ${dragOver ? "drag-over" : ""} ${workspace.id === this.draggingWorkspaceId ? "dragging" : ""}"
 											data-workspace-id=${workspace.id}

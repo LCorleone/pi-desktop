@@ -4,9 +4,11 @@
 
 import "@mariozechner/mini-lit/dist/CodeBlock.js";
 import "@mariozechner/mini-lit/dist/MarkdownBlock.js";
+import "./safe-markdown.js";
 import { invoke } from "@tauri-apps/api/core";
 import { html, nothing, render } from "lit";
 import type { DiffLine } from "./chat-view/assistant-workflow-view.js";
+import { joinFsPath, pathBaseName, pathDirName } from "../utils/fs-paths.js";
 
 type FileViewMode = "rendered" | "raw";
 
@@ -26,29 +28,9 @@ function fileExtension(path: string): string {
 	return base.slice(idx + 1).toLowerCase();
 }
 
-function pathBaseName(path: string): string {
-	const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
-	const parts = normalized.split("/");
-	return parts[parts.length - 1] || normalized;
-}
-
-function pathDirName(path: string): string {
-	const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
-	const idx = normalized.lastIndexOf("/");
-	if (idx === -1) return "";
-	if (idx === 0) return "/";
-	return normalized.slice(0, idx);
-}
-
 function isMarkdownPath(path: string | null): boolean {
 	if (!path) return false;
 	return ["md", "markdown", "mdown", "mkdn", "mdx"].includes(fileExtension(path));
-}
-
-function joinFsPath(base: string, name: string): string {
-	const sep = base.includes("\\") ? "\\" : "/";
-	const normalizedBase = base.replace(/[\\/]+$/, "");
-	return `${normalizedBase}${sep}${name}`;
 }
 
 export class FileViewer {
@@ -68,6 +50,7 @@ export class FileViewer {
 	private diffLines: DiffLine[] | null = null;
 	private diffName: string | null = null;
 	private openingExternal = false;
+	private openRequestSeq = 0;
 	private autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 	private onDraftFileCreated: ((filePath: string) => void) | null = null;
 	private onClose: (() => void) | null = null;
@@ -107,9 +90,14 @@ export class FileViewer {
 	}
 
 	async openFile(filePath: string, options: { force?: boolean } = {}): Promise<void> {
+		// Monotonic request token: a newer openFile/openDraft/clear invalidates
+		// this request so a slow read can never clobber the newer file's state
+		// (or autosave its content into the newer file's path).
+		const requestSeq = ++this.openRequestSeq;
 		if (!options.force && this.filePath === filePath && !this.draftId && !this.loading) return;
 		if (this.filePath && this.filePath !== filePath && this.dirty) {
 			await this.persistOpenedFile({ silent: true });
+			if (requestSeq !== this.openRequestSeq) return;
 		}
 		this.clearAutoSaveTimer();
 		if (this.filePath !== filePath) {
@@ -130,7 +118,9 @@ export class FileViewer {
 
 		try {
 			const { readTextFile } = await import("@tauri-apps/plugin-fs");
+			if (requestSeq !== this.openRequestSeq) return;
 			const text = await readTextFile(filePath);
+			if (requestSeq !== this.openRequestSeq) return;
 			if (text.includes("\u0000")) {
 				this.error = "Binary file preview is not supported yet.";
 				this.content = "";
@@ -140,16 +130,19 @@ export class FileViewer {
 				this.editorText = text;
 			}
 		} catch (err) {
+			if (requestSeq !== this.openRequestSeq) return;
 			this.error = err instanceof Error ? err.message : String(err);
 			this.content = "";
 			this.editorText = "";
 		} finally {
+			if (requestSeq !== this.openRequestSeq) return;
 			this.loading = false;
 			this.render();
 		}
 	}
 
 	openDraft(draftId: string, suggestedName = DEFAULT_DRAFT_NAME): void {
+		this.openRequestSeq += 1; // invalidate any in-flight openFile
 		this.clearAutoSaveTimer();
 		this.diffLines = null;
 		this.diffName = null;
@@ -176,6 +169,7 @@ export class FileViewer {
 	}
 
 	clear(): void {
+		this.openRequestSeq += 1; // invalidate any in-flight openFile
 		this.clearAutoSaveTimer();
 		this.diffLines = null;
 		this.diffName = null;
@@ -413,7 +407,7 @@ export class FileViewer {
 								: markdown && this.viewMode === "rendered"
 									? html`
 										<div class="file-viewer-markdown">
-											<markdown-block .content=${this.editorText}></markdown-block>
+											<safe-markdown-block .content=${this.editorText}></safe-markdown-block>
 										</div>
 									`
 									: html`

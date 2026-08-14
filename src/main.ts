@@ -2,6 +2,7 @@
  * Pi Desktop - app bootstrap
  */
 
+import { invoke } from "@tauri-apps/api/core";
 import { html, nothing, render } from "lit";
 import { ChatView } from "./components/chat-view.js";
 import type { DiffLine } from "./components/chat-view/assistant-workflow-view.js";
@@ -47,6 +48,7 @@ import { ensureDesktopNotifyBridgeExtensionInstalled } from "./extensions/deskto
 import { isExtensionConfigIntent, normalizeExtensionCommandName } from "./extensions/extension-command-intent.js";
 import { ensureDesktopSdkCompatExtensionInstalled } from "./extensions/sdk-compat-extension.js";
 import { ensureSmartVoiceNotifyDesktopHostMode } from "./extensions/smart-voice-notify-config.js";
+import { joinFsPath } from "./utils/fs-paths.js";
 import "./styles/app.css";
 
 interface WorkspaceSessionTab {
@@ -80,7 +82,6 @@ interface WorkspaceState {
 	title: string;
 	color: string | null;
 	emoji: string | null;
-	pinned: boolean;
 	leftMode: SidebarMode;
 	pane: "chat" | "file" | "packages" | "settings" | "terminal";
 	activeProjectId: string | null;
@@ -115,7 +116,6 @@ interface SessionRuntime {
 
 const WORKSPACES_STORAGE_KEY = "pi-desktop.workspaces.v1";
 const WORKSPACES_ACTIVE_STORAGE_KEY = "pi-desktop.workspaces.active.v1";
-const LEGACY_PROJECTS_STORAGE_KEY = "pi-desktop.projects.v1";
 const WORKSPACE_DEFAULT_ID = "workspace_default";
 const WORKSPACE_PROJECTS_KEY_PREFIX = "pi-desktop.workspace-projects.v1";
 const SIDEBAR_WIDTH_KEY = "pi-desktop.sidebar.width.v1";
@@ -199,6 +199,26 @@ class StaleProjectTaskError extends Error {
 
 let workspaces: WorkspaceState[] = [];
 let activeWorkspaceId: string | null = null;
+/** Session ids that have already been auto-named, so the LLM title call runs at most once per session. */
+const autoNamedSessionIds = new Set<string>();
+/**
+ * Canonicalized project paths that were already granted runtime fs read+write
+ * scope (Rust `allow_project_fs_scope`), so a granted project is never
+ * re-invoked. Only scopes to explicitly opened projects — never $HOME itself.
+ */
+const grantedProjectFsScopes = new Set<string>();
+
+/** Widen runtime fs scope to a project dir (restores file editing after the capability hardening). Fire-and-forget; never blocks or throws into UI flow. */
+function allowProjectFsScope(path: string | null | undefined): void {
+	if (!path) return;
+	const normalized = normalizeStoredPath(path);
+	if (!normalized) return;
+	if (grantedProjectFsScopes.has(normalized)) return;
+	grantedProjectFsScopes.add(normalized);
+	void invoke("allow_project_fs_scope", { path: normalized }).catch((err) => {
+		console.error("allow_project_fs_scope failed:", err);
+	});
+}
 let sidebarWidth = 320;
 let removeSidebarResizeHandlers: (() => void) | null = null;
 let removeTerminalDockResizeHandlers: (() => void) | null = null;
@@ -603,12 +623,6 @@ function normalizeSessionPath(path: string | null | undefined): string {
 	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
-function joinFsPath(base: string, child: string): string {
-	const normalizedBase = base.replace(/\\/g, "/").replace(/\/+$/, "");
-	const normalizedChild = child.replace(/\\/g, "/").replace(/^\/+/, "");
-	return normalizedBase ? `${normalizedBase}/${normalizedChild}` : normalizedChild;
-}
-
 function sessionRuntimeKey(workspaceId: string, tabId: string): string {
 	return `${workspaceId}::${tabId}`;
 }
@@ -954,6 +968,7 @@ function setWorkspaceActiveProject(
 ): void {
 	workspace.activeProjectId = normalizeStoredId(project?.id ?? null);
 	workspace.activeProjectPath = normalizeStoredPath(project?.path ?? null);
+	allowProjectFsScope(workspace.activeProjectPath);
 }
 
 function setSessionTabProject(tab: WorkspaceSessionTab, projectId: string | null, projectPath: string | null): void {
@@ -1751,8 +1766,7 @@ async function autoNameSessionIfNew(): Promise<void> {
 	if (!userMessage || userMessage.trim().length === 0) return;
 
 	// Prevent double-invocation
-	const flagKey = `autoNamed_${state.sessionId}`;
-	if ((activeSession as any)[flagKey]) return;
+	if (autoNamedSessionIds.has(state.sessionId)) return;
 
 	// Capture runtime now, before any awaits, so switching tabs mid-call
 	// doesn't cause us to rename the wrong session.
@@ -1814,7 +1828,7 @@ async function autoNameSessionIfNew(): Promise<void> {
 			persistWorkspaces();
 			syncContentTabsBar(workspace);
 			scheduleSidebarSessionsRefresh(0);
-			(activeSession as any)[flagKey] = true;
+			autoNamedSessionIds.add(state.sessionId);
 		}
 
 	} catch (err) {
@@ -2300,42 +2314,15 @@ function buildRpcStartOptions(localCwd: string, mode: "local" | "ssh", ssh: SshC
 		};
 	}
 	return {
-		cliPath: findCliPath(),
+		cliPath: null,
 		piPath: findPiBinaryPath(),
 		cwd: localCwd,
 		connectionMode: "local",
 	};
 }
 
-function findCliPath(): string | null {
-	if (import.meta.env.DEV) {
-		// Optional local dev path (if running next to pi-mono)
-		return null;
-	}
-	return null;
-}
-
 function findPiBinaryPath(): string | null {
 	return preferredPiBinaryPath;
-}
-
-function getCwd(): string {
-	try {
-		const defaultWorkspaceRaw = localStorage.getItem(workspaceProjectsStorageKey(WORKSPACE_DEFAULT_ID));
-		if (defaultWorkspaceRaw) {
-			const projects = JSON.parse(defaultWorkspaceRaw) as Array<{ path?: string }>;
-			if (projects[0]?.path) return projects[0].path;
-		}
-
-		const legacyRaw = localStorage.getItem(LEGACY_PROJECTS_STORAGE_KEY);
-		if (legacyRaw) {
-			const projects = JSON.parse(legacyRaw) as Array<{ path?: string }>;
-			if (projects[0]?.path) return projects[0].path;
-		}
-	} catch {
-		// ignore and fallback
-	}
-	return ".";
 }
 
 const WORKSPACE_DEFAULT_EMOJIS = ["💻", "🧠", "🚀", "📝", "📦", "🔧", "⚡️", "🌙", "🔥", "🧪", "📁", "💬", "🎯", "🎨", "🏔️", "🌊", "☕", "🛰️"] as const;
@@ -2376,7 +2363,6 @@ function defaultWorkspace(): WorkspaceState {
 		title: "Workspace 1",
 		color: null,
 		emoji: pickWorkspaceDefaultEmoji(WORKSPACE_DEFAULT_ID),
-		pinned: false,
 		leftMode: "projects",
 		pane: "chat",
 		activeProjectId: null,
@@ -2400,7 +2386,6 @@ function createWorkspace(title?: string, emoji?: string | null): WorkspaceState 
 		title: title || `Workspace ${nextWorkspaceIndex()}`,
 		color: null,
 		emoji: normalizedEmoji,
-		pinned: false,
 		leftMode: "projects",
 		pane: "chat",
 		activeProjectId: null,
@@ -2415,17 +2400,6 @@ function createWorkspace(title?: string, emoji?: string | null): WorkspaceState 
 	};
 }
 
-function normalizeWorkspaceOrder(): boolean {
-	let changed = false;
-	for (const workspace of workspaces) {
-		if (workspace.pinned) {
-			workspace.pinned = false;
-			changed = true;
-		}
-	}
-	return changed;
-}
-
 function applyWorkspaceTabOrder(orderedIds: string[]): boolean {
 	if (orderedIds.length !== workspaces.length) return false;
 	const order = new Map<string, number>();
@@ -2433,12 +2407,7 @@ function applyWorkspaceTabOrder(orderedIds: string[]): boolean {
 	if (order.size !== workspaces.length) return false;
 	const before = workspaces.map((workspace) => workspace.id).join("|");
 	workspaces.sort((a, b) => (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.id) ?? Number.MAX_SAFE_INTEGER));
-	normalizeWorkspaceOrder();
 	return before !== workspaces.map((workspace) => workspace.id).join("|");
-}
-
-function setWorkspacePinned(_workspaceId: string, _pinned: boolean): boolean {
-	return false;
 }
 
 function persistWorkspaces(): void {
@@ -2463,80 +2432,27 @@ function loadWorkspaces(): void {
 			workspaces = parsed
 				.filter((w) => typeof w.id === "string" && w.id.length > 0)
 				.map((w, idx) => {
-					const fallbackSessionTitle =
-						typeof w.sessionTitle === "string" && w.sessionTitle.trim().length > 0
-							? w.sessionTitle.trim()
-							: NEW_SESSION_TAB_TITLE;
-					const rawSessionTabs = Array.isArray(w.sessionTabs) ? (w.sessionTabs as Array<Partial<WorkspaceSessionTab>>) : [];
-					const rawFileTabs = Array.isArray(w.fileTabs) ? (w.fileTabs as Array<Partial<WorkspaceFileTab>>) : [];
+					// Build raw workspace/tab objects only; ALL tab normalization
+					// (field sanitation, ssh gating, fallback tabs, pruning, active-tab
+					// repair) is deferred to ensureWorkspaceContentState so loaded
+					// workspaces get the exact same treatment as runtime ones.
+					const rawSessionTabs = (
+						Array.isArray(w.sessionTabs) ? (w.sessionTabs as Array<Partial<WorkspaceSessionTab>>) : []
+					) as WorkspaceSessionTab[];
+					const rawFileTabs = (
+						Array.isArray(w.fileTabs) ? (w.fileTabs as Array<Partial<WorkspaceFileTab>>) : []
+					) as WorkspaceFileTab[];
 
-					const sessionTabs = rawSessionTabs
-						.filter((tab) => typeof tab.id === "string" && tab.id.length > 0)
-						.map((tab) => {
-							const sessionPath = normalizeStoredPath(tab.sessionPath);
-							const storedMessageCount = tab.messageCount;
-							const needsAttentionRaw = tab.needsAttention;
-							const attentionMessageRaw = tab.attentionMessage;
-							return {
-								id: tab.id!,
-								projectId: normalizeStoredId(tab.projectId),
-								projectPath: normalizeStoredPath(tab.projectPath),
-								sessionPath,
-								title: typeof tab.title === "string" && tab.title.trim().length > 0 ? tab.title.trim() : fallbackSessionTitle,
-								messageCount: typeof storedMessageCount === "number" && Number.isFinite(storedMessageCount) ? storedMessageCount : sessionPath ? null : 0,
-								ephemeral: typeof tab.ephemeral === "boolean" ? Boolean(tab.ephemeral) : !sessionPath,
-								needsAttention: typeof needsAttentionRaw === "boolean" ? needsAttentionRaw : false,
-								attentionMessage:
-									typeof attentionMessageRaw === "string" && attentionMessageRaw.trim().length > 0
-										? attentionMessageRaw.trim()
-										: null,
-								connectionMode: (tab.connectionMode === "ssh" ? "ssh" : "local") as ConnectionMode,
-								sshConfig: tab.sshConfig ?? null,
-							};
-						});
-
-					if (sessionTabs.length === 0) {
-						sessionTabs.push(
-							createSessionTab(
-								fallbackSessionTitle,
-								null,
-								normalizeStoredId(w.activeProjectId),
-								normalizeStoredPath(w.activeProjectPath),
-							),
-						);
-					}
-
-					const fileTabs = rawFileTabs
-						.filter((tab) => typeof tab.id === "string" && tab.id.length > 0)
-						.map((tab) => {
-							const path = normalizeStoredPath(tab.path);
-							const projectPath = normalizeStoredPath(tab.projectPath);
-							return {
-								id: tab.id!,
-								projectId: normalizeStoredId(tab.projectId),
-								projectPath,
-								path,
-								title:
-									typeof tab.title === "string" && tab.title.trim().length > 0
-										? tab.title.trim()
-										: path
-											? baseName(path)
-											: NEW_FILE_TAB_TITLE,
-								draftDirectoryPath: path ? null : normalizeStoredPath(tab.draftDirectoryPath) ?? projectPath,
-								draftAnchorPath: path ? null : normalizeStoredPath(tab.draftAnchorPath),
-							};
-						});
-
-					if (fileTabs.length === 0 && typeof w.filePath === "string" && w.filePath.trim().length > 0) {
-						fileTabs.push({
+					// Legacy single-file workspace schema: migrate the persisted file
+					// path into a file tab before normalization.
+					if (rawFileTabs.length === 0 && typeof w.filePath === "string" && w.filePath.trim().length > 0) {
+						rawFileTabs.push({
 							id: uid("filetab"),
 							projectId: normalizeStoredId(w.activeProjectId),
 							projectPath: normalizeStoredPath(w.activeProjectPath),
 							path: w.filePath,
 							title: baseName(w.filePath),
-							draftDirectoryPath: null,
-							draftAnchorPath: null,
-						});
+						} as WorkspaceFileTab);
 					}
 
 					const workspace: WorkspaceState = {
@@ -2544,24 +2460,20 @@ function loadWorkspaces(): void {
 						title: typeof w.title === "string" && w.title.trim().length > 0 ? w.title : `Workspace ${idx + 1}`,
 						color: typeof w.color === "string" && w.color.trim().length > 0 ? w.color : null,
 						emoji: typeof w.emoji === "string" && w.emoji.trim().length > 0 ? w.emoji.trim() : null,
-						pinned: false,
 						leftMode: w.leftMode === "files" ? "files" : "projects",
 						pane: w.pane === "packages" || w.pane === "settings" ? w.pane : "chat",
 						activeProjectId: normalizeStoredId(w.activeProjectId),
 						activeProjectPath: normalizeStoredPath(w.activeProjectPath),
 						filePath: typeof w.filePath === "string" ? w.filePath : null,
 						terminalOpen: Boolean(w.terminalOpen || w.pane === "terminal"),
-						sessionTitle: fallbackSessionTitle,
-						sessionTabs,
-						activeSessionTabId:
-							typeof w.activeSessionTabId === "string" && sessionTabs.some((tab) => tab.id === w.activeSessionTabId)
-								? w.activeSessionTabId
-								: sessionTabs[0]?.id ?? null,
-						fileTabs,
-						activeFileTabId:
-							typeof w.activeFileTabId === "string" && fileTabs.some((tab) => tab.id === w.activeFileTabId)
-								? w.activeFileTabId
-								: fileTabs[0]?.id ?? null,
+						sessionTitle:
+							typeof w.sessionTitle === "string" && w.sessionTitle.trim().length > 0
+								? w.sessionTitle.trim()
+								: NEW_SESSION_TAB_TITLE,
+						sessionTabs: rawSessionTabs,
+						fileTabs: rawFileTabs,
+						activeSessionTabId: typeof w.activeSessionTabId === "string" ? w.activeSessionTabId : null,
+						activeFileTabId: typeof w.activeFileTabId === "string" ? w.activeFileTabId : null,
 					};
 
 					ensureWorkspaceContentState(workspace);
@@ -2586,8 +2498,7 @@ function loadWorkspaces(): void {
 		mutatedWorkspaceMetadata = ensureWorkspaceEmoji(workspace) || mutatedWorkspaceMetadata;
 	}
 
-	const normalizedWorkspaceOrder = normalizeWorkspaceOrder();
-	if (normalizedWorkspaceOrder || mutatedWorkspaceMetadata) {
+	if (mutatedWorkspaceMetadata) {
 		persistWorkspaces();
 	}
 
@@ -2608,7 +2519,6 @@ function syncWorkspaceTabsBar(): void {
 		title: workspace.title,
 		color: workspace.color,
 		emoji: workspace.emoji,
-		pinned: false,
 		closable: true,
 	}));
 	sidebar?.setWorkspaces(workspaceItems, activeWorkspaceId);
@@ -3004,6 +2914,17 @@ async function applyWorkspacePane(workspace: WorkspaceState | null = getActiveWo
 	syncDebugOverlay();
 }
 
+/**
+ * Fire-and-forget applyWorkspacePane with rejection logging. Callers that kick
+ * off a pane update without awaiting it must go through this wrapper so a
+ * failed update is reported instead of becoming an unhandled rejection.
+ */
+function queueApplyWorkspacePane(workspace: WorkspaceState | null = getActiveWorkspace()): void {
+	void applyWorkspacePane(workspace).catch((err) => {
+		console.error("Failed to apply workspace pane:", err);
+	});
+}
+
 async function ensureRuntimeForSessionTab(
 	workspace: WorkspaceState,
 	sessionTab: WorkspaceSessionTab,
@@ -3340,10 +3261,6 @@ async function runStartupCompatibilityCheck(): Promise<void> {
 	}
 }
 
-function applyCliStatusToTitlebar(): void {
-	// top titlebar removed; keep runtime polling state only
-}
-
 async function refreshCliUpdateStatus(): Promise<void> {
 	if (cliUpdateChecking) return;
 	cliUpdateChecking = true;
@@ -3363,7 +3280,6 @@ async function refreshCliUpdateStatus(): Promise<void> {
 	} finally {
 		cliUpdateChecking = false;
 		syncCliUpdateUiHint();
-		applyCliStatusToTitlebar();
 	}
 }
 
@@ -3407,10 +3323,31 @@ function startDesktopUpdatePolling(): void {
 	}, UPDATE_NOTICE_INTERVAL_MS);
 }
 
-async function initialize(): Promise<void> {
-	stopAuthConfigChangeMonitor();
+/**
+ * Drop app-shell component instances from a previous init attempt. Once
+ * connectionError swapped the app shell for the error shell, these instances
+ * still render into detached DOM and never rebind — renderApp() only creates
+ * a component when its reference is null. Release them (and their
+ * subscriptions) so a retry recreates each one against the fresh containers.
+ * settingsPanel rebinds itself via setContainer(); the command palette,
+ * session browser, shortcuts panel and extension-UI handler live in
+ * document.body containers that survive the shell swap.
+ */
+function releaseAppShellComponents(): void {
 	chatView?.disconnect();
 	chatView = null;
+	sidebar?.destroy();
+	sidebar = null;
+	terminalPanel?.dispose();
+	terminalPanel = null;
+	contentTabsBar = null;
+	fileViewer = null;
+	packagesView = null;
+}
+
+async function initialize(): Promise<void> {
+	stopAuthConfigChangeMonitor();
+	releaseAppShellComponents();
 	if (debugOverlayInterval) {
 		clearInterval(debugOverlayInterval);
 		debugOverlayInterval = null;
@@ -3553,7 +3490,7 @@ async function initialize(): Promise<void> {
 			workspace.pane = workspace.pane === "packages" ? "chat" : "packages";
 			persistWorkspaces();
 			syncWorkspaceTabsBar();
-			void applyWorkspacePane(workspace);
+			queueApplyWorkspacePane(workspace);
 		});
 		chatView.setOnOpenExtensionConfig(async (commandName, args) => {
 			const normalizedName = normalizeExtensionCommandName(commandName);
@@ -3686,7 +3623,7 @@ async function initialize(): Promise<void> {
 			persistWorkspaces();
 			syncWorkspaceTabsBar();
 			syncContentTabsBar(workspace);
-			void applyWorkspacePane(workspace);
+			queueApplyWorkspacePane(workspace);
 		});
 		chatView.setOnOpenDiff((filePath, diffLines, fileName) => {
 			fileViewer?.setDiff(diffLines, fileName);
@@ -3699,7 +3636,7 @@ async function initialize(): Promise<void> {
 				persistWorkspaces();
 				syncWorkspaceTabsBar();
 				syncContentTabsBar(workspace);
-				void applyWorkspacePane(workspace);
+				queueApplyWorkspacePane(workspace);
 			}
 		});
 		chatView.render();
@@ -3813,7 +3750,7 @@ function mountSettingsPanel(): SettingsPanel {
 		workspace.pane = "chat";
 		persistWorkspaces();
 		syncWorkspaceTabsBar();
-		void applyWorkspacePane(workspace);
+		queueApplyWorkspacePane(workspace);
 	});
 	panel.setOnRequestAddProject(() => {
 		void sidebar?.openFolder();
@@ -3841,13 +3778,20 @@ function initializeComponents(): void {
 	document.body.appendChild(sessionBrowserContainer);
 	sessionBrowser = new SessionBrowser(sessionBrowserContainer);
 	sessionBrowser.setOnSessionSelected(async () => {
-		const workspace = getActiveWorkspace();
-		if (workspace) {
-			workspace.pane = "chat";
-			persistWorkspaces();
+		// SessionBrowser invokes this callback fire-and-forget, so rejections
+		// must be handled here or they surface as unhandled promise rejections.
+		try {
+			const workspace = getActiveWorkspace();
+			if (workspace) {
+				workspace.pane = "chat";
+				persistWorkspaces();
+			}
+			await chatView?.refreshFromBackend({ throwOnError: true });
+			await applyWorkspacePane(workspace ?? null);
+		} catch (err) {
+			console.error("Failed to activate selected session:", err);
+			chatView?.notify("Failed to open session", "error");
 		}
-		await chatView?.refreshFromBackend({ throwOnError: true });
-		await applyWorkspacePane(workspace ?? null);
 	});
 	sessionBrowser.setOnForkText((text) => {
 		chatView?.setInputText(text);
@@ -3960,7 +3904,7 @@ function openPackagesPane(): void {
 	workspace.pane = "packages";
 	persistWorkspaces();
 	syncWorkspaceTabsBar();
-	void applyWorkspacePane(workspace);
+	queueApplyWorkspacePane(workspace);
 }
 
 function toggleTerminalDock(forceOpen?: boolean): void {
@@ -3975,7 +3919,7 @@ function toggleTerminalDock(forceOpen?: boolean): void {
 	workspace.pane = "chat";
 	persistWorkspaces();
 	syncWorkspaceTabsBar();
-	void applyWorkspacePane(workspace);
+	queueApplyWorkspacePane(workspace);
 }
 
 async function startFreshSessionTab(options: { forceNewTab?: boolean; title?: string } = {}): Promise<void> {
@@ -4241,7 +4185,7 @@ function setupKeyboardShortcuts(): void {
 			e.preventDefault();
 			const w = getActiveWorkspace();
 			if (w) {
-				if (e.key === "1") { w.pane = "chat"; persistWorkspaces(); void applyWorkspacePane(w); renderApp(); }
+				if (e.key === "1") { w.pane = "chat"; persistWorkspaces(); queueApplyWorkspacePane(w); renderApp(); }
 				else if (e.key === "2") { toggleTerminalDock(); renderApp(); }
 				else if (e.key === "3") {
 					if (sidebar?.getMode() === "files") {
@@ -4252,7 +4196,7 @@ function setupKeyboardShortcuts(): void {
 					}
 					renderApp();
 				}
-				else if (e.key === "4") { w.pane = w.pane === "packages" ? "chat" : "packages"; persistWorkspaces(); void applyWorkspacePane(w); renderApp(); }
+				else if (e.key === "4") { w.pane = w.pane === "packages" ? "chat" : "packages"; persistWorkspaces(); queueApplyWorkspacePane(w); renderApp(); }
 				else { sidebar?.toggleCollapsed(); }
 			}
 			return;
@@ -4480,7 +4424,7 @@ function renderApp(): void {
 						<button
 							class="rail-btn ${getActiveWorkspace()?.pane === "chat" && !getActiveWorkspace()?.terminalOpen ? "active" : ""}"
 							title="Chat"
-							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = "chat"; persistWorkspaces(); void applyWorkspacePane(w); renderApp(); }}
+							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = "chat"; persistWorkspaces(); queueApplyWorkspacePane(w); renderApp(); }}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
 							${getActiveRuntime()?.running ? html`<span class="rail-status-dot"></span>` : nothing}
@@ -4513,7 +4457,7 @@ function renderApp(): void {
 						<button
 							class="rail-btn ${getActiveWorkspace()?.pane === "packages" ? "active" : ""}"
 							title="Packages"
-							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = w.pane === "packages" ? "chat" : "packages"; persistWorkspaces(); void applyWorkspacePane(w); renderApp(); }}
+							@click=${() => { const w = getActiveWorkspace(); if (!w) return; w.pane = w.pane === "packages" ? "chat" : "packages"; persistWorkspaces(); queueApplyWorkspacePane(w); renderApp(); }}
 						>
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" x2="12" y1="22" y2="12"/></svg>
 							<span class="rail-label">Packages</span>
@@ -4589,7 +4533,7 @@ function renderApp(): void {
 				pruneEphemeralTabsWhenLeavingDraft(workspace);
 				persistWorkspaces();
 				syncWorkspaceTabsBar();
-				void applyWorkspacePane(workspace);
+				queueApplyWorkspacePane(workspace);
 				return;
 			}
 
@@ -4604,7 +4548,7 @@ function renderApp(): void {
 			syncWorkspaceTabsBar();
 			syncContentTabsBar(workspace);
 			syncActiveChatRuntimeBinding(workspace, { forceReset: true, statusText: sessionTab.sessionPath ? "Loading session…" : "Starting new session…" });
-			void applyWorkspacePane(workspace);
+			queueApplyWorkspacePane(workspace);
 
 			const projectPath = getSessionTabProjectPath(sessionTab);
 			void queueProjectTask(
@@ -4657,7 +4601,7 @@ function renderApp(): void {
 				workspace.pane = "chat";
 				persistWorkspaces();
 				syncWorkspaceTabsBar();
-				void applyWorkspacePane(workspace);
+				queueApplyWorkspacePane(workspace);
 				return;
 			}
 
@@ -4697,7 +4641,7 @@ function renderApp(): void {
 				forceReset: true,
 				statusText: nextSession?.sessionPath ? "Loading session…" : "Starting new session…",
 			});
-			void applyWorkspacePane(workspace);
+			queueApplyWorkspacePane(workspace);
 
 			const disposeRemovedRuntime = () => {
 				if (removedTab) {
@@ -4712,7 +4656,7 @@ function renderApp(): void {
 			disposeRemovedRuntime();
 
 			if (!wasActive) {
-				void applyWorkspacePane(workspace);
+				queueApplyWorkspacePane(workspace);
 				return;
 			}
 
@@ -4750,7 +4694,7 @@ function renderApp(): void {
 			persistWorkspaces();
 			syncWorkspaceTabsBar();
 			syncSidebarSelectionFromWorkspace(workspace);
-			void applyWorkspacePane(workspace);
+			queueApplyWorkspacePane(workspace);
 		});
 		fileViewer.setOnDraftFileCreated((filePath) => {
 			const workspace = getActiveWorkspace();
@@ -4780,7 +4724,7 @@ function renderApp(): void {
 			syncContentTabsBar(workspace);
 			syncSidebarSelectionFromWorkspace(workspace);
 			sidebar?.refreshActiveProjectFiles(true);
-			void applyWorkspacePane(workspace);
+			queueApplyWorkspacePane(workspace);
 		});
 	}
 
@@ -4807,7 +4751,7 @@ function renderApp(): void {
 			workspace.pane = "chat";
 			persistWorkspaces();
 			syncWorkspaceTabsBar();
-			void applyWorkspacePane(workspace);
+			queueApplyWorkspacePane(workspace);
 		});
 	}
 
@@ -4821,7 +4765,7 @@ function renderApp(): void {
 			workspace.pane = "chat";
 			persistWorkspaces();
 			syncWorkspaceTabsBar();
-			void applyWorkspacePane(workspace);
+			queueApplyWorkspacePane(workspace);
 		});
 		packagesView.setOnInsertPromptTemplate(async (commandText) => {
 			const workspace = getActiveWorkspace();
@@ -4941,7 +4885,7 @@ function renderApp(): void {
 			setWorkspaceActiveProject(workspace, project);
 			persistWorkspaces();
 			syncWorkspaceTabsBar();
-			void applyWorkspacePane(workspace);
+			queueApplyWorkspacePane(workspace);
 			return;
 		}
 
@@ -4958,7 +4902,7 @@ function renderApp(): void {
 			packagesView?.setProjectPath(null);
 			terminalPanel?.setProjectPath(null);
 			fileViewer?.setProjectPath(null);
-			void applyWorkspacePane(workspace);
+			queueApplyWorkspacePane(workspace);
 			void queueProjectTask(
 				async (version) => {
 					assertProjectTaskCurrent(version);
@@ -5000,7 +4944,7 @@ function renderApp(): void {
 			syncWorkspaceTabsBar();
 			syncContentTabsBar(workspace);
 			syncActiveChatRuntimeBinding(workspace, { forceReset: true, statusText: "Loading session…" });
-			void applyWorkspacePane(workspace);
+			queueApplyWorkspacePane(workspace);
 
 			void queueProjectTask(
 				async (version) => {
@@ -5028,7 +4972,7 @@ function renderApp(): void {
 		syncWorkspaceTabsBar();
 		syncContentTabsBar(workspace);
 		syncActiveChatRuntimeBinding(workspace, { forceReset: true, statusText: "Starting new session…" });
-		void applyWorkspacePane(workspace);
+		queueApplyWorkspacePane(workspace);
 
 		void queueProjectTask(
 			async (version) => {
@@ -5059,7 +5003,7 @@ function renderApp(): void {
 		syncWorkspaceTabsBar();
 		syncContentTabsBar(workspace);
 		syncActiveChatRuntimeBinding(workspace, { forceReset: true, statusText: "Starting new session…" });
-		void applyWorkspacePane(workspace);
+		queueApplyWorkspacePane(workspace);
 
 		void queueProjectTask(
 			async (version) => {
@@ -5090,7 +5034,7 @@ function renderApp(): void {
 		persistWorkspaces();
 		syncWorkspaceTabsBar();
 		syncContentTabsBar(workspace);
-		void applyWorkspacePane(workspace);
+		queueApplyWorkspacePane(workspace);
 	});
 
 	const activateSidebarSession = (
@@ -5126,7 +5070,7 @@ function renderApp(): void {
 		syncWorkspaceTabsBar();
 		syncContentTabsBar(workspace);
 		syncActiveChatRuntimeBinding(workspace, { forceReset: true, statusText: "Loading session…" });
-		void applyWorkspacePane(workspace);
+		queueApplyWorkspacePane(workspace);
 
 		void queueProjectTask(
 			async (version) => {
@@ -5185,7 +5129,7 @@ function renderApp(): void {
 		syncWorkspaceTabsBar();
 		syncContentTabsBar(workspace);
 		syncActiveChatRuntimeBinding(workspace, { forceReset: true, statusText: "Loading remote session…" });
-		void applyWorkspacePane(workspace);
+		queueApplyWorkspacePane(workspace);
 
 		void queueProjectTask(
 			async (version) => {
@@ -5228,7 +5172,7 @@ function renderApp(): void {
 		syncWorkspaceTabsBar();
 		syncContentTabsBar(workspace);
 		syncActiveChatRuntimeBinding(workspace, { forceReset: true, statusText: "Starting new remote session…" });
-		void applyWorkspacePane(workspace);
+		queueApplyWorkspacePane(workspace);
 
 		void queueProjectTask(
 			async (version) => {
@@ -5349,7 +5293,7 @@ function renderApp(): void {
 			forceReset: true,
 			statusText: nextSession?.sessionPath ? "Loading session…" : "Starting new session…",
 		});
-		void applyWorkspacePane(workspace);
+		queueApplyWorkspacePane(workspace);
 
 		const disposeRemovedRuntimes = () => {
 			removedTabs.forEach((tab) => removeRuntimeForTab(workspace.id, tab.id));
@@ -5361,7 +5305,7 @@ function renderApp(): void {
 		disposeRemovedRuntimes();
 
 		if (!activeWasRemoved) {
-			void applyWorkspacePane(workspace);
+			queueApplyWorkspacePane(workspace);
 			return;
 		}
 
@@ -5406,7 +5350,7 @@ function renderApp(): void {
 				persistWorkspaces();
 				syncWorkspaceTabsBar();
 				syncContentTabsBar(workspace);
-				void applyWorkspacePane(workspace);
+				queueApplyWorkspacePane(workspace);
 			}
 			return;
 		}
@@ -5433,7 +5377,7 @@ function renderApp(): void {
 		persistWorkspaces();
 		syncWorkspaceTabsBar();
 		syncContentTabsBar(workspace);
-		void applyWorkspacePane(workspace);
+		queueApplyWorkspacePane(workspace);
 	});
 
 	sidebar.setOnFileOpen((projectId, filePath) => {
@@ -5446,7 +5390,7 @@ function renderApp(): void {
 		persistWorkspaces();
 		syncWorkspaceTabsBar();
 		syncContentTabsBar(workspace);
-		void applyWorkspacePane(workspace);
+		queueApplyWorkspacePane(workspace);
 	});
 
 	syncRunningSessionIndicators();

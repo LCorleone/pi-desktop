@@ -1,4 +1,5 @@
 import { buildPiThemeDocument, isThemeDocumentSchemaCompatible } from "./pi-theme-document.js";
+import { joinFsPath } from "../utils/fs-paths.js";
 
 interface BundledThemeSpec {
 	fileName: string;
@@ -166,12 +167,6 @@ const BUNDLED_THEME_ID_SET = new Set<string>(
 
 export function isBundledThemeId(id: string): boolean {
 	return BUNDLED_THEME_ID_SET.has(id.trim().toLowerCase());
-}
-
-function joinFsPath(base: string, child: string): string {
-	const b = base.replace(/\\/g, "/").replace(/\/+$/, "");
-	const c = child.replace(/\\/g, "/").replace(/^\/+/, "");
-	return b ? `${b}/${c}` : c;
 }
 
 function toPiThemeDocument(spec: BundledThemeSpec) {

@@ -165,13 +165,19 @@ pub async fn pty_spawn(
         .take_writer()
         .map_err(|e| format!("Failed to take PTY writer: {}", e))?;
 
-    // Supersede any existing session under this id.
+    // Supersede any existing session under this id. Computing the next
+    // generation, detaching the previous child, and inserting the new session
+    // all happen in ONE lock scope: with separate compute/insert scopes, two
+    // concurrent spawns for the same id could both observe no existing
+    // session, both pick generation 1, and blindly overwrite each other —
+    // interleaving their pty-data streams and leaking the overwritten child
+    // un-killed.
     let (generation, old_child) = {
         let mut sessions = state
             .sessions
             .lock()
             .map_err(|_| "Failed to acquire PTY sessions lock".to_string())?;
-        let (next, old) = if let Some(existing) = sessions.get_mut(&id) {
+        let (generation, old_child) = if let Some(existing) = sessions.get_mut(&id) {
             let g = existing.generation.saturating_add(1).max(1);
             let old_child = if let Ok(mut c) = existing.child.lock() {
                 c.take()
@@ -182,27 +188,23 @@ pub async fn pty_spawn(
         } else {
             (1, None)
         };
-        (next, old)
+        sessions.insert(
+            id.clone(),
+            PtySession {
+                master: Arc::new(Mutex::new(master)),
+                writer: Arc::new(Mutex::new(writer)),
+                child: Arc::new(Mutex::new(Some(child))),
+                generation,
+            },
+        );
+        (generation, old_child)
     };
-    // Kill outside the lock (mirror pty_kill).
+    // Kill + reap the superseded child outside the sessions lock: kill/wait
+    // block, and blocking under the global sessions lock would stall every
+    // tab's pty_write/pty_resize/pty_spawn (mirrored in pty_kill below).
     if let Some(mut child) = old_child {
         let _ = child.kill();
         let _ = child.wait();
-    }
-
-    let session = PtySession {
-        master: Arc::new(Mutex::new(master)),
-        writer: Arc::new(Mutex::new(writer)),
-        child: Arc::new(Mutex::new(Some(child))),
-        generation,
-    };
-
-    {
-        let mut sessions = state
-            .sessions
-            .lock()
-            .map_err(|_| "Failed to acquire PTY sessions lock".to_string())?;
-        sessions.insert(id.clone(), session);
     }
 
     // Reader thread: pump PTY output -> base64 -> pty-data events.
@@ -234,8 +236,12 @@ pub async fn pty_spawn(
         }
 
         // Reap the child and emit exit. Only act if this generation is still
-        // current (a newer spawn may have replaced us).
+        // current (a newer spawn may have replaced us). The child handle is
+        // taken out under the sessions lock, but wait() runs after releasing
+        // it — wait blocks (e.g. for daemonized descendants) and must never
+        // stall the global sessions lock.
         let mut exit_code = None;
+        let mut child_to_reap: Option<Box<dyn portable_pty::Child + Send>> = None;
         {
             if let Ok(mut sessions) = sessions_for_exit.lock() {
                 let superseded = sessions
@@ -245,18 +251,16 @@ pub async fn pty_spawn(
                 if !superseded {
                     if let Some(sess) = sessions.get_mut(&reader_id) {
                         if let Ok(mut c) = sess.child.lock() {
-                            if let Some(mut child) = c.take() {
-                                match child.wait() {
-                                    Ok(status) => {
-                                        exit_code = Some(status.exit_code() as i32)
-                                    }
-                                    Err(_) => {}
-                                }
-                            }
+                            child_to_reap = c.take();
                         }
                     }
                     sessions.remove(&reader_id);
                 }
+            }
+        }
+        if let Some(mut child) = child_to_reap {
+            if let Ok(status) = child.wait() {
+                exit_code = Some(status.exit_code() as i32);
             }
         }
 
@@ -281,15 +285,23 @@ pub fn pty_write(
     data: String,
 ) -> Result<(), String> {
     let id = normalize_id(id);
-    let sessions = state
-        .sessions
-        .lock()
-        .map_err(|_| "Failed to acquire PTY sessions lock".to_string())?;
-    let session = sessions
-        .get(&id)
-        .ok_or_else(|| format!("No PTY session for id: {}", id))?;
-    let mut writer = session
-        .writer
+    // Clone the writer handle under the sessions lock, then drop that lock
+    // before writing: write_all/flush block when the child stops draining its
+    // input, and blocking while holding the GLOBAL sessions lock would stall
+    // every tab's PTY ops. The per-session writer mutex still serializes
+    // concurrent writes to this one PTY.
+    let writer = {
+        let sessions = state
+            .sessions
+            .lock()
+            .map_err(|_| "Failed to acquire PTY sessions lock".to_string())?;
+        sessions
+            .get(&id)
+            .ok_or_else(|| format!("No PTY session for id: {}", id))?
+            .writer
+            .clone()
+    };
+    let mut writer = writer
         .lock()
         .map_err(|_| "Failed to acquire writer lock".to_string())?;
     writer
@@ -336,11 +348,17 @@ pub fn pty_resize(
 #[tauri::command]
 pub fn pty_kill(state: tauri::State<'_, PtyState>, id: String) -> Result<(), String> {
     let id = normalize_id(id);
-    let mut sessions = state
-        .sessions
-        .lock()
-        .map_err(|_| "Failed to acquire PTY sessions lock".to_string())?;
-    if let Some(session) = sessions.remove(&id) {
+    // Remove the session under the lock, then kill/wait outside it: wait()
+    // blocks until the child dies, and doing that while holding the sessions
+    // lock would stall every other tab's PTY ops.
+    let session = {
+        let mut sessions = state
+            .sessions
+            .lock()
+            .map_err(|_| "Failed to acquire PTY sessions lock".to_string())?;
+        sessions.remove(&id)
+    };
+    if let Some(session) = session {
         if let Ok(mut c) = session.child.lock() {
             if let Some(mut child) = c.take() {
                 let _ = child.kill();
