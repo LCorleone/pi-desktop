@@ -217,6 +217,8 @@ function allowProjectFsScope(path: string | null | undefined): void {
 	grantedProjectFsScopes.add(normalized);
 	void invoke("allow_project_fs_scope", { path: normalized }).catch((err) => {
 		console.error("allow_project_fs_scope failed:", err);
+		// Un-mark so a later activation retries instead of staying silently ungranted for the session.
+		grantedProjectFsScopes.delete(normalized);
 	});
 }
 let sidebarWidth = 320;
