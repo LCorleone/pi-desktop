@@ -4,6 +4,10 @@
 @import "@fontsource/jetbrains-mono/700.css";
 
 @import "tailwindcss";
+/* mini-lit templates render Tailwind utilities (overflow-auto, max-h-96, px-3, …) from
+   node_modules, which Tailwind v4 never scans by default — without this the code-block
+   scroll area/table wrappers/label styling silently degrade to no-ops. */
+@source "../../node_modules/@mariozechner/mini-lit/dist";
 @import "@mariozechner/mini-lit/styles/themes/default.css";
 @import "@xterm/xterm/css/xterm.css";
 @import "./tokens.css";
@@ -1739,7 +1743,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 	line-height: 1.58;
 }
 
-.file-viewer-markdown markdown-block {
+.file-viewer-markdown :is(markdown-block, safe-markdown-block) {
 	display: block;
 }
 
@@ -4936,7 +4940,7 @@ body.file-split-resizing #file-split-resize-handle::after {
 	color: color-mix(in srgb, var(--text) 86%, var(--muted));
 }
 
-.assistant-content markdown-block {
+.assistant-content :is(markdown-block, safe-markdown-block) {
 	display: block;
 }
 
@@ -5065,33 +5069,33 @@ body.file-split-resizing #file-split-resize-handle::after {
 	}
 }
 
-.assistant-content markdown-block h1,
-.assistant-content markdown-block h2,
-.assistant-content markdown-block h3,
-.assistant-content markdown-block h4 {
+.assistant-content :is(markdown-block, safe-markdown-block) h1,
+.assistant-content :is(markdown-block, safe-markdown-block) h2,
+.assistant-content :is(markdown-block, safe-markdown-block) h3,
+.assistant-content :is(markdown-block, safe-markdown-block) h4 {
 	letter-spacing: -0.01em;
 	color: inherit;
 }
 
-.assistant-content markdown-block h1 {
+.assistant-content :is(markdown-block, safe-markdown-block) h1 {
 	font-size: 1.62em;
 	font-weight: 600;
 	margin: 0.88em 0 0.46em;
 }
 
-.assistant-content markdown-block h2 {
+.assistant-content :is(markdown-block, safe-markdown-block) h2 {
 	font-size: 1.4em;
 	font-weight: 600;
 	margin: 0.82em 0 0.44em;
 }
 
-.assistant-content markdown-block h3 {
+.assistant-content :is(markdown-block, safe-markdown-block) h3 {
 	font-size: 1.2em;
 	font-weight: 600;
 	margin: 0.78em 0 0.42em;
 }
 
-.assistant-content markdown-block strong {
+.assistant-content :is(markdown-block, safe-markdown-block) strong {
 	font-weight: 600;
 }
 
@@ -5471,7 +5475,8 @@ body.file-split-resizing #file-split-resize-handle::after {
 	align-items: baseline;
 	justify-content: center;
 	gap: 12px;
-	min-width: max-content;
+	/* 0 (not max-content) so the label's max-width/ellipsis can actually engage when narrow */
+	min-width: 0;
 	margin: 0 auto;
 }
 
@@ -5510,6 +5515,10 @@ body.file-split-resizing #file-split-resize-handle::after {
 .tool-workflow-summary:hover .workflow-summary-meta,
 .tool-workflow-summary:hover .workflow-summary-caret {
 	color: color-mix(in srgb, var(--text) 90%, var(--muted));
+}
+.tool-workflow-summary:focus-visible {
+	background: color-mix(in srgb, var(--bg-soft) 34%, transparent);
+	border-radius: 6px;
 }
 
 .tool-workflow-list {
@@ -5667,12 +5676,11 @@ body.file-split-resizing #file-split-resize-handle::after {
 .tool-workflow-thinking {
 	margin-top: 4px;
 	margin-bottom: 8px;
-	width: min(100%, 64ch);
-	max-width: 100%;
+	max-width: min(100%, 64ch);
 	border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
 	border-radius: 6px;
 	overflow: hidden;
-	font-size: 13px;
+	font-size: 12px;
 }
 .tool-workflow-thinking-toggle {
 	width: 100%;
@@ -5871,13 +5879,13 @@ body.file-split-resizing #file-split-resize-handle::after {
 	overflow: auto;
 }
 
-.changelog-inline-output markdown-block {
+.changelog-inline-output :is(markdown-block, safe-markdown-block) {
 	line-height: 1.45;
 }
 
-.changelog-inline-output markdown-block h1,
-.changelog-inline-output markdown-block h2,
-.changelog-inline-output markdown-block h3 {
+.changelog-inline-output :is(markdown-block, safe-markdown-block) h1,
+.changelog-inline-output :is(markdown-block, safe-markdown-block) h2,
+.changelog-inline-output :is(markdown-block, safe-markdown-block) h3 {
 	margin-top: 0.7em;
 }
 
@@ -5935,22 +5943,22 @@ body.file-split-resizing #file-split-resize-handle::after {
 	white-space: normal;
 }
 
-.system-text-inline markdown-block {
+.system-text-inline :is(markdown-block, safe-markdown-block) {
 	line-height: 1.45;
 }
 
-.system-text-inline markdown-block p,
-.system-text-inline markdown-block p:last-child {
+.system-text-inline :is(markdown-block, safe-markdown-block) p,
+.system-text-inline :is(markdown-block, safe-markdown-block) p:last-child {
 	margin: 0;
 }
 
-.system-text-inline markdown-block a {
+.system-text-inline :is(markdown-block, safe-markdown-block) a {
 	color: color-mix(in srgb, var(--accent) 82%, #4f95ff);
 	text-decoration: none;
 }
 
-.system-text-inline markdown-block a:hover,
-.system-text-inline markdown-block a:focus-visible {
+.system-text-inline :is(markdown-block, safe-markdown-block) a:hover,
+.system-text-inline :is(markdown-block, safe-markdown-block) a:focus-visible {
 	text-decoration: underline;
 }
 
@@ -8692,34 +8700,34 @@ body.file-split-resizing #file-split-resize-handle::after {
 /* Markdown and streaming */
 /* -------------------------------------------------------------------------- */
 
-markdown-block {
+:is(markdown-block, safe-markdown-block) {
 	line-height: 1.62;
 	color: inherit;
 	overflow-wrap: anywhere;
 	word-break: break-word;
 }
 
-markdown-block :not(pre):not(code):not(code *) {
+:is(markdown-block, safe-markdown-block) :not(pre):not(code):not(code *) {
 	overflow-wrap: anywhere;
 	word-break: break-word;
 }
 
-markdown-block p {
+:is(markdown-block, safe-markdown-block) p {
 	margin-bottom: 0.54em;
 }
 
-markdown-block p:last-child {
+:is(markdown-block, safe-markdown-block) p:last-child {
 	margin-bottom: 0;
 }
 
-markdown-block hr {
+:is(markdown-block, safe-markdown-block) hr {
 	border: 0;
 	border-top: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
 	margin: 1em 0;
 }
 
-.assistant-content markdown-block.markdown-content code:not(.hljs):not(pre code),
-markdown-block code:not(.hljs):not(pre code) {
+.assistant-content :is(markdown-block, safe-markdown-block).markdown-content code:not(.hljs):not(pre code),
+:is(markdown-block, safe-markdown-block) code:not(.hljs):not(pre code) {
 	background: color-mix(in srgb, var(--bg-soft) 42%, transparent) !important;
 	border: none !important;
 	color: color-mix(in srgb, var(--text) 88%, var(--muted)) !important;
@@ -8729,14 +8737,14 @@ markdown-block code:not(.hljs):not(pre code) {
 	font-weight: 500;
 }
 
-:root.light .assistant-content markdown-block.markdown-content code:not(.hljs):not(pre code),
-:root.light markdown-block code:not(.hljs):not(pre code) {
+:root.light .assistant-content :is(markdown-block, safe-markdown-block).markdown-content code:not(.hljs):not(pre code),
+:root.light :is(markdown-block, safe-markdown-block) code:not(.hljs):not(pre code) {
 	background: color-mix(in srgb, var(--bg-soft) 84%, #fff 16%) !important;
 	color: color-mix(in srgb, var(--text) 80%, var(--muted)) !important;
 }
 
-.assistant-content markdown-block pre,
-markdown-block pre {
+.assistant-content :is(markdown-block, safe-markdown-block) pre,
+:is(markdown-block, safe-markdown-block) pre {
 	background: color-mix(in srgb, var(--bg-muted) 54%, transparent) !important;
 	padding: 10px;
 	border-radius: 8px;
@@ -8745,40 +8753,40 @@ markdown-block pre {
 	border: none !important;
 }
 
-:root.light .assistant-content markdown-block pre,
-:root.light markdown-block pre {
+:root.light .assistant-content :is(markdown-block, safe-markdown-block) pre,
+:root.light :is(markdown-block, safe-markdown-block) pre {
 	background: color-mix(in srgb, var(--bg-soft) 76%, #fff 24%) !important;
 }
 
-.assistant-content markdown-block code-block > div,
-markdown-block code-block > div {
+.assistant-content :is(markdown-block, safe-markdown-block) code-block > div,
+:is(markdown-block, safe-markdown-block) code-block > div {
 	background: color-mix(in srgb, var(--bg-soft) 34%, transparent);
 	border: 1px solid color-mix(in srgb, var(--border) 58%, transparent) !important;
 	border-radius: 10px;
 	overflow: hidden;
 }
 
-.assistant-content markdown-block code-block > div > div:first-child,
-markdown-block code-block > div > div:first-child {
+.assistant-content :is(markdown-block, safe-markdown-block) code-block > div > div:first-child,
+:is(markdown-block, safe-markdown-block) code-block > div > div:first-child {
 	background: transparent;
 	padding: 6px 10px;
 	min-height: 30px;
 }
 
-.assistant-content markdown-block code-block > div > div:first-child > span,
-markdown-block code-block > div > div:first-child > span {
+.assistant-content :is(markdown-block, safe-markdown-block) code-block > div > div:first-child > span,
+:is(markdown-block, safe-markdown-block) code-block > div > div:first-child > span {
 	font-size: 11px;
 	color: color-mix(in srgb, var(--text) 66%, var(--muted));
 }
 
-.assistant-content markdown-block code-block > div > div:last-child,
-markdown-block code-block > div > div:last-child {
+.assistant-content :is(markdown-block, safe-markdown-block) code-block > div > div:last-child,
+:is(markdown-block, safe-markdown-block) code-block > div > div:last-child {
 	background: transparent;
 	border-top: 1px solid color-mix(in srgb, var(--border) 54%, transparent);
 }
 
-.assistant-content markdown-block code-block > div > div:last-child > pre,
-markdown-block code-block > div > div:last-child > pre {
+.assistant-content :is(markdown-block, safe-markdown-block) code-block > div > div:last-child > pre,
+:is(markdown-block, safe-markdown-block) code-block > div > div:last-child > pre {
 	margin: 0 !important;
 	padding: 10px 12px 12px !important;
 	background: transparent !important;
@@ -8786,15 +8794,15 @@ markdown-block code-block > div > div:last-child > pre {
 	border-radius: 0 !important;
 }
 
-.assistant-content markdown-block code-block copy-button,
-markdown-block code-block copy-button {
+.assistant-content :is(markdown-block, safe-markdown-block) code-block copy-button,
+:is(markdown-block, safe-markdown-block) code-block copy-button {
 	opacity: 0;
 	pointer-events: none;
 	transition: opacity var(--duration-fast) var(--ease-standard);
 }
 
-.assistant-content markdown-block code-block copy-button button,
-markdown-block code-block copy-button button {
+.assistant-content :is(markdown-block, safe-markdown-block) code-block copy-button button,
+:is(markdown-block, safe-markdown-block) code-block copy-button button {
 	width: 24px;
 	height: 24px;
 	min-width: 24px;
@@ -8805,43 +8813,43 @@ markdown-block code-block copy-button button {
 	color: color-mix(in srgb, var(--text) 70%, var(--muted));
 }
 
-.assistant-content markdown-block code-block copy-button button:hover,
-.assistant-content markdown-block code-block copy-button button:focus-visible,
-markdown-block code-block copy-button button:hover,
-markdown-block code-block copy-button button:focus-visible {
+.assistant-content :is(markdown-block, safe-markdown-block) code-block copy-button button:hover,
+.assistant-content :is(markdown-block, safe-markdown-block) code-block copy-button button:focus-visible,
+:is(markdown-block, safe-markdown-block) code-block copy-button button:hover,
+:is(markdown-block, safe-markdown-block) code-block copy-button button:focus-visible {
 	background: color-mix(in srgb, var(--bg-soft) 66%, transparent) !important;
 	color: color-mix(in srgb, var(--text) 92%, var(--muted));
 }
 
-.assistant-content markdown-block code-block copy-button button svg,
-markdown-block code-block copy-button button svg {
+.assistant-content :is(markdown-block, safe-markdown-block) code-block copy-button button svg,
+:is(markdown-block, safe-markdown-block) code-block copy-button button svg {
 	width: 14px;
 	height: 14px;
 }
 
-.assistant-content markdown-block code-block copy-button button > span,
-markdown-block code-block copy-button button > span {
+.assistant-content :is(markdown-block, safe-markdown-block) code-block copy-button button > span,
+:is(markdown-block, safe-markdown-block) code-block copy-button button > span {
 	display: none;
 }
 
-.assistant-content markdown-block code-block:hover copy-button,
-.assistant-content markdown-block code-block:focus-within copy-button,
-.assistant-content markdown-block code-block copy-button:focus-within,
-markdown-block code-block:hover copy-button,
-markdown-block code-block:focus-within copy-button,
-markdown-block code-block copy-button:focus-within {
+.assistant-content :is(markdown-block, safe-markdown-block) code-block:hover copy-button,
+.assistant-content :is(markdown-block, safe-markdown-block) code-block:focus-within copy-button,
+.assistant-content :is(markdown-block, safe-markdown-block) code-block copy-button:focus-within,
+:is(markdown-block, safe-markdown-block) code-block:hover copy-button,
+:is(markdown-block, safe-markdown-block) code-block:focus-within copy-button,
+:is(markdown-block, safe-markdown-block) code-block copy-button:focus-within {
 	opacity: 1;
 	pointer-events: auto;
 }
 
-:root.light .assistant-content markdown-block code-block > div,
-:root.light markdown-block code-block > div {
+:root.light .assistant-content :is(markdown-block, safe-markdown-block) code-block > div,
+:root.light :is(markdown-block, safe-markdown-block) code-block > div {
 	background: color-mix(in srgb, var(--bg-soft) 80%, #fff 20%);
 	border: 1px solid color-mix(in srgb, var(--border) 56%, transparent) !important;
 }
 
-.assistant-content markdown-block code-block .hljs,
-markdown-block code-block .hljs {
+.assistant-content :is(markdown-block, safe-markdown-block) code-block .hljs,
+:is(markdown-block, safe-markdown-block) code-block .hljs {
 	background: transparent !important;
 }
 
@@ -9563,6 +9571,10 @@ button:active:not(:disabled),
 	background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
 	border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
 }
+.workflow-modified-file:focus-visible {
+	background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
+	border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
 
 .workflow-modified-file.no-action {
 	cursor: default;
@@ -9623,6 +9635,10 @@ button:active:not(:disabled),
 }
 
 .workflow-modified-file-diff-toggle:hover {
+	background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
+	color: var(--text);
+}
+.workflow-modified-file-diff-toggle:focus-visible {
 	background: color-mix(in srgb, var(--bg-soft) 70%, transparent);
 	color: var(--text);
 }
