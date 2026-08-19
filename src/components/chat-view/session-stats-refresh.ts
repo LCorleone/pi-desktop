@@ -89,20 +89,28 @@ export function computeSessionStatsFromRaw({
 	const pendingCount =
 		statePendingCount || Math.round(pickNumber(raw, ["pendingCount", "pendingMessages", "usage.pendingCount"]) ?? 0);
 	const contextWindow = resolveContextWindow(raw);
-	const rawUsageRatio = normalizeUsageRatio(
+	// Ratio-named fields are 0–1 fractions; percent-named fields are 0–100 (the pi
+	// backend sends `contextUsage.percent = tokens / window * 100`). They must be
+	// normalized differently: routing a percent through the ≤1-as-fraction
+	// heuristic turns a sub-1% usage (e.g. 0.96) into 96%.
+	const rawRatio = normalizeUsageRatio(
 		pickNumber(raw, [
 			"usageRatio",
 			"usage.ratio",
 			"tokenUsageRatio",
-			"usagePercent",
-			"usage.percent",
-			"contextUsage.percent",
-			"context.percent",
-			"contextUsagePercent",
-			"context_usage.percent",
-			"context_usage_percent",
 		]),
 	);
+	const rawPercent = pickNumber(raw, [
+		"usagePercent",
+		"usage.percent",
+		"contextUsage.percent",
+		"context.percent",
+		"contextUsagePercent",
+		"context_usage.percent",
+		"context_usage_percent",
+	]);
+	const normalizedPercent = rawPercent !== null && Number.isFinite(rawPercent) ? Math.min(1, Math.max(0, rawPercent / 100)) : null;
+	const rawUsageRatio = rawRatio ?? normalizedPercent;
 	const contextUsageExplicitlyUnknown =
 		(contextUsageTokensExplicitNull || contextUsagePercentExplicitNull) && contextTokensFromStats === null && rawUsageRatio === null;
 	const contextTokens = contextTokensFromStats ?? (contextUsageExplicitlyUnknown ? null : lastAssistantContextTokens);
